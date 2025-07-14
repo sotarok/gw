@@ -1,5 +1,10 @@
 # gw - Git Worktree CLI Tool
 
+[![CI](https://github.com/sotarok/gw/actions/workflows/ci.yml/badge.svg)](https://github.com/sotarok/gw/actions/workflows/ci.yml)
+[![Release](https://github.com/sotarok/gw/actions/workflows/release.yml/badge.svg)](https://github.com/sotarok/gw/actions/workflows/release.yml)
+[![Go Report Card](https://goreportcard.com/badge/github.com/sotarok/gw)](https://goreportcard.com/report/github.com/sotarok/gw)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+
 A convenient CLI tool for managing Git worktrees with automatic package manager setup.
 
 ## Features
@@ -12,20 +17,57 @@ A convenient CLI tool for managing Git worktrees with automatic package manager 
 
 ## Installation
 
-### From source
+### Using Homebrew (macOS/Linux)
 
 ```bash
-git clone https://github.com/yourusername/gw.git
-cd gw
-go build -o gw
-# Move to your PATH
-mv gw /usr/local/bin/
+brew tap sotarok/gw
+brew install gw
 ```
 
 ### Using go install
 
 ```bash
-go install github.com/yourusername/gw@latest
+go install github.com/sotarok/gw@latest
+```
+
+### Download Binary
+
+Download the latest binary for your platform from the [Releases page](https://github.com/sotarok/gw/releases).
+
+#### Linux
+
+```bash
+# AMD64
+curl -L https://github.com/sotarok/gw/releases/latest/download/gw_Linux_x86_64.tar.gz | tar xz
+sudo mv gw /usr/local/bin/
+
+# ARM64
+curl -L https://github.com/sotarok/gw/releases/latest/download/gw_Linux_arm64.tar.gz | tar xz
+sudo mv gw /usr/local/bin/
+```
+
+#### macOS
+
+```bash
+# Intel Mac
+curl -L https://github.com/sotarok/gw/releases/latest/download/gw_Darwin_x86_64.tar.gz | tar xz
+sudo mv gw /usr/local/bin/
+
+# Apple Silicon
+curl -L https://github.com/sotarok/gw/releases/latest/download/gw_Darwin_arm64.tar.gz | tar xz
+sudo mv gw /usr/local/bin/
+```
+
+#### Windows
+
+Download the Windows binary from the [Releases page](https://github.com/sotarok/gw/releases) and add it to your PATH.
+
+### From source
+
+```bash
+git clone https://github.com/sotarok/gw.git
+cd gw
+make install
 ```
 
 ## Usage
