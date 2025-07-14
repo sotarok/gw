@@ -49,7 +49,6 @@ git push origin v0.1.0
 ### GoReleaser の利点
 - マルチプラットフォームビルド
 - 自動的なチェンジログ生成
-- Homebrew Formula の自動更新
 - Docker イメージの作成（設定により）
 - checksums.txt の自動生成
 
@@ -78,10 +77,9 @@ go get github.com/spf13/cobra@v1.8.0
 
 ### 推奨される配布方法
 1. **GitHub Releases**: 直接ダウンロード
-2. **Homebrew**: macOS/Linux ユーザー向け
-3. **go install**: Go 開発者向け
-4. **Docker**: コンテナ環境向け
-5. **OS パッケージマネージャー**: apt, yum, etc.
+2. **go install**: Go 開発者向け
+3. **Docker**: コンテナ環境向け
+4. **OS パッケージマネージャー**: apt, yum, etc.
 
 ### バイナリサイズ最適化
 ```go

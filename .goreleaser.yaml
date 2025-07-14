@@ -63,26 +63,14 @@ changelog:
     - title: 'Refactors'
       regexp: '^refactor'
 
-brews:
-  - repository:
-      owner: "{{ .Env.HOMEBREW_TAP_OWNER }}"
-      name: "{{ .Env.HOMEBREW_TAP_NAME }}"
-      token: "{{ .Env.HOMEBREW_TAP_TOKEN }}"
-    folder: Formula
-    homepage: "https://github.com/{{ .Env.GITHUB_REPOSITORY }}"
-    description: "Git worktree CLI tool to manage worktrees easily"
-    license: "MIT"
-    test: |
-      system "#{bin}/gw", "--help"
-    install: |
-      bin.install "gw"
-    skip_upload: auto
+# Homebrew support can be added later
+# brews:
 
 nfpms:
   - id: packages
     package_name: gw
     vendor: GW Contributors
-    homepage: "https://github.com/{{ .Env.GITHUB_REPOSITORY }}"
+    homepage: "https://github.com/sotarok/gw"
     maintainer: "GW Contributors"
     description: "Git worktree CLI tool to manage worktrees easily"
     license: MIT
@@ -94,7 +82,7 @@ nfpms:
 
 release:
   github:
-    owner: "{{ .Env.GITHUB_REPOSITORY_OWNER }}"
+    owner: sotarok
     name: gw
   draft: false
   prerelease: auto
@@ -102,15 +90,9 @@ release:
   footer: |
     ## Installation
 
-    ### Homebrew (macOS/Linux)
-    ```bash
-    brew tap {{ .Env.GITHUB_REPOSITORY_OWNER }}/gw
-    brew install gw
-    ```
-
     ### Go Install
     ```bash
-    go install github.com/{{ .Env.GITHUB_REPOSITORY }}@latest
+    go install github.com/sotarok/gw@latest
     ```
 
     ### Manual Download

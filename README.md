@@ -17,13 +17,6 @@ A convenient CLI tool for managing Git worktrees with automatic package manager 
 
 ## Installation
 
-### Using Homebrew (macOS/Linux)
-
-```bash
-brew tap sotarok/gw
-brew install gw
-```
-
 ### Using go install
 
 ```bash

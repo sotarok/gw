@@ -75,14 +75,7 @@ make release
 
 ## Post-Release
 
-1. **Update Homebrew Formula (if applicable):**
-   - The release workflow can automatically update a Homebrew tap
-   - Configure the environment variables in the repository settings:
-     - `HOMEBREW_TAP_OWNER`
-     - `HOMEBREW_TAP_NAME`
-     - `HOMEBREW_TAP_TOKEN`
-
-2. **Announce the release:**
+1. **Announce the release:**
    - Create a discussion or announcement
    - Update any documentation sites
    - Tweet or post about major releases
