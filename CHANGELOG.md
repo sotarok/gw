@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.0] - 2025-07-14
+
 ### Added
 - Initial implementation of `gw start` command for creating worktrees
 - Initial implementation of `gw end` command for removing worktrees

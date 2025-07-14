@@ -31,7 +31,17 @@ We follow [Semantic Versioning](https://semver.org/):
    make check
    ```
 
-3. **Create and push a new tag:**
+3. **Update CHANGELOG.md:**
+   ```bash
+   # Update changelog for the new version
+   ./scripts/update-changelog.sh v0.1.0
+   
+   # Review and commit the changes
+   git add CHANGELOG.md
+   git commit -m "chore: update CHANGELOG for v0.1.0"
+   ```
+
+4. **Create and push a new tag:**
    ```bash
    # For a new patch release
    git tag v0.1.1
@@ -46,7 +56,7 @@ We follow [Semantic Versioning](https://semver.org/):
    git push origin v0.1.1
    ```
 
-4. **GitHub Actions will automatically:**
+5. **GitHub Actions will automatically:**
    - Run all tests
    - Build binaries for multiple platforms
    - Create a GitHub release with:
@@ -55,7 +65,7 @@ We follow [Semantic Versioning](https://semver.org/):
      - Checksums file
      - Installation instructions
 
-5. **Verify the release:**
+6. **Verify the release:**
    - Check the [GitHub Releases page](https://github.com/yourusername/gw/releases)
    - Download and test a binary
    - Verify checksums
