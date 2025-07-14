@@ -3,6 +3,7 @@ package ui
 import (
 	"fmt"
 	"gw/internal/git"
+	"strconv"
 	"strings"
 
 	"github.com/charmbracelet/bubbles/key"
@@ -124,6 +125,12 @@ func (m worktreeSelector) View() string {
 	return s.String()
 }
 
+// isNumeric checks if a string contains only digits
+func isNumeric(s string) bool {
+	_, err := strconv.Atoi(s)
+	return err == nil
+}
+
 // SelectWorktree shows an interactive UI to select a worktree
 func SelectWorktree() (*git.WorktreeInfo, error) {
 	worktrees, err := git.ListWorktrees()
@@ -138,8 +145,10 @@ func SelectWorktree() (*git.WorktreeInfo, error) {
 	// Filter out the main worktree (usually the first one)
 	var filteredWorktrees []git.WorktreeInfo
 	for _, wt := range worktrees {
-		// Skip if it's the main worktree (no branch name in specific format)
-		if strings.Contains(wt.Branch, "/impl") {
+		// Skip if it's the main worktree (check for issue number pattern)
+		// Accept branches like "123/impl", "456/fix", etc.
+		parts := strings.Split(wt.Branch, "/")
+		if len(parts) >= 2 && isNumeric(parts[0]) {
 			filteredWorktrees = append(filteredWorktrees, wt)
 		}
 	}

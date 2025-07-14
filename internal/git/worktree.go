@@ -98,7 +98,10 @@ func ListWorktrees() ([]WorktreeInfo, error) {
 		} else if strings.HasPrefix(line, "HEAD ") {
 			current.Commit = strings.TrimPrefix(line, "HEAD ")
 		} else if strings.HasPrefix(line, "branch ") {
-			current.Branch = strings.TrimPrefix(line, "branch ")
+			branch := strings.TrimPrefix(line, "branch ")
+			// Remove refs/heads/ prefix if present
+			branch = strings.TrimPrefix(branch, "refs/heads/")
+			current.Branch = branch
 		} else if line == "detached" {
 			current.IsDetached = true
 		} else if line == "" && current.Path != "" {
