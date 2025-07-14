@@ -12,8 +12,14 @@ go build -o gw
 # Build and install to $GOPATH/bin
 go install
 
-# Run tests (when implemented)
+# Run all tests
 go test ./...
+
+# Run tests with verbose output
+go test -v ./...
+
+# Run specific test
+go test -v -run TestDetectPackageManager ./internal/detect
 
 # Check for compile errors without building
 go build -o /dev/null ./...
@@ -96,3 +102,16 @@ The application uses a layered architecture where commands flow through:
 - Issue numbers are used directly in shell commands without sanitization
 - Package manager commands are executed without validation
 - No checks for command injection in user inputs
+
+## Testing Approach
+
+The codebase uses Test-Driven Development (TDD) following these principles:
+1. Write tests first to define expected behavior
+2. See tests fail (Red phase)
+3. Write minimal code to make tests pass (Green phase)
+4. Refactor while keeping tests green (Refactor phase)
+
+Example improvements made through TDD:
+- Fixed `DetectPackageManager` to return deep copies, preventing global state mutation
+- Tests use temporary directories and git repositories for isolation
+- Each test is self-contained with proper setup and cleanup

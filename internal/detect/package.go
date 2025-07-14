@@ -52,6 +52,19 @@ var packageManagers = []PackageManager{
 	},
 }
 
+// copyPackageManager creates a deep copy of a PackageManager
+func copyPackageManager(pm PackageManager) *PackageManager {
+	// Create a new slice for InstallCmd to avoid sharing the underlying array
+	cmdCopy := make([]string, len(pm.InstallCmd))
+	copy(cmdCopy, pm.InstallCmd)
+	
+	return &PackageManager{
+		Name:       pm.Name,
+		LockFile:   pm.LockFile,
+		InstallCmd: cmdCopy,
+	}
+}
+
 // DetectPackageManager detects the package manager used in the given directory
 func DetectPackageManager(dir string) (*PackageManager, error) {
 	// First check for Node.js projects
@@ -60,19 +73,21 @@ func DetectPackageManager(dir string) (*PackageManager, error) {
 		for _, pm := range packageManagers {
 			if pm.Name == "npm" || pm.Name == "yarn" || pm.Name == "pnpm" {
 				if _, err := os.Stat(filepath.Join(dir, pm.LockFile)); err == nil {
-					return &pm, nil
+					// Return a deep copy to prevent modifications to the global array
+					return copyPackageManager(pm), nil
 				}
 			}
 		}
 		// Default to npm if no specific lock file is found
-		return &packageManagers[0], nil
+		return copyPackageManager(packageManagers[0]), nil
 	}
 
 	// Check for other package managers
 	for _, pm := range packageManagers {
 		if pm.Name != "npm" && pm.Name != "yarn" && pm.Name != "pnpm" {
 			if _, err := os.Stat(filepath.Join(dir, pm.LockFile)); err == nil {
-				return &pm, nil
+				// Return a deep copy to prevent modifications to the global array
+				return copyPackageManager(pm), nil
 			}
 		}
 	}
