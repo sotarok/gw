@@ -33,6 +33,7 @@ func init() {
 func runEnd(cmd *cobra.Command, args []string) error {
 	var issueNumber string
 	var worktreePath string
+	var isInteractiveMode bool
 
 	if len(args) == 0 {
 		// Interactive mode
@@ -49,6 +50,7 @@ func runEnd(cmd *cobra.Command, args []string) error {
 			issueNumber = parts[0]
 		}
 		worktreePath = selected.Path
+		isInteractiveMode = true
 	} else {
 		issueNumber = args[0]
 
@@ -58,6 +60,7 @@ func runEnd(cmd *cobra.Command, args []string) error {
 			return err
 		}
 		worktreePath = wt.Path
+		isInteractiveMode = false
 	}
 
 	if issueNumber == "" {
@@ -134,8 +137,16 @@ func runEnd(cmd *cobra.Command, args []string) error {
 	fmt.Printf("Removing worktree for issue #%s...\n", issueNumber)
 
 	// Remove the worktree
-	if err := git.RemoveWorktree(issueNumber); err != nil {
-		return err
+	if isInteractiveMode {
+		// Use the actual path when selected from interactive mode
+		if err := git.RemoveWorktreeByPath(worktreePath); err != nil {
+			return err
+		}
+	} else {
+		// Use issue number template when specified directly
+		if err := git.RemoveWorktree(issueNumber); err != nil {
+			return err
+		}
 	}
 
 	fmt.Printf("✓ Successfully removed worktree for issue #%s\n", issueNumber)
