@@ -14,7 +14,7 @@ func HasUncommittedChanges() (bool, error) {
 		return false, fmt.Errorf("failed to check git status: %w", err)
 	}
 
-	return len(strings.TrimSpace(string(output))) > 0, nil
+	return strings.TrimSpace(string(output)) != "", nil
 }
 
 // HasUnpushedCommits checks if there are unpushed commits in the current branch

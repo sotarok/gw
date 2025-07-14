@@ -25,11 +25,11 @@ func createTestRepo(t *testing.T) (string, func()) {
 	// Configure git user for commits
 	cmd = exec.Command("git", "config", "user.email", "test@example.com")
 	cmd.Dir = tempDir
-	cmd.Run()
+	_ = cmd.Run()
 
 	cmd = exec.Command("git", "config", "user.name", "Test User")
 	cmd.Dir = tempDir
-	cmd.Run()
+	_ = cmd.Run()
 
 	cleanup := func() {
 		os.RemoveAll(tempDir)
@@ -48,7 +48,9 @@ func TestHasUncommittedChanges(t *testing.T) {
 		if err != nil {
 			t.Fatalf("failed to get current dir: %v", err)
 		}
-		defer os.Chdir(originalDir)
+		defer func() {
+			_ = os.Chdir(originalDir)
+		}()
 
 		if err := os.Chdir(tempDir); err != nil {
 			t.Fatalf("failed to change dir: %v", err)
@@ -90,7 +92,9 @@ func TestHasUncommittedChanges(t *testing.T) {
 		if err != nil {
 			t.Fatalf("failed to get current dir: %v", err)
 		}
-		defer os.Chdir(originalDir)
+		defer func() {
+			_ = os.Chdir(originalDir)
+		}()
 
 		if err := os.Chdir(tempDir); err != nil {
 			t.Fatalf("failed to change dir: %v", err)
@@ -137,7 +141,9 @@ func TestHasUncommittedChanges(t *testing.T) {
 		if err != nil {
 			t.Fatalf("failed to get current dir: %v", err)
 		}
-		defer os.Chdir(originalDir)
+		defer func() {
+			_ = os.Chdir(originalDir)
+		}()
 
 		if err := os.Chdir(tempDir); err != nil {
 			t.Fatalf("failed to change dir: %v", err)
@@ -176,7 +182,9 @@ func TestGetCurrentBranch(t *testing.T) {
 		if err != nil {
 			t.Fatalf("failed to get current dir: %v", err)
 		}
-		defer os.Chdir(originalDir)
+		defer func() {
+			_ = os.Chdir(originalDir)
+		}()
 
 		if err := os.Chdir(tempDir); err != nil {
 			t.Fatalf("failed to change dir: %v", err)
@@ -219,7 +227,9 @@ func TestGetCurrentBranch(t *testing.T) {
 		if err != nil {
 			t.Fatalf("failed to get current dir: %v", err)
 		}
-		defer os.Chdir(originalDir)
+		defer func() {
+			_ = os.Chdir(originalDir)
+		}()
 
 		if err := os.Chdir(tempDir); err != nil {
 			t.Fatalf("failed to change dir: %v", err)

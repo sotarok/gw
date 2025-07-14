@@ -135,7 +135,7 @@ func GetWorktreeForIssue(issueNumber string) (*WorktreeInfo, error) {
 	}
 
 	targetPath := fmt.Sprintf("%s-%s", repoName, issueNumber)
-	
+
 	worktrees, err := ListWorktrees()
 	if err != nil {
 		return nil, err

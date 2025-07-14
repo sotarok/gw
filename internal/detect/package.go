@@ -7,26 +7,32 @@ import (
 	"path/filepath"
 )
 
+const (
+	npmName  = "npm"
+	yarnName = "yarn"
+	pnpmName = "pnpm"
+)
+
 // PackageManager represents a supported package manager
 type PackageManager struct {
-	Name        string
-	LockFile    string
-	InstallCmd  []string
+	Name       string
+	LockFile   string
+	InstallCmd []string
 }
 
 var packageManagers = []PackageManager{
 	{
-		Name:       "npm",
+		Name:       npmName,
 		LockFile:   "package-lock.json",
 		InstallCmd: []string{"npm", "install"},
 	},
 	{
-		Name:       "yarn",
+		Name:       yarnName,
 		LockFile:   "yarn.lock",
 		InstallCmd: []string{"yarn", "install"},
 	},
 	{
-		Name:       "pnpm",
+		Name:       pnpmName,
 		LockFile:   "pnpm-lock.yaml",
 		InstallCmd: []string{"pnpm", "install"},
 	},
@@ -57,7 +63,7 @@ func copyPackageManager(pm PackageManager) *PackageManager {
 	// Create a new slice for InstallCmd to avoid sharing the underlying array
 	cmdCopy := make([]string, len(pm.InstallCmd))
 	copy(cmdCopy, pm.InstallCmd)
-	
+
 	return &PackageManager{
 		Name:       pm.Name,
 		LockFile:   pm.LockFile,
@@ -71,7 +77,7 @@ func DetectPackageManager(dir string) (*PackageManager, error) {
 	if _, err := os.Stat(filepath.Join(dir, "package.json")); err == nil {
 		// Check for specific lock files to determine the package manager
 		for _, pm := range packageManagers {
-			if pm.Name == "npm" || pm.Name == "yarn" || pm.Name == "pnpm" {
+			if pm.Name == npmName || pm.Name == yarnName || pm.Name == pnpmName {
 				if _, err := os.Stat(filepath.Join(dir, pm.LockFile)); err == nil {
 					// Return a deep copy to prevent modifications to the global array
 					return copyPackageManager(pm), nil
@@ -84,7 +90,7 @@ func DetectPackageManager(dir string) (*PackageManager, error) {
 
 	// Check for other package managers
 	for _, pm := range packageManagers {
-		if pm.Name != "npm" && pm.Name != "yarn" && pm.Name != "pnpm" {
+		if pm.Name != npmName && pm.Name != yarnName && pm.Name != pnpmName {
 			if _, err := os.Stat(filepath.Join(dir, pm.LockFile)); err == nil {
 				// Return a deep copy to prevent modifications to the global array
 				return copyPackageManager(pm), nil

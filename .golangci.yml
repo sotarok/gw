@@ -1,0 +1,102 @@
+run:
+  deadline: 5m
+  tests: true
+
+linters:
+  enable:
+    - bodyclose
+    - dogsled
+    - dupl
+    - errcheck
+    - copyloopvar
+    - exhaustive
+    - gochecknoinits
+    - goconst
+    - gocritic
+    - gocyclo
+    - gofmt
+    - goimports
+    - mnd
+    - goprintffuncname
+    - gosec
+    - gosimple
+    - govet
+    - ineffassign
+    - lll
+    - misspell
+    - nakedret
+    - noctx
+    - nolintlint
+    - prealloc
+    - revive
+    - staticcheck
+    - stylecheck
+    - typecheck
+    - unconvert
+    - unparam
+    - unused
+    - whitespace
+
+linters-settings:
+  gocyclo:
+    min-complexity: 15
+  goconst:
+    min-len: 2
+    min-occurrences: 2
+  misspell:
+    locale: US
+  lll:
+    line-length: 140
+  mnd:
+    settings:
+      mnd:
+        checks: argument,case,condition,return
+  gocritic:
+    enabled-tags:
+      - diagnostic
+      - experimental
+      - opinionated
+      - performance
+      - style
+
+issues:
+  exclude-rules:
+    - path: _test\.go
+      linters:
+        - mnd
+        - dupl
+        - gosec
+        - errcheck
+    - text: "weak cryptographic primitive"
+      linters:
+        - gosec
+    - path: cmd/
+      linters:
+        - gochecknoinits
+    - linters:
+        - gocritic
+      text: "ifElseChain|singleCaseSwitch"
+    - linters:
+        - gosec
+      text: "G204"  # Subprocess launched with variable
+    - linters:
+        - revive
+      text: "unused-parameter"
+    - linters:
+        - gocyclo
+      text: "cyclomatic complexity"
+    - linters:
+        - gocritic
+      text: "octalLiteral"
+    - linters:
+        - revive
+      text: "func name will be used as detect.DetectPackageManager by other packages"
+    - linters:
+        - gocritic
+      text: "unnamedResult"
+    - linters:
+        - mnd
+      text: "Magic number"
+    - linters:
+        - goconst
+      text: "string `npm` has 3 occurrences"

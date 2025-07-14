@@ -20,6 +20,10 @@ go.work.sum
 
 # Binary
 gw
+gw.exe
+
+# Build artifacts
+dist/
 
 # IDE
 .idea/

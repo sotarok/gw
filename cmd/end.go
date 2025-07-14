@@ -37,7 +37,7 @@ func runEnd(cmd *cobra.Command, args []string) error {
 	if len(args) == 0 {
 		// Interactive mode
 		fmt.Println("No issue number provided, entering interactive mode...")
-		
+
 		selected, err := ui.SelectWorktree()
 		if err != nil {
 			return err
@@ -51,7 +51,7 @@ func runEnd(cmd *cobra.Command, args []string) error {
 		worktreePath = selected.Path
 	} else {
 		issueNumber = args[0]
-		
+
 		// Find the worktree for this issue
 		wt, err := git.GetWorktreeForIssue(issueNumber)
 		if err != nil {

@@ -214,8 +214,9 @@ func TestDetectPackageManager(t *testing.T) {
 		copy(originalCmd, pm1.InstallCmd)
 
 		// Modify the returned struct
-		pm1.Name = "modified"
-		pm1.InstallCmd[0] = "modified"
+		const modifiedStr = "modified"
+		pm1.Name = modifiedStr
+		pm1.InstallCmd[0] = modifiedStr
 
 		// Get another instance
 		pm2, err := DetectPackageManager(tempDir)

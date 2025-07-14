@@ -99,7 +99,7 @@ func (m worktreeSelector) View() string {
 		}
 
 		line := fmt.Sprintf("%s%s", cursor, wt.Path)
-		
+
 		if wt.Branch != "" {
 			line += fmt.Sprintf(" (%s)", wt.Branch)
 		}
