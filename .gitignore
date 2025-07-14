@@ -38,3 +38,5 @@ Thumbs.db
 
 # Claude settings
 .claude/settings.local.json
+
+*.md.bak
