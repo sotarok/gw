@@ -13,7 +13,6 @@ builds:
       - CGO_ENABLED=0
     goos:
       - linux
-      - windows
       - darwin
     goarch:
       - amd64
@@ -22,9 +21,7 @@ builds:
     goarm:
       - "7"
     ignore:
-      - goos: windows
-        goarch: arm64
-      - goos: windows
+      - goos: darwin
         goarch: arm
     ldflags:
       - -s -w -X main.version={{.Version}} -X main.commit={{.Commit}} -X main.date={{.Date}}
@@ -38,9 +35,6 @@ archives:
       {{- else if eq .Arch "386" }}i386
       {{- else }}{{ .Arch }}{{ end }}
       {{- if .Arm }}v{{ .Arm }}{{ end }}
-    format_overrides:
-      - goos: windows
-        format: zip
     files:
       - README.md
       - LICENSE

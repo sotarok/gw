@@ -13,7 +13,7 @@ A convenient CLI tool for managing Git worktrees with automatic package manager 
 - Automatic detection and setup of package managers (npm, yarn, pnpm, cargo, go, pip, bundler)
 - Interactive worktree selection for removal
 - Safety checks before removing worktrees (uncommitted changes, unpushed commits, merge status)
-- Cross-platform support (Windows, macOS, Linux)
+- Cross-platform support (macOS, Linux)
 
 ## Installation
 
@@ -58,9 +58,6 @@ curl -L https://github.com/sotarok/gw/releases/latest/download/gw_Darwin_arm64.t
 sudo mv gw /usr/local/bin/
 ```
 
-#### Windows
-
-Download the Windows binary from the [Releases page](https://github.com/sotarok/gw/releases) and add it to your PATH.
 
 ### From source
 
