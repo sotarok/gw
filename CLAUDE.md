@@ -26,6 +26,22 @@ go build -o /dev/null ./...
 
 # Update dependencies
 go mod tidy
+
+# Format code
+make fmt
+
+# Run checks (lint, tests, etc)
+make check
+```
+
+### Pre-commit Checklist
+**IMPORTANT**: Always run these commands before committing:
+```bash
+# 1. Format the code
+make fmt
+
+# 2. Run all checks
+make check
 ```
 
 ### Testing the CLI
