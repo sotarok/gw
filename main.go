@@ -1,8 +1,9 @@
 package main
 
 import (
-	"gw/cmd"
 	"os"
+
+	"github.com/sotarok/gw/cmd"
 )
 
 // These variables are set via ldflags by goreleaser

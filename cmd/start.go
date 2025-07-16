@@ -2,9 +2,10 @@ package cmd
 
 import (
 	"fmt"
-	"gw/internal/detect"
-	"gw/internal/git"
 	"os"
+
+	"github.com/sotarok/gw/internal/detect"
+	"github.com/sotarok/gw/internal/git"
 
 	"github.com/spf13/cobra"
 )

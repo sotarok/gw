@@ -3,10 +3,11 @@ package cmd
 import (
 	"bufio"
 	"fmt"
-	"gw/internal/git"
-	"gw/internal/ui"
 	"os"
 	"strings"
+
+	"github.com/sotarok/gw/internal/git"
+	"github.com/sotarok/gw/internal/ui"
 
 	"github.com/spf13/cobra"
 )

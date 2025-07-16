@@ -2,9 +2,10 @@ package ui
 
 import (
 	"fmt"
-	"gw/internal/git"
 	"strconv"
 	"strings"
+
+	"github.com/sotarok/gw/internal/git"
 
 	"github.com/charmbracelet/bubbles/key"
 	tea "github.com/charmbracelet/bubbletea"
