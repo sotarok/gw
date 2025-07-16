@@ -10,8 +10,10 @@ A convenient CLI tool for managing Git worktrees with automatic package manager 
 ## Features
 
 - Create worktrees with simple commands
+- Checkout existing branches as worktrees
 - Automatic detection and setup of package managers (npm, yarn, pnpm, cargo, go, pip, bundler)
 - Interactive worktree selection for removal
+- Interactive branch selection for checkout
 - Safety checks before removing worktrees (uncommitted changes, unpushed commits, merge status)
 - Cross-platform support (macOS, Linux)
 
@@ -75,6 +77,25 @@ gw start 456 develop
 This will:
 1. Create a new worktree at `../{repository-name}-{issue-number}`
 2. Create a new branch `{issue-number}/impl`
+3. Change to the new worktree directory
+4. Automatically run package manager setup if detected
+
+### Checkout an existing branch
+
+```bash
+# Checkout specific branch as worktree
+gw checkout feature/auth
+
+# Checkout remote branch
+gw checkout origin/feature/api
+
+# Interactive mode - select from list of branches
+gw checkout
+```
+
+This will:
+1. Create a new worktree at `../{repository-name}-{branch-name}`
+2. Checkout the specified branch (or create tracking branch for remote)
 3. Change to the new worktree directory
 4. Automatically run package manager setup if detected
 

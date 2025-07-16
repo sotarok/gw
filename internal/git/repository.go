@@ -36,3 +36,31 @@ func GetCurrentBranch() (string, error) {
 
 	return strings.TrimSpace(string(output)), nil
 }
+
+// ListAllBranches returns all local and remote branches
+func ListAllBranches() ([]string, error) {
+	// First, fetch to ensure we have latest remote branches
+	fetchCmd := exec.Command("git", "fetch", "--prune")
+	if err := fetchCmd.Run(); err != nil {
+		// Continue even if fetch fails
+		fmt.Printf("Warning: failed to fetch latest branches: %v\n", err)
+	}
+
+	// Get all branches (local and remote)
+	cmd := exec.Command("git", "branch", "-a", "--format=%(refname:short)")
+	output, err := cmd.Output()
+	if err != nil {
+		return nil, fmt.Errorf("failed to list branches: %w", err)
+	}
+
+	lines := strings.Split(strings.TrimSpace(string(output)), "\n")
+	var branches []string
+	for _, line := range lines {
+		line = strings.TrimSpace(line)
+		if line != "" && !strings.Contains(line, "HEAD") {
+			branches = append(branches, line)
+		}
+	}
+
+	return branches, nil
+}

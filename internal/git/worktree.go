@@ -160,3 +160,39 @@ func GetWorktreeForIssue(issueNumber string) (*WorktreeInfo, error) {
 
 	return nil, fmt.Errorf("worktree for issue %s not found", issueNumber)
 }
+
+// CreateWorktreeFromBranch creates a new git worktree from an existing branch
+func CreateWorktreeFromBranch(worktreePath, sourceBranch, targetBranch string) error {
+	if !IsGitRepository() {
+		return fmt.Errorf("not in a git repository")
+	}
+
+	// Check if source branch starts with origin/
+	isRemoteBranch := strings.HasPrefix(sourceBranch, "origin/")
+
+	var cmd *exec.Cmd
+	if isRemoteBranch {
+		// For remote branches, create a new local branch tracking the remote
+		cmd = exec.Command("git", "worktree", "add", worktreePath, "-b", targetBranch, sourceBranch)
+	} else {
+		// For local branches, just check it out
+		cmd = exec.Command("git", "worktree", "add", worktreePath, sourceBranch)
+	}
+
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+
+	if err := cmd.Run(); err != nil {
+		return fmt.Errorf("failed to create worktree: %w", err)
+	}
+
+	return nil
+}
+
+// RunCommand executes a command in the current directory
+func RunCommand(command string) error {
+	cmd := exec.Command("sh", "-c", command)
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+	return cmd.Run()
+}

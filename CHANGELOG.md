@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- New `gw checkout` command to create worktrees from existing branches
+- Interactive branch selection when no branch is specified for checkout
+- Support for checking out both local and remote branches
+- Automatic creation of tracking branches for remote branches
+- Proper sanitization of branch names for directory creation (handles special characters like /, \, *, ?, <, >, |, :, ")
+
 ## [0.1.1] - 2025-07-16
 
 ### Fixed

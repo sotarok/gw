@@ -12,6 +12,12 @@ import (
 	"github.com/charmbracelet/lipgloss"
 )
 
+// SelectorItem represents an item in the selector
+type SelectorItem struct {
+	ID   string
+	Name string
+}
+
 var (
 	selectedStyle = lipgloss.NewStyle().
 			Foreground(lipgloss.Color("170")).
@@ -175,4 +181,83 @@ func SelectWorktree() (*git.WorktreeInfo, error) {
 	}
 
 	return model.selected, nil
+}
+
+// ShowSelector displays a generic selector with the given items
+func ShowSelector(title string, items []SelectorItem) (*SelectorItem, error) {
+	m := &genericSelector{
+		items:  items,
+		title:  title,
+		cursor: 0,
+		keyMap: keys,
+	}
+
+	p := tea.NewProgram(m, tea.WithAltScreen())
+	result, err := p.Run()
+	if err != nil {
+		return nil, err
+	}
+
+	model := result.(*genericSelector)
+	if model.selected == nil {
+		return nil, fmt.Errorf("no item selected")
+	}
+
+	return model.selected, nil
+}
+
+// genericSelector is a generic selector model
+type genericSelector struct {
+	items    []SelectorItem
+	cursor   int
+	selected *SelectorItem
+	title    string
+	keyMap   keyMap
+}
+
+func (m *genericSelector) Init() tea.Cmd {
+	return nil
+}
+
+func (m *genericSelector) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+	switch msg := msg.(type) {
+	case tea.KeyMsg:
+		switch {
+		case key.Matches(msg, m.keyMap.Up):
+			if m.cursor > 0 {
+				m.cursor--
+			}
+		case key.Matches(msg, m.keyMap.Down):
+			if m.cursor < len(m.items)-1 {
+				m.cursor++
+			}
+		case key.Matches(msg, m.keyMap.Select):
+			m.selected = &m.items[m.cursor]
+			return m, tea.Quit
+		case key.Matches(msg, m.keyMap.Quit):
+			return m, tea.Quit
+		}
+	}
+	return m, nil
+}
+
+func (m *genericSelector) View() string {
+	s := fmt.Sprintf("%s\n\n", m.title)
+
+	for i, item := range m.items {
+		cursor := " "
+		if m.cursor == i {
+			cursor = ">"
+		}
+
+		line := fmt.Sprintf("%s %s", cursor, item.Name)
+		if m.cursor == i {
+			s += selectedStyle.Render(line) + "\n"
+		} else {
+			s += normalStyle.Render(line) + "\n"
+		}
+	}
+
+	s += "\n" + dimStyle.Render("↑/k: up • ↓/j: down • enter: select • q: quit")
+	return s
 }
