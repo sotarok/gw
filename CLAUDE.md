@@ -44,6 +44,35 @@ make fmt
 make check
 ```
 
+### Changelog Management
+When making changes that affect functionality, bug fixes, or features:
+
+1. **Update CHANGELOG.md** - Add entries under the `[Unreleased]` section
+2. **Use conventional commit messages** for easier changelog generation:
+   - `fix:` for bug fixes
+   - `feat:` for new features
+   - `docs:` for documentation changes
+   - `chore:` for maintenance tasks
+   - `refactor:` for code refactoring
+   - `test:` for test additions/changes
+
+3. **Generate changelog entries from commits** (for reference):
+   ```bash
+   # Show commits since last tag
+   git log $(git describe --tags --abbrev=0)..HEAD --oneline
+   
+   # Show commits with more detail
+   git log $(git describe --tags --abbrev=0)..HEAD --pretty=format:"- %s"
+   ```
+
+4. **Changelog categories** to use:
+   - `Added` for new features
+   - `Changed` for changes in existing functionality
+   - `Deprecated` for soon-to-be removed features
+   - `Removed` for now removed features
+   - `Fixed` for any bug fixes
+   - `Security` for vulnerability fixes
+
 ### Testing the CLI
 ```bash
 # Create a test worktree

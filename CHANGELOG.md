@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.1] - 2025-07-16
+
+### Fixed
+- Update module path from `gw` to `github.com/sotarok/gw` for go install compatibility
+- Fix import paths throughout the codebase
+- Fix Go version in go.mod (was incorrectly set to 1.24.5)
+
+### Changed
+- Add coverage.txt to .gitignore
+
+### Documentation
+- Add pre-commit checklist to CLAUDE.md (run `make fmt` and `make check` before committing)
+
 ## [0.1.0] - 2025-07-14
 
 ### Added
