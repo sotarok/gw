@@ -64,3 +64,25 @@ func ListAllBranches() ([]string, error) {
 
 	return branches, nil
 }
+
+// BranchExists checks if a branch exists (local or remote)
+func BranchExists(branch string) (bool, error) {
+	// Check if it's a local branch
+	cmd := exec.Command("git", "rev-parse", "--verify", "--quiet", branch)
+	if err := cmd.Run(); err == nil {
+		return true, nil
+	}
+
+	// Check if it's a remote branch
+	remoteRef := branch
+	if !strings.HasPrefix(branch, "origin/") {
+		remoteRef = "origin/" + branch
+	}
+
+	cmd = exec.Command("git", "rev-parse", "--verify", "--quiet", remoteRef)
+	if err := cmd.Run(); err == nil {
+		return true, nil
+	}
+
+	return false, nil
+}
