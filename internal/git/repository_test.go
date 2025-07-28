@@ -2,6 +2,7 @@ package git
 
 import (
 	"os"
+	"strings"
 	"testing"
 )
 
@@ -105,21 +106,32 @@ func TestBranchExists(t *testing.T) {
 	})
 
 	t.Run("returns true for existing remote branch", func(t *testing.T) {
-		// Check for both origin/main and origin/master
-		exists, err := BranchExists("origin/main")
+		// In CI environment, we might be in a shallow clone without remote branches
+		// Let's skip this test if we can't find any remote branches
+		branches, err := ListAllBranches()
 		if err != nil {
-			t.Fatalf("unexpected error checking origin/main: %v", err)
+			t.Fatalf("failed to list branches: %v", err)
 		}
-
+		
+		// Find any origin/* branch to test with
+		var remoteBranch string
+		for _, branch := range branches {
+			if strings.HasPrefix(branch, "origin/") {
+				remoteBranch = branch
+				break
+			}
+		}
+		
+		if remoteBranch == "" {
+			t.Skip("No remote branches found, skipping remote branch test")
+		}
+		
+		exists, err := BranchExists(remoteBranch)
+		if err != nil {
+			t.Fatalf("unexpected error checking %s: %v", remoteBranch, err)
+		}
 		if !exists {
-			// Try origin/master if origin/main doesn't exist
-			exists, err = BranchExists("origin/master")
-			if err != nil {
-				t.Fatalf("unexpected error checking origin/master: %v", err)
-			}
-			if !exists {
-				t.Error("expected BranchExists to return true for either 'origin/main' or 'origin/master' branch")
-			}
+			t.Errorf("expected BranchExists to return true for existing remote branch '%s'", remoteBranch)
 		}
 	})
 
