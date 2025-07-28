@@ -112,7 +112,7 @@ func TestBranchExists(t *testing.T) {
 		if err != nil {
 			t.Fatalf("failed to list branches: %v", err)
 		}
-		
+
 		// Find any origin/* branch to test with
 		var remoteBranch string
 		for _, branch := range branches {
@@ -121,11 +121,11 @@ func TestBranchExists(t *testing.T) {
 				break
 			}
 		}
-		
+
 		if remoteBranch == "" {
 			t.Skip("No remote branches found, skipping remote branch test")
 		}
-		
+
 		exists, err := BranchExists(remoteBranch)
 		if err != nil {
 			t.Fatalf("unexpected error checking %s: %v", remoteBranch, err)
