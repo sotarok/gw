@@ -49,16 +49,16 @@ func FindUntrackedEnvFiles(repoPath string) ([]EnvFile, error) {
 		return nil, fmt.Errorf("failed to walk directory: %w", err)
 	}
 
-	// Get tracked files from git
-	cmd := exec.Command("git", "ls-files")
+	// Get only tracked files from git
+	cmd := exec.Command("git", "ls-files", "--cached")
 	cmd.Dir = repoPath
-	output, err := cmd.Output()
+	trackedOutput, err := cmd.Output()
 	if err != nil {
 		return nil, fmt.Errorf("failed to get tracked files: %w", err)
 	}
 
 	trackedFiles := make(map[string]bool)
-	for _, file := range strings.Split(string(output), "\n") {
+	for _, file := range strings.Split(string(trackedOutput), "\n") {
 		if file != "" {
 			trackedFiles[file] = true
 		}

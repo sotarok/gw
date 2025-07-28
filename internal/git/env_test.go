@@ -132,6 +132,104 @@ func TestFindUntrackedEnvFilesWithNodeModules(t *testing.T) {
 	}
 }
 
+func TestFindUntrackedEnvFilesExcludesAllTrackedFiles(t *testing.T) {
+	// Create temporary directory
+	tmpDir, err := os.MkdirTemp("", "gw-test-*")
+	if err != nil {
+		t.Fatalf("Failed to create temp dir: %v", err)
+	}
+	defer os.RemoveAll(tmpDir)
+
+	// Initialize git repository
+	runGitCommand(t, tmpDir, "init")
+	runGitCommand(t, tmpDir, "config", "user.email", "test@example.com")
+	runGitCommand(t, tmpDir, "config", "user.name", "Test User")
+
+	// Create directory structure
+	dirs := []string{
+		"apps/frontend",
+		"apps/backend",
+		"apps/service",
+	}
+
+	for _, dir := range dirs {
+		fullPath := filepath.Join(tmpDir, dir)
+		if err := os.MkdirAll(fullPath, 0755); err != nil {
+			t.Fatalf("Failed to create dir %s: %v", dir, err)
+		}
+	}
+
+	// Create test files - mix of tracked and untracked
+	testFiles := map[string]bool{
+		"apps/frontend/.env.local":        false, // untracked
+		"apps/frontend/.env.example":      true,  // tracked
+		"apps/backend/.env":               false, // untracked
+		"apps/backend/.env.local.example": true,  // tracked
+		"apps/service/.env.production":    false, // untracked
+		"apps/service/.env.example":       true,  // tracked
+	}
+
+	for file, tracked := range testFiles {
+		filePath := filepath.Join(tmpDir, file)
+		if err := os.WriteFile(filePath, []byte("test"), 0644); err != nil {
+			t.Fatalf("Failed to create file %s: %v", file, err)
+		}
+
+		if tracked {
+			runGitCommand(t, tmpDir, "add", file)
+		}
+	}
+
+	// Commit tracked files
+	runGitCommand(t, tmpDir, "commit", "-m", "Initial commit")
+
+	// Find untracked env files
+	envFiles, err := FindUntrackedEnvFiles(tmpDir)
+	if err != nil {
+		t.Fatalf("FindUntrackedEnvFiles failed: %v", err)
+	}
+
+	// Expected untracked files only
+	expectedUntracked := []string{
+		"apps/frontend/.env.local",
+		"apps/backend/.env",
+		"apps/service/.env.production",
+	}
+
+	// Tracked files that should NOT be found
+	trackedFiles := []string{
+		"apps/frontend/.env.example",
+		"apps/backend/.env.local.example",
+		"apps/service/.env.example",
+	}
+
+	// Check if all expected untracked files are found
+	foundFiles := make(map[string]bool)
+	for _, envFile := range envFiles {
+		foundFiles[envFile.Path] = true
+		t.Logf("Found file: %s", envFile.Path)
+	}
+
+	// Verify only untracked files are found
+	for _, expectedFile := range expectedUntracked {
+		if !foundFiles[expectedFile] {
+			t.Errorf("Expected to find untracked file %s but it was not found", expectedFile)
+		}
+	}
+
+	// Verify tracked files are NOT found
+	for _, trackedFile := range trackedFiles {
+		if foundFiles[trackedFile] {
+			t.Errorf("Tracked file %s should not be found but was included", trackedFile)
+		}
+	}
+
+	// Verify exact count
+	if len(envFiles) != len(expectedUntracked) {
+		t.Errorf("Expected exactly %d untracked files, got %d", len(expectedUntracked), len(envFiles))
+	}
+}
+
 func TestCopyEnvFiles(t *testing.T) {
 	// Create source directory
 	srcDir, err := os.MkdirTemp("", "gw-src-*")
