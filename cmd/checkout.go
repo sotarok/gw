@@ -55,6 +55,15 @@ func runCheckout(cmd *cobra.Command, args []string) error {
 	worktreeName := fmt.Sprintf("%s-%s", repoName, sanitizedBranchName)
 	worktreePath := filepath.Join("..", worktreeName)
 
+	// Check if branch exists
+	exists, err := git.BranchExists(branch)
+	if err != nil {
+		return fmt.Errorf("failed to check branch existence: %w", err)
+	}
+	if !exists {
+		return fmt.Errorf("branch '%s' does not exist in the repository\nUse 'git branch -a' to see all available branches", branch)
+	}
+
 	// Create worktree
 	fmt.Printf("Creating worktree for branch '%s'...\n", branch)
 	if err := git.CreateWorktreeFromBranch(worktreePath, branch, branchName); err != nil {
