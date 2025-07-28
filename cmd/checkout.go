@@ -69,6 +69,12 @@ func runCheckout(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("branch '%s' does not exist in the repository\nUse 'git branch -a' to see all available branches", branch)
 	}
 
+	// Get the original repository root before creating worktree
+	originalDir, err := os.Getwd()
+	if err != nil {
+		return fmt.Errorf("failed to get current directory: %w", err)
+	}
+
 	// Create worktree
 	fmt.Printf("Creating worktree for branch '%s'...\n", branch)
 	if err := git.CreateWorktreeFromBranch(worktreePath, branch, branchName); err != nil {
@@ -88,9 +94,8 @@ func runCheckout(cmd *cobra.Command, args []string) error {
 	fmt.Printf("Changed directory to: %s\n", absolutePath)
 
 	// Handle environment files
-	// Get the original repository root (parent of worktree directory)
-	sourceRoot := filepath.Dir(absolutePath)
-	envFiles, err := git.FindUntrackedEnvFiles(sourceRoot)
+	// Use the original repository root to find env files
+	envFiles, err := git.FindUntrackedEnvFiles(originalDir)
 	if err != nil {
 		fmt.Printf("⚠ Failed to find env files: %v\n", err)
 	} else if len(envFiles) > 0 {
@@ -116,7 +121,7 @@ func runCheckout(cmd *cobra.Command, args []string) error {
 			ui.ShowEnvFilesList(filePaths)
 
 			// Copy files
-			if err := git.CopyEnvFiles(envFiles, sourceRoot, absolutePath); err != nil {
+			if err := git.CopyEnvFiles(envFiles, originalDir, absolutePath); err != nil {
 				fmt.Printf("⚠ Failed to copy some env files: %v\n", err)
 			}
 		}
