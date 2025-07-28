@@ -18,6 +18,11 @@ type SelectorItem struct {
 	Name string
 }
 
+const (
+	mainBranch   = "main"
+	masterBranch = "master"
+)
+
 var (
 	selectedStyle = lipgloss.NewStyle().
 			Foreground(lipgloss.Color("170")).
@@ -149,19 +154,19 @@ func SelectWorktree() (*git.WorktreeInfo, error) {
 		return nil, fmt.Errorf("no worktrees found")
 	}
 
-	// Filter out the main worktree (usually the first one)
-	var filteredWorktrees []git.WorktreeInfo
+	// Filter out the main worktree and master/main branches
+	filteredWorktrees := make([]git.WorktreeInfo, 0, len(worktrees))
 	for _, wt := range worktrees {
-		// Skip if it's the main worktree (check for issue number pattern)
-		// Accept branches like "123/impl", "456/fix", etc.
-		parts := strings.Split(wt.Branch, "/")
-		if len(parts) >= 2 && isNumeric(parts[0]) {
-			filteredWorktrees = append(filteredWorktrees, wt)
+		// Skip main/master branches and current worktree if it's main/master
+		if wt.Branch == mainBranch || wt.Branch == masterBranch {
+			continue
 		}
+		// Include all other worktrees
+		filteredWorktrees = append(filteredWorktrees, wt)
 	}
 
 	if len(filteredWorktrees) == 0 {
-		return nil, fmt.Errorf("no issue worktrees found")
+		return nil, fmt.Errorf("no worktrees found (excluding main/master)")
 	}
 
 	m := worktreeSelector{
