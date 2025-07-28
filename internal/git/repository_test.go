@@ -89,24 +89,37 @@ func TestIsGitRepository(t *testing.T) {
 
 func TestBranchExists(t *testing.T) {
 	t.Run("returns true for existing local branch", func(t *testing.T) {
-		// main branch should always exist
-		exists, err := BranchExists("main")
+		// Get current branch to test with
+		currentBranch, err := GetCurrentBranch()
+		if err != nil {
+			t.Fatalf("failed to get current branch: %v", err)
+		}
+
+		exists, err := BranchExists(currentBranch)
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
 		if !exists {
-			t.Error("expected BranchExists to return true for 'main' branch")
+			t.Errorf("expected BranchExists to return true for current branch '%s'", currentBranch)
 		}
 	})
 
 	t.Run("returns true for existing remote branch", func(t *testing.T) {
-		// origin/main should exist
+		// Check for both origin/main and origin/master
 		exists, err := BranchExists("origin/main")
 		if err != nil {
-			t.Fatalf("unexpected error: %v", err)
+			t.Fatalf("unexpected error checking origin/main: %v", err)
 		}
+
 		if !exists {
-			t.Error("expected BranchExists to return true for 'origin/main' branch")
+			// Try origin/master if origin/main doesn't exist
+			exists, err = BranchExists("origin/master")
+			if err != nil {
+				t.Fatalf("unexpected error checking origin/master: %v", err)
+			}
+			if !exists {
+				t.Error("expected BranchExists to return true for either 'origin/main' or 'origin/master' branch")
+			}
 		}
 	})
 
