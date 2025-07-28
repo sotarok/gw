@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.0] - 2025-07-28
+
 ### Added
 - New `gw checkout` command to create worktrees from existing branches
 - Interactive branch selection when no branch is specified for checkout
@@ -43,6 +45,3 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Security
 - Deep copy of PackageManager structs to prevent global state mutation
 
-## [0.1.0] - TBD
-
-Initial release
