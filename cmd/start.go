@@ -3,11 +3,17 @@ package cmd
 import (
 	"fmt"
 	"os"
+	"path/filepath"
 
 	"github.com/sotarok/gw/internal/detect"
 	"github.com/sotarok/gw/internal/git"
+	"github.com/sotarok/gw/internal/ui"
 
 	"github.com/spf13/cobra"
+)
+
+var (
+	startCopyEnvs bool
 )
 
 var startCmd = &cobra.Command{
@@ -21,6 +27,7 @@ A new branch '{issue-number}/impl' will be created based on the specified base b
 }
 
 func init() {
+	startCmd.Flags().BoolVar(&startCopyEnvs, "copy-envs", false, "Copy untracked .env files to the new worktree")
 	rootCmd.AddCommand(startCmd)
 }
 
@@ -58,6 +65,40 @@ func runStart(cmd *cobra.Command, args []string) error {
 	}
 
 	fmt.Printf("✓ Changed to worktree directory\n")
+
+	// Handle environment files
+	sourceRoot := filepath.Dir(worktreePath)
+	envFiles, err := git.FindUntrackedEnvFiles(sourceRoot)
+	if err != nil {
+		fmt.Printf("⚠ Failed to find env files: %v\n", err)
+	} else if len(envFiles) > 0 {
+		shouldCopy := startCopyEnvs
+
+		// If flag not set, ask user
+		if !startCopyEnvs {
+			fmt.Printf("\nFound %d untracked environment file(s). Copy them to the new worktree?", len(envFiles))
+			confirmed, err := ui.ConfirmPrompt("")
+			if err != nil {
+				fmt.Printf("⚠ Failed to get user input: %v\n", err)
+			} else {
+				shouldCopy = confirmed
+			}
+		}
+
+		if shouldCopy {
+			// Show files to be copied
+			filePaths := make([]string, len(envFiles))
+			for i, f := range envFiles {
+				filePaths[i] = f.Path
+			}
+			ui.ShowEnvFilesList(filePaths)
+
+			// Copy files
+			if err := git.CopyEnvFiles(envFiles, sourceRoot, worktreePath); err != nil {
+				fmt.Printf("⚠ Failed to copy some env files: %v\n", err)
+			}
+		}
+	}
 
 	// Run setup if a package manager is detected
 	if err := detect.RunSetup(worktreePath); err != nil {

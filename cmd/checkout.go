@@ -12,6 +12,10 @@ import (
 	"github.com/spf13/cobra"
 )
 
+var (
+	checkoutCopyEnvs bool
+)
+
 var checkoutCmd = &cobra.Command{
 	Use:   "checkout [branch]",
 	Short: "Checkout an existing branch as a new worktree",
@@ -22,6 +26,7 @@ If no branch is specified, an interactive selector will be shown.`,
 }
 
 func init() {
+	checkoutCmd.Flags().BoolVar(&checkoutCopyEnvs, "copy-envs", false, "Copy untracked .env files to the new worktree")
 	rootCmd.AddCommand(checkoutCmd)
 }
 
@@ -72,6 +77,41 @@ func runCheckout(cmd *cobra.Command, args []string) error {
 	}
 
 	fmt.Printf("Changed directory to: %s\n", absolutePath)
+
+	// Handle environment files
+	// Get the original repository root (parent of worktree directory)
+	sourceRoot := filepath.Dir(absolutePath)
+	envFiles, err := git.FindUntrackedEnvFiles(sourceRoot)
+	if err != nil {
+		fmt.Printf("⚠ Failed to find env files: %v\n", err)
+	} else if len(envFiles) > 0 {
+		shouldCopy := checkoutCopyEnvs
+
+		// If flag not set, ask user
+		if !checkoutCopyEnvs {
+			fmt.Printf("\nFound %d untracked environment file(s). Copy them to the new worktree?", len(envFiles))
+			confirmed, err := ui.ConfirmPrompt("")
+			if err != nil {
+				fmt.Printf("⚠ Failed to get user input: %v\n", err)
+			} else {
+				shouldCopy = confirmed
+			}
+		}
+
+		if shouldCopy {
+			// Show files to be copied
+			filePaths := make([]string, len(envFiles))
+			for i, f := range envFiles {
+				filePaths[i] = f.Path
+			}
+			ui.ShowEnvFilesList(filePaths)
+
+			// Copy files
+			if err := git.CopyEnvFiles(envFiles, sourceRoot, absolutePath); err != nil {
+				fmt.Printf("⚠ Failed to copy some env files: %v\n", err)
+			}
+		}
+	}
 
 	// Run package manager setup
 	pm, err := detect.DetectPackageManager(absolutePath)
