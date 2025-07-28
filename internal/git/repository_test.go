@@ -2,6 +2,7 @@ package git
 
 import (
 	"os"
+	"strings"
 	"testing"
 )
 
@@ -83,6 +84,117 @@ func TestIsGitRepository(t *testing.T) {
 
 		if IsGitRepository() {
 			t.Error("expected IsGitRepository to return false outside git repository")
+		}
+	})
+}
+
+func TestBranchExists(t *testing.T) {
+	t.Run("returns true for existing local branch", func(t *testing.T) {
+		// Get current branch to test with
+		currentBranch, err := GetCurrentBranch()
+		if err != nil {
+			t.Fatalf("failed to get current branch: %v", err)
+		}
+
+		exists, err := BranchExists(currentBranch)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if !exists {
+			t.Errorf("expected BranchExists to return true for current branch '%s'", currentBranch)
+		}
+	})
+
+	t.Run("returns true for existing remote branch", func(t *testing.T) {
+		// In CI environment, we might be in a shallow clone without remote branches
+		// Let's skip this test if we can't find any remote branches
+		branches, err := ListAllBranches()
+		if err != nil {
+			t.Fatalf("failed to list branches: %v", err)
+		}
+
+		// Find any origin/* branch to test with
+		var remoteBranch string
+		for _, branch := range branches {
+			if strings.HasPrefix(branch, "origin/") {
+				remoteBranch = branch
+				break
+			}
+		}
+
+		if remoteBranch == "" {
+			t.Skip("No remote branches found, skipping remote branch test")
+		}
+
+		exists, err := BranchExists(remoteBranch)
+		if err != nil {
+			t.Fatalf("unexpected error checking %s: %v", remoteBranch, err)
+		}
+		if !exists {
+			t.Errorf("expected BranchExists to return true for existing remote branch '%s'", remoteBranch)
+		}
+	})
+
+	t.Run("returns false for non-existent branch", func(t *testing.T) {
+		exists, err := BranchExists("non-existent-branch-12345")
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if exists {
+			t.Error("expected BranchExists to return false for non-existent branch")
+		}
+	})
+
+	t.Run("checks remote when local branch doesn't exist", func(t *testing.T) {
+		// Create a temporary git repository for testing
+		tempDir, err := os.MkdirTemp("", "test-git-repo")
+		if err != nil {
+			t.Fatalf("failed to create temp dir: %v", err)
+		}
+		defer os.RemoveAll(tempDir)
+
+		// Save current directory
+		originalDir, err := os.Getwd()
+		if err != nil {
+			t.Fatalf("failed to get current dir: %v", err)
+		}
+		defer func() {
+			_ = os.Chdir(originalDir)
+		}()
+
+		// Change to temp directory
+		if err := os.Chdir(tempDir); err != nil {
+			t.Fatalf("failed to change dir: %v", err)
+		}
+
+		// Initialize git repo
+		if err := RunCommand("git init"); err != nil {
+			t.Fatalf("failed to init git repo: %v", err)
+		}
+
+		// Create initial commit
+		if err := RunCommand("git config user.email 'test@example.com' && git config user.name 'Test User'"); err != nil {
+			t.Fatalf("failed to configure git: %v", err)
+		}
+		if err := os.WriteFile("README.md", []byte("test"), 0644); err != nil {
+			t.Fatalf("failed to create file: %v", err)
+		}
+		if err := RunCommand("git add . && git commit -m 'initial commit'"); err != nil {
+			t.Fatalf("failed to create commit: %v", err)
+		}
+
+		// Create a branch
+		if err := RunCommand("git checkout -b test-branch"); err != nil {
+			t.Fatalf("failed to create branch: %v", err)
+		}
+
+		// Test that the branch exists
+		exists, err := BranchExists("test-branch")
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if !exists {
+			t.Error("expected BranchExists to return true for created branch")
 		}
 	})
 }
