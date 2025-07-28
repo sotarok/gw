@@ -99,30 +99,38 @@ func runCheckout(cmd *cobra.Command, args []string) error {
 	if err != nil {
 		fmt.Printf("⚠ Failed to find env files: %v\n", err)
 	} else if len(envFiles) > 0 {
+		// Prepare file list
+		filePaths := make([]string, len(envFiles))
+		for i, f := range envFiles {
+			filePaths[i] = f.Path
+		}
+
 		shouldCopy := checkoutCopyEnvs
 
 		// If flag not set, ask user
 		if !checkoutCopyEnvs {
-			fmt.Printf("\nFound %d untracked environment file(s). Copy them to the new worktree?", len(envFiles))
+			fmt.Printf("\nFound %d untracked environment file(s):\n", len(envFiles))
+			ui.ShowEnvFilesList(filePaths)
+
+			fmt.Printf("\nCopy them to the new worktree?")
 			confirmed, err := ui.ConfirmPrompt("")
 			if err != nil {
 				fmt.Printf("⚠ Failed to get user input: %v\n", err)
 			} else {
 				shouldCopy = confirmed
 			}
+		} else {
+			// When flag is set, also show the files being copied
+			fmt.Printf("\nCopying environment files:\n")
+			ui.ShowEnvFilesList(filePaths)
 		}
 
 		if shouldCopy {
-			// Show files to be copied
-			filePaths := make([]string, len(envFiles))
-			for i, f := range envFiles {
-				filePaths[i] = f.Path
-			}
-			ui.ShowEnvFilesList(filePaths)
-
 			// Copy files
 			if err := git.CopyEnvFiles(envFiles, originalDir, absolutePath); err != nil {
 				fmt.Printf("⚠ Failed to copy some env files: %v\n", err)
+			} else {
+				fmt.Printf("✓ Environment files copied successfully\n")
 			}
 		}
 	}
