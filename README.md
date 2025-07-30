@@ -12,6 +12,7 @@ A convenient CLI tool for managing Git worktrees with automatic package manager 
 - Create worktrees with simple commands
 - Checkout existing branches as worktrees
 - Automatic detection and setup of package managers (npm, yarn, pnpm, cargo, go, pip, bundler)
+- Copy untracked environment files (.env, .env.local, etc.) to new worktrees
 - Interactive worktree selection for removal
 - Interactive branch selection for checkout
 - Safety checks before removing worktrees (uncommitted changes, unpushed commits, merge status)
@@ -72,13 +73,17 @@ gw start 123
 
 # Create worktree based on specific branch
 gw start 456 develop
+
+# Create worktree and copy environment files
+gw start 789 --copy-envs
 ```
 
 This will:
 1. Create a new worktree at `../{repository-name}-{issue-number}`
 2. Create a new branch `{issue-number}/impl`
 3. Change to the new worktree directory
-4. Automatically run package manager setup if detected
+4. Optionally copy untracked .env files from the original repository
+5. Automatically run package manager setup if detected
 
 ### Checkout an existing branch
 
@@ -91,13 +96,17 @@ gw checkout origin/feature/api
 
 # Interactive mode - select from list of branches
 gw checkout
+
+# Checkout and copy environment files
+gw checkout feature/auth --copy-envs
 ```
 
 This will:
 1. Create a new worktree at `../{repository-name}-{branch-name}`
 2. Checkout the specified branch (or create tracking branch for remote)
 3. Change to the new worktree directory
-4. Automatically run package manager setup if detected
+4. Optionally copy untracked .env files from the original repository
+5. Automatically run package manager setup if detected
 
 ### Remove a worktree
 

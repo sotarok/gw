@@ -12,6 +12,10 @@ import (
 	"github.com/spf13/cobra"
 )
 
+var (
+	checkoutCopyEnvs bool
+)
+
 var checkoutCmd = &cobra.Command{
 	Use:   "checkout [branch]",
 	Short: "Checkout an existing branch as a new worktree",
@@ -22,6 +26,7 @@ If no branch is specified, an interactive selector will be shown.`,
 }
 
 func init() {
+	checkoutCmd.Flags().BoolVar(&checkoutCopyEnvs, "copy-envs", false, "Copy untracked .env files to the new worktree")
 	rootCmd.AddCommand(checkoutCmd)
 }
 
@@ -64,6 +69,12 @@ func runCheckout(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("branch '%s' does not exist in the repository\nUse 'git branch -a' to see all available branches", branch)
 	}
 
+	// Get the original repository root before creating worktree
+	originalDir, err := os.Getwd()
+	if err != nil {
+		return fmt.Errorf("failed to get current directory: %w", err)
+	}
+
 	// Create worktree
 	fmt.Printf("Creating worktree for branch '%s'...\n", branch)
 	if err := git.CreateWorktreeFromBranch(worktreePath, branch, branchName); err != nil {
@@ -81,6 +92,48 @@ func runCheckout(cmd *cobra.Command, args []string) error {
 	}
 
 	fmt.Printf("Changed directory to: %s\n", absolutePath)
+
+	// Handle environment files
+	// Use the original repository root to find env files
+	envFiles, err := git.FindUntrackedEnvFiles(originalDir)
+	if err != nil {
+		fmt.Printf("⚠ Failed to find env files: %v\n", err)
+	} else if len(envFiles) > 0 {
+		// Prepare file list
+		filePaths := make([]string, len(envFiles))
+		for i, f := range envFiles {
+			filePaths[i] = f.Path
+		}
+
+		shouldCopy := checkoutCopyEnvs
+
+		// If flag not set, ask user
+		if !checkoutCopyEnvs {
+			fmt.Printf("\nFound %d untracked environment file(s):\n", len(envFiles))
+			ui.ShowEnvFilesList(filePaths)
+
+			fmt.Printf("\nCopy them to the new worktree?")
+			confirmed, err := ui.ConfirmPrompt("")
+			if err != nil {
+				fmt.Printf("⚠ Failed to get user input: %v\n", err)
+			} else {
+				shouldCopy = confirmed
+			}
+		} else {
+			// When flag is set, also show the files being copied
+			fmt.Printf("\nCopying environment files:\n")
+			ui.ShowEnvFilesList(filePaths)
+		}
+
+		if shouldCopy {
+			// Copy files
+			if err := git.CopyEnvFiles(envFiles, originalDir, absolutePath); err != nil {
+				fmt.Printf("⚠ Failed to copy some env files: %v\n", err)
+			} else {
+				fmt.Printf("✓ Environment files copied successfully\n")
+			}
+		}
+	}
 
 	// Run package manager setup
 	pm, err := detect.DetectPackageManager(absolutePath)

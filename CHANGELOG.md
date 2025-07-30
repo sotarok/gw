@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- Add `--copy-envs` flag to `start` and `checkout` commands to copy untracked .env files
+- Interactive prompt to copy environment files when `--copy-envs` flag is not specified
+- Automatic detection of untracked .env files (excluding .git, node_modules, vendor, dist, build directories)
+- Display list of environment files to be copied before copying
+
 ## [0.2.0] - 2025-07-28
 
 ### Added
