@@ -7,11 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.0] - 2025-07-30
+
 ### Added
 - Add `--copy-envs` flag to `start` and `checkout` commands to copy untracked .env files
 - Interactive prompt to copy environment files when `--copy-envs` flag is not specified
 - Automatic detection of untracked .env files (excluding .git, node_modules, vendor, dist, build directories)
 - Display list of environment files to be copied before copying
+- Add `BranchExists` function to validate branch existence before checkout
+
+### Fixed
+- Show environment files list before confirmation prompt for better UX
+- Use original repository root for finding env files in checkout command
+- Include non-numeric branches in `gw end` interactive mode (now shows all branches with "/impl" pattern)
+- Improve error message for non-existent branches in checkout command
+- Handle CI environments without remote branches in tests
 
 ## [0.2.0] - 2025-07-28
 
