@@ -22,6 +22,7 @@ type Interface interface {
 	// Status operations
 	HasUncommittedChanges() (bool, error)
 	HasUnpushedCommits() (bool, error)
+	IsMergedToOrigin(targetBranch string) (bool, error)
 
 	// Environment file operations
 	FindUntrackedEnvFiles(repoPath string) ([]EnvFile, error)
@@ -97,6 +98,10 @@ func (c *DefaultClient) HasUncommittedChanges() (bool, error) {
 
 func (c *DefaultClient) HasUnpushedCommits() (bool, error) {
 	return HasUnpushedCommits()
+}
+
+func (c *DefaultClient) IsMergedToOrigin(targetBranch string) (bool, error) {
+	return IsMergedToOrigin(targetBranch)
 }
 
 // Environment file operations

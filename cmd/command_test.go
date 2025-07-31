@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"fmt"
 	"os"
+	"path/filepath"
 	"testing"
 
 	"github.com/sotarok/gw/internal/detect"
@@ -21,6 +22,14 @@ type mockGit struct {
 	envFiles            []git.EnvFile
 	findEnvError        error
 	copyEnvError        error
+
+	// Override functions for custom behavior
+	BranchExistsFn          func(string) (bool, error)
+	ListAllBranchesFn       func() ([]string, error)
+	GetCurrentBranchFn      func() (string, error)
+	GetWorktreeForIssueFn   func(string) (*git.WorktreeInfo, error)
+	HasUncommittedChangesFn func() (bool, error)
+	HasUnpushedCommitsFn    func() (bool, error)
 }
 
 func (m *mockGit) IsGitRepository() bool {
@@ -32,7 +41,10 @@ func (m *mockGit) GetRepositoryName() (string, error) {
 }
 
 func (m *mockGit) GetCurrentBranch() (string, error) {
-	return "main", nil
+	if m.GetCurrentBranchFn != nil {
+		return m.GetCurrentBranchFn()
+	}
+	return defaultBaseBranch, nil
 }
 
 func (m *mockGit) CreateWorktree(issueNumber, baseBranch string) (string, error) {
@@ -43,6 +55,9 @@ func (m *mockGit) CreateWorktree(issueNumber, baseBranch string) (string, error)
 }
 
 func (m *mockGit) CreateWorktreeFromBranch(worktreePath, sourceBranch, targetBranch string) error {
+	// Create the worktree directory for the test
+	absolutePath, _ := filepath.Abs(worktreePath)
+	os.MkdirAll(absolutePath, 0755)
 	return nil
 }
 
@@ -59,6 +74,9 @@ func (m *mockGit) ListWorktrees() ([]git.WorktreeInfo, error) {
 }
 
 func (m *mockGit) GetWorktreeForIssue(issueNumber string) (*git.WorktreeInfo, error) {
+	if m.GetWorktreeForIssueFn != nil {
+		return m.GetWorktreeForIssueFn(issueNumber)
+	}
 	if m.worktreeExists {
 		return &git.WorktreeInfo{Path: "/existing/path"}, nil
 	}
@@ -66,19 +84,35 @@ func (m *mockGit) GetWorktreeForIssue(issueNumber string) (*git.WorktreeInfo, er
 }
 
 func (m *mockGit) BranchExists(branch string) (bool, error) {
-	return true, nil
+	if m.BranchExistsFn != nil {
+		return m.BranchExistsFn(branch)
+	}
+	return false, nil
 }
 
 func (m *mockGit) ListAllBranches() ([]string, error) {
-	return []string{"main", "feature"}, nil
+	if m.ListAllBranchesFn != nil {
+		return m.ListAllBranchesFn()
+	}
+	return []string{defaultBaseBranch, "feature"}, nil
 }
 
 func (m *mockGit) HasUncommittedChanges() (bool, error) {
+	if m.HasUncommittedChangesFn != nil {
+		return m.HasUncommittedChangesFn()
+	}
 	return false, nil
 }
 
 func (m *mockGit) HasUnpushedCommits() (bool, error) {
+	if m.HasUnpushedCommitsFn != nil {
+		return m.HasUnpushedCommitsFn()
+	}
 	return false, nil
+}
+
+func (m *mockGit) IsMergedToOrigin(targetBranch string) (bool, error) {
+	return true, nil
 }
 
 func (m *mockGit) FindUntrackedEnvFiles(repoPath string) ([]git.EnvFile, error) {
@@ -103,13 +137,23 @@ func (m *mockGit) SanitizeBranchNameForDirectory(branch string) string {
 type mockUI struct {
 	confirmResult bool
 	confirmError  error
+
+	// Override functions for custom behavior
+	ShowSelectorFn   func(string, []ui.SelectorItem) (*ui.SelectorItem, error)
+	SelectWorktreeFn func() (*git.WorktreeInfo, error)
 }
 
 func (m *mockUI) SelectWorktree() (*git.WorktreeInfo, error) {
+	if m.SelectWorktreeFn != nil {
+		return m.SelectWorktreeFn()
+	}
 	return nil, nil
 }
 
 func (m *mockUI) ShowSelector(title string, items []ui.SelectorItem) (*ui.SelectorItem, error) {
+	if m.ShowSelectorFn != nil {
+		return m.ShowSelectorFn(title, items)
+	}
 	return nil, nil
 }
 
@@ -292,6 +336,370 @@ func TestStartCommand_Execute(t *testing.T) {
 
 			cmd := NewStartCommand(deps, tt.copyEnvs)
 			err = cmd.Execute(tt.issueNumber, tt.baseBranch)
+
+			// Check error
+			if tt.expectedError != "" {
+				if err == nil || err.Error() != tt.expectedError {
+					t.Errorf("Expected error %q, got %v", tt.expectedError, err)
+				}
+			} else if err != nil {
+				t.Errorf("Unexpected error: %v", err)
+			}
+
+			// Check output
+			if tt.checkOutput != nil {
+				tt.checkOutput(t, stdout.String(), stderr.String())
+			}
+		})
+	}
+}
+
+func TestCheckoutCommand_Execute(t *testing.T) {
+	// Save and restore working directory
+	originalDir, _ := os.Getwd()
+	defer os.Chdir(originalDir)
+
+	tests := []struct {
+		name          string
+		branch        string
+		copyEnvs      bool
+		mockSetup     func() (*mockGit, *mockUI, *mockDetect, func())
+		expectedError string
+		checkOutput   func(t *testing.T, stdout, stderr string)
+	}{
+		{
+			name:   "branch does not exist",
+			branch: "non-existent-branch",
+			mockSetup: func() (*mockGit, *mockUI, *mockDetect, func()) {
+				return &mockGit{
+					isGitRepo: true,
+				}, &mockUI{}, &mockDetect{}, func() {}
+			},
+			expectedError: "branch 'non-existent-branch' does not exist in the repository\nUse 'git branch -a' to see all available branches",
+		},
+		{
+			name:   "successful checkout without env files",
+			branch: "feature/test",
+			mockSetup: func() (*mockGit, *mockUI, *mockDetect, func()) {
+				tempDir, _ := os.MkdirTemp("", "gw-worktree-*")
+				mockGitInstance := &mockGit{
+					isGitRepo: true,
+					envFiles:  []git.EnvFile{},
+				}
+				// Override BranchExists to return true
+				mockGitInstance.BranchExistsFn = func(branch string) (bool, error) {
+					return true, nil
+				}
+				return mockGitInstance, &mockUI{}, &mockDetect{}, func() { os.RemoveAll(tempDir) }
+			},
+			checkOutput: func(t *testing.T, stdout, stderr string) {
+				if !contains(stdout, "Creating worktree for branch 'feature/test'") {
+					t.Error("Expected creation message in stdout")
+				}
+				if !contains(stdout, "Changed directory to:") {
+					t.Error("Expected directory change message in stdout")
+				}
+			},
+		},
+		{
+			name:     "successful checkout with env files - copyEnvs flag",
+			branch:   "feature/test",
+			copyEnvs: true,
+			mockSetup: func() (*mockGit, *mockUI, *mockDetect, func()) {
+				tempDir, _ := os.MkdirTemp("", "gw-worktree-*")
+				mockGitInstance := &mockGit{
+					isGitRepo: true,
+					envFiles: []git.EnvFile{
+						{Path: ".env", AbsolutePath: "/repo/.env"},
+					},
+				}
+				mockGitInstance.BranchExistsFn = func(branch string) (bool, error) {
+					return true, nil
+				}
+				return mockGitInstance, &mockUI{}, &mockDetect{}, func() { os.RemoveAll(tempDir) }
+			},
+			checkOutput: func(t *testing.T, stdout, stderr string) {
+				if !contains(stdout, "Copying environment files:") {
+					t.Error("Expected copying message in stdout")
+				}
+				if !contains(stdout, "✓ Environment files copied successfully") {
+					t.Error("Expected copy success message in stdout")
+				}
+			},
+		},
+		{
+			name:   "interactive branch selection",
+			branch: "", // Empty branch triggers interactive mode
+			mockSetup: func() (*mockGit, *mockUI, *mockDetect, func()) {
+				tempDir, _ := os.MkdirTemp("", "gw-worktree-*")
+				mockGitInstance := &mockGit{
+					isGitRepo: true,
+					envFiles:  []git.EnvFile{},
+				}
+				mockGitInstance.BranchExistsFn = func(branch string) (bool, error) {
+					return true, nil
+				}
+				mockGitInstance.ListAllBranchesFn = func() ([]string, error) {
+					return []string{"main", "feature/test", "bugfix/123"}, nil
+				}
+				mockGitInstance.GetCurrentBranchFn = func() (string, error) {
+					return "main", nil
+				}
+				ui := &mockUI{
+					ShowSelectorFn: func(title string, items []ui.SelectorItem) (*ui.SelectorItem, error) {
+						// Simulate selecting "feature/test"
+						for i := range items {
+							if items[i].ID == "feature/test" {
+								return &items[i], nil
+							}
+						}
+						return &items[0], nil
+					},
+				}
+				return mockGitInstance, ui, &mockDetect{}, func() { os.RemoveAll(tempDir) }
+			},
+			checkOutput: func(t *testing.T, stdout, stderr string) {
+				if !contains(stdout, "Creating worktree for branch 'feature/test'") {
+					t.Error("Expected creation message for selected branch")
+				}
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Create temp directory for testing
+			tempDir, err := os.MkdirTemp("", "gw-test-*")
+			if err != nil {
+				t.Fatalf("Failed to create temp dir: %v", err)
+			}
+			defer os.RemoveAll(tempDir)
+
+			// Change to temp directory
+			if err := os.Chdir(tempDir); err != nil {
+				t.Fatalf("Failed to change to temp dir: %v", err)
+			}
+
+			// Setup mocks
+			mockGit, mockUI, mockDetect, cleanup := tt.mockSetup()
+			defer cleanup()
+			stdout := &bytes.Buffer{}
+			stderr := &bytes.Buffer{}
+
+			deps := &Dependencies{
+				Git:    mockGit,
+				UI:     mockUI,
+				Detect: mockDetect,
+				Stdout: stdout,
+				Stderr: stderr,
+			}
+
+			cmd := NewCheckoutCommand(deps, tt.copyEnvs)
+			err = cmd.Execute(tt.branch)
+
+			// Check error
+			if tt.expectedError != "" {
+				if err == nil || err.Error() != tt.expectedError {
+					t.Errorf("Expected error %q, got %v", tt.expectedError, err)
+				}
+			} else if err != nil {
+				t.Errorf("Unexpected error: %v", err)
+			}
+
+			// Check output
+			if tt.checkOutput != nil {
+				tt.checkOutput(t, stdout.String(), stderr.String())
+			}
+		})
+	}
+}
+
+func TestEndCommand_Execute(t *testing.T) {
+	// Save and restore working directory
+	originalDir, _ := os.Getwd()
+	defer os.Chdir(originalDir)
+
+	tests := []struct {
+		name          string
+		issueNumber   string
+		force         bool
+		mockSetup     func() (*mockGit, *mockUI, *mockDetect, func())
+		expectedError string
+		checkOutput   func(t *testing.T, stdout, stderr string)
+	}{
+		{
+			name:        "worktree not found",
+			issueNumber: "123",
+			mockSetup: func() (*mockGit, *mockUI, *mockDetect, func()) {
+				mockGitInstance := &mockGit{}
+				mockGitInstance.GetWorktreeForIssueFn = func(issueNumber string) (*git.WorktreeInfo, error) {
+					return nil, fmt.Errorf("worktree not found for issue %s", issueNumber)
+				}
+				return mockGitInstance, &mockUI{}, &mockDetect{}, func() {}
+			},
+			expectedError: "worktree not found for issue 123",
+		},
+		{
+			name:        "successful removal without warnings",
+			issueNumber: "123",
+			mockSetup: func() (*mockGit, *mockUI, *mockDetect, func()) {
+				tempDir, _ := os.MkdirTemp("", "gw-worktree-*")
+				mockGitInstance := &mockGit{
+					worktreePath: tempDir,
+				}
+				mockGitInstance.GetWorktreeForIssueFn = func(issueNumber string) (*git.WorktreeInfo, error) {
+					return &git.WorktreeInfo{Path: tempDir}, nil
+				}
+				return mockGitInstance, &mockUI{}, &mockDetect{}, func() { os.RemoveAll(tempDir) }
+			},
+			checkOutput: func(t *testing.T, stdout, stderr string) {
+				if !contains(stdout, "Checking worktree for issue #123") {
+					t.Error("Expected checking message in stdout")
+				}
+				if !contains(stdout, "✓ Successfully removed worktree for issue #123") {
+					t.Error("Expected success message in stdout")
+				}
+			},
+		},
+		{
+			name:        "with warnings - user confirms",
+			issueNumber: "123",
+			mockSetup: func() (*mockGit, *mockUI, *mockDetect, func()) {
+				tempDir, _ := os.MkdirTemp("", "gw-worktree-*")
+				mockGitInstance := &mockGit{
+					worktreePath: tempDir,
+				}
+				mockGitInstance.GetWorktreeForIssueFn = func(issueNumber string) (*git.WorktreeInfo, error) {
+					return &git.WorktreeInfo{Path: tempDir}, nil
+				}
+				mockGitInstance.HasUncommittedChangesFn = func() (bool, error) {
+					return true, nil
+				}
+				ui := &mockUI{confirmResult: true}
+				return mockGitInstance, ui, &mockDetect{}, func() { os.RemoveAll(tempDir) }
+			},
+			checkOutput: func(t *testing.T, stdout, stderr string) {
+				if !contains(stdout, "Safety check warnings:") {
+					t.Error("Expected warnings in stdout")
+				}
+				if !contains(stdout, "You have uncommitted changes") {
+					t.Error("Expected uncommitted changes warning")
+				}
+				if !contains(stdout, "✓ Successfully removed worktree") {
+					t.Error("Expected success message")
+				}
+			},
+		},
+		{
+			name:        "with warnings - user aborts",
+			issueNumber: "123",
+			mockSetup: func() (*mockGit, *mockUI, *mockDetect, func()) {
+				tempDir, _ := os.MkdirTemp("", "gw-worktree-*")
+				mockGitInstance := &mockGit{
+					worktreePath: tempDir,
+				}
+				mockGitInstance.GetWorktreeForIssueFn = func(issueNumber string) (*git.WorktreeInfo, error) {
+					return &git.WorktreeInfo{Path: tempDir}, nil
+				}
+				mockGitInstance.HasUnpushedCommitsFn = func() (bool, error) {
+					return true, nil
+				}
+				ui := &mockUI{confirmResult: false}
+				return mockGitInstance, ui, &mockDetect{}, func() { os.RemoveAll(tempDir) }
+			},
+			checkOutput: func(t *testing.T, stdout, stderr string) {
+				if !contains(stdout, "Safety check warnings:") {
+					t.Error("Expected warnings in stdout")
+				}
+				if !contains(stdout, "Aborted.") {
+					t.Error("Expected abort message")
+				}
+				if contains(stdout, "Successfully removed") {
+					t.Error("Should not have removed worktree")
+				}
+			},
+		},
+		{
+			name:        "force removal bypasses warnings",
+			issueNumber: "123",
+			force:       true,
+			mockSetup: func() (*mockGit, *mockUI, *mockDetect, func()) {
+				tempDir, _ := os.MkdirTemp("", "gw-worktree-*")
+				mockGitInstance := &mockGit{
+					worktreePath: tempDir,
+				}
+				mockGitInstance.GetWorktreeForIssueFn = func(issueNumber string) (*git.WorktreeInfo, error) {
+					return &git.WorktreeInfo{Path: tempDir}, nil
+				}
+				mockGitInstance.HasUncommittedChangesFn = func() (bool, error) {
+					return true, nil
+				}
+				return mockGitInstance, &mockUI{}, &mockDetect{}, func() { os.RemoveAll(tempDir) }
+			},
+			checkOutput: func(t *testing.T, stdout, stderr string) {
+				if contains(stdout, "Safety check warnings:") {
+					t.Error("Should not show warnings when forced")
+				}
+				if !contains(stdout, "✓ Successfully removed worktree") {
+					t.Error("Expected success message")
+				}
+			},
+		},
+		{
+			name: "interactive mode",
+			mockSetup: func() (*mockGit, *mockUI, *mockDetect, func()) {
+				tempDir, _ := os.MkdirTemp("", "gw-worktree-*")
+				mockGitInstance := &mockGit{}
+				ui := &mockUI{}
+				ui.SelectWorktreeFn = func() (*git.WorktreeInfo, error) {
+					return &git.WorktreeInfo{
+						Path:   tempDir,
+						Branch: "123/impl",
+					}, nil
+				}
+				return mockGitInstance, ui, &mockDetect{}, func() { os.RemoveAll(tempDir) }
+			},
+			checkOutput: func(t *testing.T, stdout, stderr string) {
+				if !contains(stdout, "No issue number provided, entering interactive mode") {
+					t.Error("Expected interactive mode message")
+				}
+				if !contains(stdout, "✓ Successfully removed worktree for issue #123") {
+					t.Error("Expected success message")
+				}
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Create temp directory for testing
+			tempDir, err := os.MkdirTemp("", "gw-test-*")
+			if err != nil {
+				t.Fatalf("Failed to create temp dir: %v", err)
+			}
+			defer os.RemoveAll(tempDir)
+
+			// Change to temp directory
+			if err := os.Chdir(tempDir); err != nil {
+				t.Fatalf("Failed to change to temp dir: %v", err)
+			}
+
+			// Setup mocks
+			mockGit, mockUI, mockDetect, cleanup := tt.mockSetup()
+			defer cleanup()
+			stdout := &bytes.Buffer{}
+			stderr := &bytes.Buffer{}
+
+			deps := &Dependencies{
+				Git:    mockGit,
+				UI:     mockUI,
+				Detect: mockDetect,
+				Stdout: stdout,
+				Stderr: stderr,
+			}
+
+			cmd := NewEndCommand(deps, tt.force)
+			err = cmd.Execute(tt.issueNumber)
 
 			// Check error
 			if tt.expectedError != "" {
