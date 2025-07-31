@@ -3,7 +3,6 @@ package cmd
 import (
 	"fmt"
 	"os"
-	"path/filepath"
 
 	"github.com/sotarok/gw/internal/detect"
 	"github.com/sotarok/gw/internal/git"
@@ -49,6 +48,12 @@ func runStart(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("worktree for issue %s already exists at %s", issueNumber, wt.Path)
 	}
 
+	// Get the original repository root before creating worktree
+	originalDir, err := os.Getwd()
+	if err != nil {
+		return fmt.Errorf("failed to get current directory: %w", err)
+	}
+
 	fmt.Printf("Creating worktree for issue #%s based on %s...\n", issueNumber, baseBranch)
 
 	// Create the worktree
@@ -67,35 +72,43 @@ func runStart(cmd *cobra.Command, args []string) error {
 	fmt.Printf("✓ Changed to worktree directory\n")
 
 	// Handle environment files
-	sourceRoot := filepath.Dir(worktreePath)
-	envFiles, err := git.FindUntrackedEnvFiles(sourceRoot)
+	// Use the original repository root to find env files
+	envFiles, err := git.FindUntrackedEnvFiles(originalDir)
 	if err != nil {
 		fmt.Printf("⚠ Failed to find env files: %v\n", err)
 	} else if len(envFiles) > 0 {
+		// Prepare file list
+		filePaths := make([]string, len(envFiles))
+		for i, f := range envFiles {
+			filePaths[i] = f.Path
+		}
+
 		shouldCopy := startCopyEnvs
 
 		// If flag not set, ask user
 		if !startCopyEnvs {
-			fmt.Printf("\nFound %d untracked environment file(s). Copy them to the new worktree?", len(envFiles))
+			fmt.Printf("\nFound %d untracked environment file(s):\n", len(envFiles))
+			ui.ShowEnvFilesList(filePaths)
+
+			fmt.Printf("\nCopy them to the new worktree?")
 			confirmed, err := ui.ConfirmPrompt("")
 			if err != nil {
 				fmt.Printf("⚠ Failed to get user input: %v\n", err)
 			} else {
 				shouldCopy = confirmed
 			}
+		} else {
+			// When flag is set, also show the files being copied
+			fmt.Printf("\nCopying environment files:\n")
+			ui.ShowEnvFilesList(filePaths)
 		}
 
 		if shouldCopy {
-			// Show files to be copied
-			filePaths := make([]string, len(envFiles))
-			for i, f := range envFiles {
-				filePaths[i] = f.Path
-			}
-			ui.ShowEnvFilesList(filePaths)
-
 			// Copy files
-			if err := git.CopyEnvFiles(envFiles, sourceRoot, worktreePath); err != nil {
+			if err := git.CopyEnvFiles(envFiles, originalDir, worktreePath); err != nil {
 				fmt.Printf("⚠ Failed to copy some env files: %v\n", err)
+			} else {
+				fmt.Printf("✓ Environment files copied successfully\n")
 			}
 		}
 	}
