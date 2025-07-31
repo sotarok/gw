@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.1] - 2025-07-31
+
+### Fixed
+- Fix `gw start` command failing to find environment files (exit status 128)
+- Use original repository root for env file search in `gw start` command
+- Ensure only untracked env files are copied (exclude .env.example and similar tracked files)
+- Show environment files list before confirmation prompt in both `start` and `checkout` commands
+
 ## [0.3.0] - 2025-07-30
 
 ### Added
