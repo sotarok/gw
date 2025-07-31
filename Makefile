@@ -21,10 +21,18 @@ test: ## Run tests
 test-verbose: ## Run tests with verbose output
 	$(GO) test -v -race ./...
 
+coverage: test ## Run tests and show coverage report
+	$(GO) tool cover -html=coverage.txt -o coverage.html
+	$(GO) tool cover -func=coverage.txt
+	@echo "Coverage report generated at coverage.html"
+
+coverage-report: ## Show coverage report in terminal
+	@$(GO) tool cover -func=coverage.txt
+
 clean: ## Clean build artifacts
 	$(GO) clean
 	rm -f $(BINARY_NAME)
-	rm -f coverage.txt
+	rm -f coverage.txt coverage.html
 
 lint: ## Run linter
 	@if ! which golangci-lint > /dev/null; then \
