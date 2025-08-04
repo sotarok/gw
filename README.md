@@ -150,34 +150,9 @@ Example `~/.gwrc`:
 auto_cd = true
 ```
 
-### Shell Integration for Auto-CD
+### Shell Integration
 
-Since `gw` runs as a subprocess, it cannot change the parent shell's directory. To enable true auto-cd functionality, use one of these methods:
-
-#### Method 1: Using --print-path flag
-
-```bash
-# Create worktree and cd to it
-cd $(gw start 123 --print-path)
-```
-
-#### Method 2: Shell function (recommended)
-
-Add this to your `~/.bashrc` or `~/.zshrc`:
-
-```bash
-gw() {
-    if [[ "$1" == "start" ]] && [[ "$*" != *"--print-path"* ]]; then
-        local path=$(command gw "$@" --print-path 2>/dev/null)
-        if [[ -n "$path" && -d "$path" ]]; then
-            command gw "$@"
-            cd "$path"
-            return
-        fi
-    fi
-    command gw "$@"
-}
-```
+To enable automatic directory changing after creating worktrees, you need to set up shell integration. See [SHELL_INTEGRATION.md](SHELL_INTEGRATION.md) for detailed setup instructions.
 
 ### Future Configuration Options
 
