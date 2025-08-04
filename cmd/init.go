@@ -209,14 +209,14 @@ gw() {
             # Run the actual command (output goes directly to terminal)
             command gw "$@"
             local exit_code=$?
-            
+
             # If command succeeded, get the worktree path and cd to it
             if [[ $exit_code -eq 0 ]]; then
                 local identifier="${2:-}"  # Get issue number or branch name
                 if [[ -n "$identifier" ]]; then
                     # Get the worktree path using shell-integration command
                     local worktree_path=$(command gw shell-integration --print-path="$identifier" 2>/dev/null)
-                    
+
                     # If we got a path, cd to it
                     if [[ -n "$worktree_path" && -d "$worktree_path" ]]; then
                         cd "$worktree_path"
@@ -224,7 +224,7 @@ gw() {
                     fi
                 fi
             fi
-            
+
             return $exit_code
         else
             # Auto CD disabled, just run the command normally
@@ -251,6 +251,7 @@ gw() {
 		fmt.Fprintln(c.stdout, "To update the shell function manually, please replace the existing gw() function with:")
 		fmt.Fprintln(c.stdout, "--------------------------------------------------------------------------------")
 		fmt.Fprint(c.stdout, shellFunction)
+		fmt.Fprintln(c.stdout)
 		fmt.Fprintln(c.stdout, "--------------------------------------------------------------------------------")
 		fmt.Fprintln(c.stdout)
 		fmt.Fprintf(c.stdout, "You can edit %s and replace the entire gw() function block.\n", rcPath)
