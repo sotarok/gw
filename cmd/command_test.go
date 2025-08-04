@@ -398,8 +398,8 @@ func TestCheckoutCommand_Execute(t *testing.T) {
 				if !contains(stdout, "Creating worktree for branch 'feature/test'") {
 					t.Error("Expected creation message in stdout")
 				}
-				if !contains(stdout, "Changed directory to:") {
-					t.Error("Expected directory change message in stdout")
+				if !contains(stdout, "Worktree ready at:") {
+					t.Error("Expected worktree ready message in stdout")
 				}
 			},
 		},

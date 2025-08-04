@@ -8,23 +8,37 @@ Add this to your `~/.bashrc` or `~/.zshrc`:
 
 ```bash
 gw() {
-    # Run the actual gw command
-    command gw "$@"
-    
-    # Check if we should cd to the new directory
+    # Check if we should auto-cd after command
     if [[ "$1" == "start" || "$1" == "checkout" ]] && [[ -f ~/.gwrc ]]; then
         # Check if auto_cd is enabled
         if grep -q "auto_cd = true" ~/.gwrc 2>/dev/null; then
-            # Extract the worktree path from the output
-            local output=$(command gw "$@" 2>&1)
-            local worktree_path=$(echo "$output" | grep "✓ Created worktree at" | sed 's/.*✓ Created worktree at //')
+            # Run the actual command (output goes directly to terminal)
+            command gw "$@"
+            local exit_code=$?
             
-            # If we found a path, cd to it
-            if [[ -n "$worktree_path" && -d "$worktree_path" ]]; then
-                cd "$worktree_path"
-                echo "Changed directory to: $worktree_path"
+            # If command succeeded, get the worktree path and cd to it
+            if [[ $exit_code -eq 0 ]]; then
+                local identifier="${2:-}"  # Get issue number or branch name
+                if [[ -n "$identifier" ]]; then
+                    # Get the worktree path using shell-integration command
+                    local worktree_path=$(command gw shell-integration --print-path="$identifier" 2>/dev/null)
+                    
+                    # If we got a path, cd to it
+                    if [[ -n "$worktree_path" && -d "$worktree_path" ]]; then
+                        cd "$worktree_path"
+                        echo "Changed directory to: $worktree_path"
+                    fi
+                fi
             fi
+            
+            return $exit_code
+        else
+            # Auto CD disabled, just run the command normally
+            command gw "$@"
         fi
+    else
+        # Not a start/checkout command, just run normally
+        command gw "$@"
     fi
 }
 ```
@@ -35,36 +49,56 @@ Add this to your `~/.config/fish/functions/gw.fish`:
 
 ```fish
 function gw
-    # Run the actual gw command
-    command gw $argv
-    
-    # Check if we should cd to the new directory
+    # Check if we should auto-cd after command
     if test "$argv[1]" = "start" -o "$argv[1]" = "checkout"
         if test -f ~/.gwrc
             # Check if auto_cd is enabled
             if grep -q "auto_cd = true" ~/.gwrc 2>/dev/null
-                # Extract the worktree path from the output
-                set output (command gw $argv 2>&1)
-                set worktree_path (echo "$output" | grep "✓ Created worktree at" | sed 's/.*✓ Created worktree at //')
+                # Run the actual command (output goes directly to terminal)
+                command gw $argv
+                set exit_code $status
                 
-                # If we found a path, cd to it
-                if test -n "$worktree_path" -a -d "$worktree_path"
-                    cd "$worktree_path"
-                    echo "Changed directory to: $worktree_path"
+                # If command succeeded, get the worktree path and cd to it
+                if test $exit_code -eq 0
+                    set identifier "$argv[2]"  # Get issue number or branch name
+                    if test -n "$identifier"
+                        # Get the worktree path using shell-integration command
+                        set worktree_path (command gw shell-integration --print-path="$identifier" 2>/dev/null)
+                        
+                        # If we got a path, cd to it
+                        if test -n "$worktree_path" -a -d "$worktree_path"
+                            cd "$worktree_path"
+                            echo "Changed directory to: $worktree_path"
+                        end
+                    end
                 end
+                
+                return $exit_code
+            else
+                # Auto CD disabled, just run the command normally
+                command gw $argv
             end
+        else
+            # No config file, just run normally
+            command gw $argv
         end
+    else
+        # Not a start/checkout command, just run normally
+        command gw $argv
     end
 end
 ```
 
 ## Alternative: Output Directory for Manual cd
 
-If you prefer not to use shell functions, you can use command substitution:
+If you prefer not to use shell functions, you can use the shell-integration command:
 
 ```bash
-# Create worktree and cd to it
-cd $(gw start 123 --print-path)
+# Create worktree
+gw start 123
+
+# Then cd to it
+cd $(gw shell-integration --print-path=123)
 ```
 
-For this to work, we would need to add a `--print-path` flag that outputs only the worktree path.
+The `shell-integration --print-path` command outputs only the worktree path for the specified issue or branch.

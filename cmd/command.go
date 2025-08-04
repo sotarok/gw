@@ -35,10 +35,9 @@ func DefaultDependencies() *Dependencies {
 
 // StartCommand handles the start command logic
 type StartCommand struct {
-	deps      *Dependencies
-	copyEnvs  bool
-	config    *config.Config
-	printPath bool
+	deps     *Dependencies
+	copyEnvs bool
+	config   *config.Config
 }
 
 // NewStartCommand creates a new start command handler
@@ -61,18 +60,6 @@ func NewStartCommandWithConfig(deps *Dependencies, copyEnvs bool, cfg *config.Co
 	}
 }
 
-// NewStartCommandWithOptions creates a new start command handler with all options
-func NewStartCommandWithOptions(deps *Dependencies, copyEnvs, printPath bool) *StartCommand {
-	// Load config
-	cfg, _ := config.Load(config.GetConfigPath())
-	return &StartCommand{
-		deps:      deps,
-		copyEnvs:  copyEnvs,
-		config:    cfg,
-		printPath: printPath,
-	}
-}
-
 // Execute runs the start command
 func (c *StartCommand) Execute(issueNumber, baseBranch string) error {
 	// Check if we're in a git repository
@@ -91,8 +78,8 @@ func (c *StartCommand) Execute(issueNumber, baseBranch string) error {
 		return fmt.Errorf("failed to get current directory: %w", err)
 	}
 
-	// Print messages only if not in print-path mode
-	if !c.printPath && c.deps.Stdout != nil {
+	// Print message if stdout is available
+	if c.deps.Stdout != nil {
 		fmt.Fprintf(c.deps.Stdout, "Creating worktree for issue #%s based on %s...\n", issueNumber, baseBranch)
 	}
 
@@ -102,24 +89,18 @@ func (c *StartCommand) Execute(issueNumber, baseBranch string) error {
 		return err
 	}
 
-	// In print-path mode, just output the path and exit
-	if c.printPath {
-		fmt.Println(worktreePath)
-		return nil
-	}
-
 	if c.deps.Stdout != nil {
 		fmt.Fprintf(c.deps.Stdout, "✓ Created worktree at %s\n", worktreePath)
 	}
 
-	// Change to the new worktree directory if auto-cd is enabled
+	// Change to the new worktree directory for setup operations
+	// Note: This only affects the current process, not the parent shell
 	if c.config != nil && c.config.AutoCD {
 		if err := os.Chdir(worktreePath); err != nil {
-			return fmt.Errorf("failed to change directory: %w", err)
-		}
-		if c.deps.Stdout != nil {
-			fmt.Fprintf(c.deps.Stdout, "✓ Changed to worktree directory\n")
-			fmt.Fprintf(c.deps.Stdout, "💡 Note: To stay in the new directory after gw exits, use: cd %s\n", worktreePath)
+			// Don't fail the command, just log the error
+			if c.deps.Stderr != nil {
+				fmt.Fprintf(c.deps.Stderr, "⚠ Could not change to worktree directory: %v\n", err)
+			}
 		}
 	}
 
@@ -140,7 +121,10 @@ func (c *StartCommand) Execute(issueNumber, baseBranch string) error {
 	}
 
 	if c.deps.Stdout != nil {
-		fmt.Fprintf(c.deps.Stdout, "\n✨ Worktree ready! You are now in:\n   %s\n", worktreePath)
+		fmt.Fprintf(c.deps.Stdout, "\n✨ Worktree ready at:\n   %s\n", worktreePath)
+		if c.config != nil && c.config.AutoCD {
+			fmt.Fprintf(c.deps.Stdout, "\n💡 Shell integration will change to this directory after the command completes.\n")
+		}
 	}
 	return nil
 }
@@ -278,11 +262,15 @@ func (c *CheckoutCommand) Execute(branch string) error {
 		return fmt.Errorf("failed to get absolute path: %w", err)
 	}
 
-	if c.config.AutoCD {
-		if err := os.Chdir(absolutePath); err != nil {
-			return fmt.Errorf("failed to change directory: %w", err)
+	// Change to the new worktree directory for setup operations
+	// Note: This only affects the current process, not the parent shell
+	if c.config != nil && c.config.AutoCD {
+		if err := os.Chdir(worktreePath); err != nil {
+			// Don't fail the command, just log the error
+			if c.deps.Stderr != nil {
+				fmt.Fprintf(c.deps.Stderr, "⚠ Could not change to worktree directory: %v\n", err)
+			}
 		}
-		fmt.Fprintf(c.deps.Stdout, "Changed directory to: %s\n", absolutePath)
 	}
 
 	// Handle environment files
@@ -295,6 +283,14 @@ func (c *CheckoutCommand) Execute(branch string) error {
 	if err := c.deps.Detect.RunSetup(absolutePath); err != nil {
 		// Don't fail if setup fails, just warn
 		fmt.Fprintf(c.deps.Stderr, "⚠ Setup failed: %v\n", err)
+	}
+
+	// Show completion message
+	if c.deps.Stdout != nil {
+		fmt.Fprintf(c.deps.Stdout, "\n✨ Worktree ready at:\n   %s\n", absolutePath)
+		if c.config != nil && c.config.AutoCD {
+			fmt.Fprintf(c.deps.Stdout, "\n💡 Shell integration will change to this directory after the command completes.\n")
+		}
 	}
 
 	return nil

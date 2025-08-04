@@ -202,15 +202,38 @@ func (c *InitCommand) addShellFunction(rcPath string) error {
 	shellFunction := `
 # gw shell integration
 gw() {
-    if [[ "$1" == "start" ]] && [[ "$*" != *"--print-path"* ]]; then
-        local path=$(command gw "$@" --print-path 2>/dev/null)
-        if [[ -n "$path" && -d "$path" ]]; then
+    # Check if we should auto-cd after command
+    if [[ "$1" == "start" || "$1" == "checkout" ]] && [[ -f ~/.gwrc ]]; then
+        # Check if auto_cd is enabled
+        if grep -q "auto_cd = true" ~/.gwrc 2>/dev/null; then
+            # Run the actual command (output goes directly to terminal)
             command gw "$@"
-            cd "$path"
-            return
+            local exit_code=$?
+            
+            # If command succeeded, get the worktree path and cd to it
+            if [[ $exit_code -eq 0 ]]; then
+                local identifier="${2:-}"  # Get issue number or branch name
+                if [[ -n "$identifier" ]]; then
+                    # Get the worktree path using shell-integration command
+                    local worktree_path=$(command gw shell-integration --print-path="$identifier" 2>/dev/null)
+                    
+                    # If we got a path, cd to it
+                    if [[ -n "$worktree_path" && -d "$worktree_path" ]]; then
+                        cd "$worktree_path"
+                        echo "Changed directory to: $worktree_path"
+                    fi
+                fi
+            fi
+            
+            return $exit_code
+        else
+            # Auto CD disabled, just run the command normally
+            command gw "$@"
         fi
+    else
+        # Not a start/checkout command, just run normally
+        command gw "$@"
     fi
-    command gw "$@"
 }`
 
 	// Read existing content
@@ -221,7 +244,16 @@ gw() {
 
 	// Check if function already exists
 	if strings.Contains(string(content), "# gw shell integration") {
-		fmt.Fprintf(c.stdout, "Shell integration already exists in %s\n", rcPath)
+		fmt.Fprintln(c.stdout)
+		fmt.Fprintf(c.stdout, "⚠️  Shell integration already exists in %s\n", rcPath)
+		fmt.Fprintln(c.stdout, "    The existing gw() function was not updated to avoid overwriting your configuration.")
+		fmt.Fprintln(c.stdout)
+		fmt.Fprintln(c.stdout, "To update the shell function manually, please replace the existing gw() function with:")
+		fmt.Fprintln(c.stdout, "--------------------------------------------------------------------------------")
+		fmt.Fprint(c.stdout, shellFunction)
+		fmt.Fprintln(c.stdout, "--------------------------------------------------------------------------------")
+		fmt.Fprintln(c.stdout)
+		fmt.Fprintf(c.stdout, "You can edit %s and replace the entire gw() function block.\n", rcPath)
 		return nil
 	}
 

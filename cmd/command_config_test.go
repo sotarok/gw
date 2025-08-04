@@ -33,8 +33,8 @@ func TestStartCommand_WithConfig(t *testing.T) {
 			},
 			expectedCwd: expectedCwdWorktree, // Should change to worktree directory
 			checkOutput: func(t *testing.T, stdout, stderr string) {
-				if !contains(stdout, "✓ Changed to worktree directory") {
-					t.Error("Expected directory change message")
+				if !contains(stdout, "Shell integration will change to this directory") {
+					t.Error("Expected message about shell integration when auto-cd is enabled")
 				}
 			},
 		},
@@ -45,8 +45,8 @@ func TestStartCommand_WithConfig(t *testing.T) {
 			},
 			expectedCwd: expectedCwdOriginal, // Should stay in original directory
 			checkOutput: func(t *testing.T, stdout, stderr string) {
-				if contains(stdout, "✓ Changed to worktree directory") {
-					t.Error("Should not change directory when auto-cd is disabled")
+				if contains(stdout, "Shell integration will change to this directory") {
+					t.Error("Should not show shell integration message when auto-cd is disabled")
 				}
 			},
 		},
@@ -139,8 +139,8 @@ func TestCheckoutCommand_WithConfig(t *testing.T) {
 			},
 			expectedCwd: expectedCwdWorktree,
 			checkOutput: func(t *testing.T, stdout, stderr string) {
-				if !contains(stdout, "Changed directory to:") {
-					t.Error("Expected directory change message")
+				if !contains(stdout, "Shell integration will change to this directory") {
+					t.Error("Expected message about shell integration when auto-cd is enabled")
 				}
 			},
 		},
@@ -151,8 +151,8 @@ func TestCheckoutCommand_WithConfig(t *testing.T) {
 			},
 			expectedCwd: expectedCwdOriginal,
 			checkOutput: func(t *testing.T, stdout, stderr string) {
-				if contains(stdout, "Changed directory to:") {
-					t.Error("Should not change directory when auto-cd is disabled")
+				if contains(stdout, "Shell integration will change to this directory") {
+					t.Error("Should not show shell integration message when auto-cd is disabled")
 				}
 			},
 		},

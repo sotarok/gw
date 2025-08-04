@@ -145,6 +145,7 @@ func TestInitCommand_ShellIntegration(t *testing.T) {
 		userInput      string
 		shellPath      string
 		expectRcUpdate bool
+		existingRc     bool // Whether to create existing shell integration
 		checkOutput    func(t *testing.T, output string)
 	}{
 		{
@@ -180,6 +181,24 @@ func TestInitCommand_ShellIntegration(t *testing.T) {
 				}
 			},
 		},
+		{
+			name:           "shell integration already exists - shows warning and instructions",
+			userInput:      "y\ny\n", // Enable auto-cd, enable shell integration
+			shellPath:      "/bin/bash",
+			expectRcUpdate: false, // Should not update because it already exists
+			existingRc:     true,
+			checkOutput: func(t *testing.T, output string) {
+				if !strings.Contains(output, "⚠️  Shell integration already exists") {
+					t.Error("Expected warning about existing shell integration")
+				}
+				if !strings.Contains(output, "To update the shell function manually") {
+					t.Error("Expected manual update instructions")
+				}
+				if !strings.Contains(output, "gw()") {
+					t.Error("Expected shell function code to be displayed")
+				}
+			},
+		},
 	}
 
 	for _, tt := range tests {
@@ -188,6 +207,20 @@ func TestInitCommand_ShellIntegration(t *testing.T) {
 			tempDir := t.TempDir()
 			configPath := filepath.Join(tempDir, ".gwrc")
 			rcPath := filepath.Join(tempDir, ".bashrc")
+
+			// If test requires existing shell integration, create it
+			if tt.existingRc {
+				existingContent := `# Existing content
+# gw shell integration
+gw() {
+    # Old version of the function
+    command gw "$@"
+}
+`
+				if err := os.WriteFile(rcPath, []byte(existingContent), 0644); err != nil {
+					t.Fatalf("Failed to create existing rc file: %v", err)
+				}
+			}
 
 			// Setup environment
 			os.Setenv("SHELL", tt.shellPath)
