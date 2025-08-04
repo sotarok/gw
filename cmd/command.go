@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/sotarok/gw/internal/config"
 	"github.com/sotarok/gw/internal/detect"
 	"github.com/sotarok/gw/internal/git"
 	"github.com/sotarok/gw/internal/ui"
@@ -34,15 +35,41 @@ func DefaultDependencies() *Dependencies {
 
 // StartCommand handles the start command logic
 type StartCommand struct {
-	deps     *Dependencies
-	copyEnvs bool
+	deps      *Dependencies
+	copyEnvs  bool
+	config    *config.Config
+	printPath bool
 }
 
 // NewStartCommand creates a new start command handler
 func NewStartCommand(deps *Dependencies, copyEnvs bool) *StartCommand {
+	// Load config
+	cfg, _ := config.Load(config.GetConfigPath())
 	return &StartCommand{
 		deps:     deps,
 		copyEnvs: copyEnvs,
+		config:   cfg,
+	}
+}
+
+// NewStartCommandWithConfig creates a new start command handler with explicit config
+func NewStartCommandWithConfig(deps *Dependencies, copyEnvs bool, cfg *config.Config) *StartCommand {
+	return &StartCommand{
+		deps:     deps,
+		copyEnvs: copyEnvs,
+		config:   cfg,
+	}
+}
+
+// NewStartCommandWithOptions creates a new start command handler with all options
+func NewStartCommandWithOptions(deps *Dependencies, copyEnvs, printPath bool) *StartCommand {
+	// Load config
+	cfg, _ := config.Load(config.GetConfigPath())
+	return &StartCommand{
+		deps:      deps,
+		copyEnvs:  copyEnvs,
+		config:    cfg,
+		printPath: printPath,
 	}
 }
 
@@ -64,7 +91,10 @@ func (c *StartCommand) Execute(issueNumber, baseBranch string) error {
 		return fmt.Errorf("failed to get current directory: %w", err)
 	}
 
-	fmt.Fprintf(c.deps.Stdout, "Creating worktree for issue #%s based on %s...\n", issueNumber, baseBranch)
+	// Print messages only if not in print-path mode
+	if !c.printPath && c.deps.Stdout != nil {
+		fmt.Fprintf(c.deps.Stdout, "Creating worktree for issue #%s based on %s...\n", issueNumber, baseBranch)
+	}
 
 	// Create the worktree
 	worktreePath, err := c.deps.Git.CreateWorktree(issueNumber, baseBranch)
@@ -72,28 +102,46 @@ func (c *StartCommand) Execute(issueNumber, baseBranch string) error {
 		return err
 	}
 
-	fmt.Fprintf(c.deps.Stdout, "✓ Created worktree at %s\n", worktreePath)
-
-	// Change to the new worktree directory
-	if err := os.Chdir(worktreePath); err != nil {
-		return fmt.Errorf("failed to change directory: %w", err)
+	// In print-path mode, just output the path and exit
+	if c.printPath {
+		fmt.Println(worktreePath)
+		return nil
 	}
 
-	fmt.Fprintf(c.deps.Stdout, "✓ Changed to worktree directory\n")
+	if c.deps.Stdout != nil {
+		fmt.Fprintf(c.deps.Stdout, "✓ Created worktree at %s\n", worktreePath)
+	}
+
+	// Change to the new worktree directory if auto-cd is enabled
+	if c.config != nil && c.config.AutoCD {
+		if err := os.Chdir(worktreePath); err != nil {
+			return fmt.Errorf("failed to change directory: %w", err)
+		}
+		if c.deps.Stdout != nil {
+			fmt.Fprintf(c.deps.Stdout, "✓ Changed to worktree directory\n")
+			fmt.Fprintf(c.deps.Stdout, "💡 Note: To stay in the new directory after gw exits, use: cd %s\n", worktreePath)
+		}
+	}
 
 	// Handle environment files
 	if err := c.handleEnvFiles(originalDir, worktreePath); err != nil {
 		// Don't fail the command, just warn
-		fmt.Fprintf(c.deps.Stderr, "⚠ Failed to handle env files: %v\n", err)
+		if c.deps.Stderr != nil {
+			fmt.Fprintf(c.deps.Stderr, "⚠ Failed to handle env files: %v\n", err)
+		}
 	}
 
 	// Run setup if a package manager is detected
 	if err := c.deps.Detect.RunSetup(worktreePath); err != nil {
 		// Don't fail if setup fails, just warn
-		fmt.Fprintf(c.deps.Stderr, "⚠ Setup failed: %v\n", err)
+		if c.deps.Stderr != nil {
+			fmt.Fprintf(c.deps.Stderr, "⚠ Setup failed: %v\n", err)
+		}
 	}
 
-	fmt.Fprintf(c.deps.Stdout, "\n✨ Worktree ready! You are now in:\n   %s\n", worktreePath)
+	if c.deps.Stdout != nil {
+		fmt.Fprintf(c.deps.Stdout, "\n✨ Worktree ready! You are now in:\n   %s\n", worktreePath)
+	}
 	return nil
 }
 
@@ -152,13 +200,26 @@ func handleEnvFiles(deps *Dependencies, copyEnvs bool, originalDir, worktreePath
 type CheckoutCommand struct {
 	deps     *Dependencies
 	copyEnvs bool
+	config   *config.Config
 }
 
 // NewCheckoutCommand creates a new checkout command handler
 func NewCheckoutCommand(deps *Dependencies, copyEnvs bool) *CheckoutCommand {
+	// Load config
+	cfg, _ := config.Load(config.GetConfigPath())
 	return &CheckoutCommand{
 		deps:     deps,
 		copyEnvs: copyEnvs,
+		config:   cfg,
+	}
+}
+
+// NewCheckoutCommandWithConfig creates a new checkout command handler with explicit config
+func NewCheckoutCommandWithConfig(deps *Dependencies, copyEnvs bool, cfg *config.Config) *CheckoutCommand {
+	return &CheckoutCommand{
+		deps:     deps,
+		copyEnvs: copyEnvs,
+		config:   cfg,
 	}
 }
 
@@ -211,17 +272,18 @@ func (c *CheckoutCommand) Execute(branch string) error {
 		return fmt.Errorf("failed to create worktree: %w", err)
 	}
 
-	// Change to the new worktree directory
+	// Change to the new worktree directory if auto-cd is enabled
 	absolutePath, err := filepath.Abs(worktreePath)
 	if err != nil {
 		return fmt.Errorf("failed to get absolute path: %w", err)
 	}
 
-	if err := os.Chdir(absolutePath); err != nil {
-		return fmt.Errorf("failed to change directory: %w", err)
+	if c.config.AutoCD {
+		if err := os.Chdir(absolutePath); err != nil {
+			return fmt.Errorf("failed to change directory: %w", err)
+		}
+		fmt.Fprintf(c.deps.Stdout, "Changed directory to: %s\n", absolutePath)
 	}
-
-	fmt.Fprintf(c.deps.Stdout, "Changed directory to: %s\n", absolutePath)
 
 	// Handle environment files
 	if err := c.handleEnvFiles(originalDir, absolutePath); err != nil {

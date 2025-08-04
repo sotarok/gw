@@ -66,6 +66,15 @@ make install
 
 ## Usage
 
+### Initialize configuration
+
+```bash
+# Run interactive configuration setup
+gw init
+```
+
+This will create a `~/.gwrc` file with your preferences.
+
 ### Create a new worktree
 
 ```bash
@@ -129,7 +138,50 @@ Safety checks include:
 
 ## Configuration
 
-Future versions will support configuration via `.gwconfig` file for:
+The `gw` tool can be configured via `~/.gwrc` file. Run `gw init` to create the configuration interactively.
+
+### Configuration Options
+
+- **auto_cd**: Automatically change to the new worktree directory after creation (default: true)
+
+Example `~/.gwrc`:
+```
+# gw configuration file
+auto_cd = true
+```
+
+### Shell Integration for Auto-CD
+
+Since `gw` runs as a subprocess, it cannot change the parent shell's directory. To enable true auto-cd functionality, use one of these methods:
+
+#### Method 1: Using --print-path flag
+
+```bash
+# Create worktree and cd to it
+cd $(gw start 123 --print-path)
+```
+
+#### Method 2: Shell function (recommended)
+
+Add this to your `~/.bashrc` or `~/.zshrc`:
+
+```bash
+gw() {
+    if [[ "$1" == "start" ]] && [[ "$*" != *"--print-path"* ]]; then
+        local path=$(command gw "$@" --print-path 2>/dev/null)
+        if [[ -n "$path" && -d "$path" ]]; then
+            command gw "$@"
+            cd "$path"
+            return
+        fi
+    fi
+    command gw "$@"
+}
+```
+
+### Future Configuration Options
+
+Future versions will support additional configuration:
 - Default base branch
 - Custom worktree location
 - Package manager preferences

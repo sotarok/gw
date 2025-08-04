@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/sotarok/gw/internal/detect"
@@ -131,7 +132,8 @@ func (m *mockGit) RunCommand(command string) error {
 }
 
 func (m *mockGit) SanitizeBranchNameForDirectory(branch string) string {
-	return branch
+	// Simple sanitization for testing
+	return strings.ReplaceAll(branch, "/", "_")
 }
 
 type mockUI struct {
