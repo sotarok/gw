@@ -301,7 +301,7 @@ func TestStartCommand_Execute(t *testing.T) {
 				if !contains(stderr, "⚠ Setup failed: npm install failed") {
 					t.Error("Expected setup warning in stderr")
 				}
-				if !contains(stdout, "✨ Worktree ready!") {
+				if !contains(stdout, "✨ Worktree ready at:") {
 					t.Error("Expected success message despite setup failure")
 				}
 			},
