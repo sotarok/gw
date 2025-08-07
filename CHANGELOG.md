@@ -8,13 +8,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
-- Configuration system with `~/.gwrc` file and `gw init` command for interactive setup
-  - Auto-cd option to automatically change to new worktree directory after creation
-  - Shell integration for bash/zsh/fish that respects auto_cd configuration
-  - Warning with manual update instructions when shell integration already exists
-- New `gw shell-integration` command with `--print-path` flag to get worktree paths
-  - Enables proper interactive output (env file prompts, progress messages) in shell functions
-  - Separates command execution from path retrieval for cleaner shell integration
+- Configuration file support via `~/.gwrc`
+- New `gw init` command for interactive configuration setup
+- Auto-cd configuration option to control directory change behavior after worktree creation
+- New `gw shell-integration` command with multiple features:
+  - `--show-script` flag to dynamically generate shell integration code
+  - `--shell` parameter to specify shell type (bash/zsh/fish)
+  - `--print-path` flag to get worktree paths for specific issues/branches
+  - Supports eval-based setup for always up-to-date shell integration
 - Test coverage reporting with Codecov integration
 - GitHub Actions workflow for automated test coverage
 - Makefile commands for local coverage reporting (`make coverage`, `make coverage-report`)

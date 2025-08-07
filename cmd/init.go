@@ -62,6 +62,10 @@ func NewInitCommandWithShell(stdin io.Reader, stdout, stderr io.Writer, configPa
 const (
 	yes = "yes"
 	no  = "no"
+
+	shellBash = "bash"
+	shellZsh  = "zsh"
+	shellFish = "fish"
 )
 
 // Execute runs the init command
@@ -133,7 +137,7 @@ func (c *InitCommand) offerShellIntegration(reader *bufio.Reader) error {
 	fmt.Fprintln(c.stdout, "Shell Integration")
 	fmt.Fprintln(c.stdout, "=================")
 	fmt.Fprintln(c.stdout, "To automatically change to the new worktree directory after 'gw start',")
-	fmt.Fprintln(c.stdout, "we can add a shell function to your shell configuration file.")
+	fmt.Fprintln(c.stdout, "you need to add shell integration to your shell configuration file.")
 	fmt.Fprintln(c.stdout)
 	fmt.Fprint(c.stdout, "Would you like to set up shell integration? (y/N): ")
 
@@ -144,33 +148,72 @@ func (c *InitCommand) offerShellIntegration(reader *bufio.Reader) error {
 
 	response = strings.TrimSpace(strings.ToLower(response))
 	if response != "y" && response != yes {
-		fmt.Fprintln(c.stdout, "Shell integration skipped.")
-		fmt.Fprintln(c.stdout, "You can manually add the shell function later. See: gw help shell-integration")
+		fmt.Fprintln(c.stdout, "Shell integration setup skipped.")
+		fmt.Fprintln(c.stdout, "You can set it up later by following the instructions in the documentation.")
 		return nil
 	}
 
 	// Detect shell and rc file
-	shell := os.Getenv("SHELL")
+	shell := c.detectShellType()
 	rcPath := c.rcPath // Use test path if provided
 	if rcPath == "" {
 		rcPath = c.detectRCPath(shell)
 	}
 
 	if rcPath == "" {
-		return fmt.Errorf("could not detect shell configuration file")
+		// Can't detect rc file, show manual instructions
+		return c.showManualInstructions(shell)
 	}
 
-	// Add shell function
-	if err := c.addShellFunction(rcPath); err != nil {
-		return err
+	// Check if eval command already exists
+	evalCommand := c.getEvalCommand(shell)
+	if c.hasShellIntegration(rcPath, evalCommand) {
+		return c.showUpdateInstructions(rcPath, shell)
+	}
+
+	// Add shell integration
+	if err := c.addShellIntegration(rcPath, shell); err != nil {
+		// If failed, show manual instructions
+		fmt.Fprintf(c.stderr, "⚠ Failed to add shell integration: %v\n", err)
+		return c.showManualInstructions(shell)
 	}
 
 	fmt.Fprintln(c.stdout)
-	fmt.Fprintf(c.stdout, "✓ Shell function added to %s\n", rcPath)
+	fmt.Fprintf(c.stdout, "✓ Shell integration added to %s\n", rcPath)
 	fmt.Fprintln(c.stdout, "Please restart your shell or run:")
 	fmt.Fprintf(c.stdout, "  source %s\n", rcPath)
 
 	return nil
+}
+
+func (c *InitCommand) detectShellType() string {
+	// First try SHELL environment variable
+	shellPath := os.Getenv("SHELL")
+	shell := filepath.Base(shellPath)
+
+	switch {
+	case strings.Contains(shell, shellZsh):
+		return shellZsh
+	case strings.Contains(shell, shellBash):
+		return shellBash
+	case strings.Contains(shell, shellFish):
+		return shellFish
+	default:
+		// Try to detect based on existing rc files
+		home, _ := os.UserHomeDir()
+		if home != "" {
+			if _, err := os.Stat(filepath.Join(home, ".zshrc")); err == nil {
+				return shellZsh
+			}
+			if _, err := os.Stat(filepath.Join(home, ".bashrc")); err == nil {
+				return shellBash
+			}
+			if _, err := os.Stat(filepath.Join(home, ".config", "fish", "config.fish")); err == nil {
+				return shellFish
+			}
+		}
+		return "unknown"
+	}
 }
 
 func (c *InitCommand) detectRCPath(shell string) string {
@@ -179,102 +222,116 @@ func (c *InitCommand) detectRCPath(shell string) string {
 		home = os.Getenv("HOME")
 	}
 
-	switch {
-	case strings.Contains(shell, "zsh"):
+	switch shell {
+	case shellZsh:
 		return filepath.Join(home, ".zshrc")
-	case strings.Contains(shell, "bash"):
+	case shellBash:
 		return filepath.Join(home, ".bashrc")
+	case shellFish:
+		return filepath.Join(home, ".config", "fish", "config.fish")
 	default:
-		// Try to detect based on existing files
-		zshrc := filepath.Join(home, ".zshrc")
-		if _, err := os.Stat(zshrc); err == nil {
-			return zshrc
-		}
-		bashrc := filepath.Join(home, ".bashrc")
-		if _, err := os.Stat(bashrc); err == nil {
-			return bashrc
-		}
 		return ""
 	}
 }
 
-func (c *InitCommand) addShellFunction(rcPath string) error {
-	shellFunction := `
-# gw shell integration
-gw() {
-    # Check if we should auto-cd after command
-    if [[ "$1" == "start" || "$1" == "checkout" ]] && [[ -f ~/.gwrc ]]; then
-        # Check if auto_cd is enabled
-        if grep -q "auto_cd = true" ~/.gwrc 2>/dev/null; then
-            # Run the actual command (output goes directly to terminal)
-            command gw "$@"
-            local exit_code=$?
+func (c *InitCommand) getEvalCommand(shell string) string {
+	switch shell {
+	case shellFish:
+		return "gw shell-integration --show-script"
+	default:
+		return fmt.Sprintf("eval \"$(gw shell-integration --show-script --shell=%s)\"", shell)
+	}
+}
 
-            # If command succeeded, get the worktree path and cd to it
-            if [[ $exit_code -eq 0 ]]; then
-                local identifier="${2:-}"  # Get issue number or branch name
-                if [[ -n "$identifier" ]]; then
-                    # Get the worktree path using shell-integration command
-                    local worktree_path=$(command gw shell-integration --print-path="$identifier" 2>/dev/null)
+func (c *InitCommand) hasShellIntegration(rcPath, evalCommand string) bool {
+	content, err := os.ReadFile(rcPath)
+	if err != nil {
+		return false
+	}
+	return strings.Contains(string(content), evalCommand)
+}
 
-                    # If we got a path, cd to it
-                    if [[ -n "$worktree_path" && -d "$worktree_path" ]]; then
-                        cd "$worktree_path"
-                        echo "Changed directory to: $worktree_path"
-                    fi
-                fi
-            fi
+func (c *InitCommand) showManualInstructions(shell string) error {
+	fmt.Fprintln(c.stdout)
+	fmt.Fprintf(c.stdout, "Detected shell: %s\n", shell)
+	fmt.Fprintln(c.stdout)
+	fmt.Fprintln(c.stdout, "To enable shell integration, add the following line to your shell configuration file:")
+	fmt.Fprintln(c.stdout)
 
-            return $exit_code
-        else
-            # Auto CD disabled, just run the command normally
-            command gw "$@"
-        fi
-    else
-        # Not a start/checkout command, just run normally
-        command gw "$@"
-    fi
-}`
+	switch shell {
+	case shellZsh:
+		fmt.Fprintln(c.stdout, "  # Add to ~/.zshrc")
+		fmt.Fprintf(c.stdout, "  eval \"$(gw shell-integration --show-script --shell=%s)\"\n", shellZsh)
+	case shellBash:
+		fmt.Fprintln(c.stdout, "  # Add to ~/.bashrc")
+		fmt.Fprintf(c.stdout, "  eval \"$(gw shell-integration --show-script --shell=%s)\"\n", shellBash)
+	case shellFish:
+		fmt.Fprintln(c.stdout, "  # Add to ~/.config/fish/config.fish")
+		fmt.Fprintf(c.stdout, "  gw shell-integration --show-script --shell=%s | source\n", shellFish)
+	default:
+		fmt.Fprintln(c.stdout, "  # For bash (add to ~/.bashrc)")
+		fmt.Fprintf(c.stdout, "  eval \"$(gw shell-integration --show-script --shell=%s)\"\n", shellBash)
+		fmt.Fprintln(c.stdout)
+		fmt.Fprintln(c.stdout, "  # For zsh (add to ~/.zshrc)")
+		fmt.Fprintf(c.stdout, "  eval \"$(gw shell-integration --show-script --shell=%s)\"\n", shellZsh)
+		fmt.Fprintln(c.stdout)
+		fmt.Fprintln(c.stdout, "  # For fish (add to ~/.config/fish/config.fish)")
+		fmt.Fprintf(c.stdout, "  gw shell-integration --show-script --shell=%s | source\n", shellFish)
+	}
 
+	fmt.Fprintln(c.stdout)
+	fmt.Fprintln(c.stdout, "After adding the line, restart your shell or source your configuration file.")
+
+	return nil
+}
+
+func (c *InitCommand) showUpdateInstructions(rcPath, shell string) error {
+	fmt.Fprintln(c.stdout)
+	fmt.Fprintf(c.stdout, "⚠️  Shell integration already exists in %s\n", rcPath)
+	fmt.Fprintln(c.stdout)
+	fmt.Fprintln(c.stdout, "The shell integration is already set up using the eval method.")
+	fmt.Fprintln(c.stdout, "This means you're always using the latest version automatically!")
+	fmt.Fprintln(c.stdout)
+	fmt.Fprintln(c.stdout, "If you need to update or modify the integration, please edit:")
+	fmt.Fprintf(c.stdout, "  %s\n", rcPath)
+	fmt.Fprintln(c.stdout)
+	fmt.Fprintln(c.stdout, "Look for the line containing:")
+	fmt.Fprintf(c.stdout, "  %s\n", c.getEvalCommand(shell))
+
+	return nil
+}
+
+func (c *InitCommand) addShellIntegration(rcPath, shell string) error {
 	// Read existing content
 	content, err := os.ReadFile(rcPath)
 	if err != nil && !os.IsNotExist(err) {
 		return fmt.Errorf("failed to read %s: %w", rcPath, err)
 	}
 
-	// Check if function already exists
-	if strings.Contains(string(content), "# gw shell integration") {
-		fmt.Fprintln(c.stdout)
-		fmt.Fprintf(c.stdout, "⚠️  Shell integration already exists in %s\n", rcPath)
-		fmt.Fprintln(c.stdout, "    The existing gw() function was not updated to avoid overwriting your configuration.")
-		fmt.Fprintln(c.stdout)
-		fmt.Fprintln(c.stdout, "To update the shell function manually, please replace the existing gw() function with:")
-		fmt.Fprintln(c.stdout, "--------------------------------------------------------------------------------")
-		fmt.Fprint(c.stdout, shellFunction)
-		fmt.Fprintln(c.stdout)
-		fmt.Fprintln(c.stdout, "--------------------------------------------------------------------------------")
-		fmt.Fprintln(c.stdout)
-		fmt.Fprintf(c.stdout, "You can edit %s and replace the entire gw() function block.\n", rcPath)
-		return nil
-	}
-
-	// Append shell function
+	// Open file for appending
 	file, err := os.OpenFile(rcPath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
 	if err != nil {
 		return fmt.Errorf("failed to open %s: %w", rcPath, err)
 	}
 	defer file.Close()
 
+	// Add newline if file doesn't end with one
 	if len(content) > 0 && !strings.HasSuffix(string(content), "\n") {
 		if _, err := file.WriteString("\n"); err != nil {
 			return fmt.Errorf("failed to write to %s: %w", rcPath, err)
 		}
 	}
-	if _, err := file.WriteString(shellFunction); err != nil {
-		return fmt.Errorf("failed to write shell function: %w", err)
+
+	// Add shell integration comment and command
+	shellIntegration := "\n# gw shell integration\n"
+	if shell == shellFish {
+		shellIntegration += fmt.Sprintf("gw shell-integration --show-script --shell=%s | source\n", shell)
+	} else {
+		shellIntegration += fmt.Sprintf("eval \"$(gw shell-integration --show-script --shell=%s)\"\n", shell)
 	}
-	if _, err := file.WriteString("\n"); err != nil {
-		return fmt.Errorf("failed to write to %s: %w", rcPath, err)
+
+	if _, err := file.WriteString(shellIntegration); err != nil {
+		return fmt.Errorf("failed to write shell integration: %w", err)
 	}
 
 	return nil

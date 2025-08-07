@@ -152,7 +152,24 @@ auto_cd = true
 
 ### Shell Integration
 
-To enable automatic directory changing after creating worktrees, you need to set up shell integration. See [SHELL_INTEGRATION.md](SHELL_INTEGRATION.md) for detailed setup instructions.
+To enable automatic directory changing after creating worktrees, you need to set up shell integration:
+
+#### Quick Setup
+
+Add one of these lines to your shell configuration file:
+
+```bash
+# For Bash (~/.bashrc)
+eval "$(gw shell-integration --show-script --shell=bash)"
+
+# For Zsh (~/.zshrc)
+eval "$(gw shell-integration --show-script --shell=zsh)"
+
+# For Fish (~/.config/fish/config.fish)
+gw shell-integration --show-script --shell=fish | source
+```
+
+This method ensures you always have the latest shell integration code. See [SHELL_INTEGRATION.md](SHELL_INTEGRATION.md) for more details.
 
 ### Future Configuration Options
 

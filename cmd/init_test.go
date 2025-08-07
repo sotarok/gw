@@ -62,8 +62,8 @@ func TestInitCommand_Execute(t *testing.T) {
 			stderr := &bytes.Buffer{}
 
 			// Create init command with test rc path
-			testRcPath := filepath.Join(tempDir, ".bashrc")
-			cmd := NewInitCommandWithShell(stdin, stdout, stderr, configPath, testRcPath)
+			rcPath := filepath.Join(tempDir, ".bashrc")
+			cmd := NewInitCommandWithShell(stdin, stdout, stderr, configPath, rcPath)
 			err := cmd.Execute()
 
 			// Check error
@@ -115,8 +115,8 @@ func TestInitCommand_ExistingConfig(t *testing.T) {
 	stderr := &bytes.Buffer{}
 
 	// Create init command with test rc path
-	testRcPath := filepath.Join(tempDir, ".bashrc")
-	cmd := NewInitCommandWithShell(stdin, stdout, stderr, configPath, testRcPath)
+	rcPath := filepath.Join(tempDir, ".bashrc")
+	cmd := NewInitCommandWithShell(stdin, stdout, stderr, configPath, rcPath)
 	err := cmd.Execute()
 	if err != nil {
 		t.Fatalf("Unexpected error: %v", err)
@@ -149,24 +149,30 @@ func TestInitCommand_ShellIntegration(t *testing.T) {
 		checkOutput    func(t *testing.T, output string)
 	}{
 		{
-			name:           "user enables auto-cd and shell integration",
+			name:           "user enables auto-cd and shell integration added automatically",
 			userInput:      "y\ny\n", // Enable auto-cd, enable shell integration
 			shellPath:      "/bin/bash",
-			expectRcUpdate: true,
+			expectRcUpdate: true, // Now writes to rc file
 			checkOutput: func(t *testing.T, output string) {
 				if !strings.Contains(output, "Shell Integration") {
 					t.Error("Expected shell integration prompt")
 				}
+				if !strings.Contains(output, "✓ Shell integration added to") {
+					t.Error("Expected success message")
+				}
 			},
 		},
 		{
-			name:           "user enables auto-cd but declines shell integration",
-			userInput:      "y\nn\n", // Enable auto-cd, decline shell integration
+			name:           "user enables auto-cd but declines shell integration instructions",
+			userInput:      "y\nn\n", // Enable auto-cd, decline shell integration instructions
 			shellPath:      "/bin/bash",
 			expectRcUpdate: false,
 			checkOutput: func(t *testing.T, output string) {
 				if !strings.Contains(output, "Shell Integration") {
 					t.Error("Expected shell integration prompt")
+				}
+				if !strings.Contains(output, "Shell integration setup skipped") {
+					t.Error("Expected skip message")
 				}
 			},
 		},
@@ -182,7 +188,7 @@ func TestInitCommand_ShellIntegration(t *testing.T) {
 			},
 		},
 		{
-			name:           "shell integration already exists - shows warning and instructions",
+			name:           "shell integration already exists - shows update instructions",
 			userInput:      "y\ny\n", // Enable auto-cd, enable shell integration
 			shellPath:      "/bin/bash",
 			expectRcUpdate: false, // Should not update because it already exists
@@ -191,11 +197,11 @@ func TestInitCommand_ShellIntegration(t *testing.T) {
 				if !strings.Contains(output, "⚠️  Shell integration already exists") {
 					t.Error("Expected warning about existing shell integration")
 				}
-				if !strings.Contains(output, "To update the shell function manually") {
-					t.Error("Expected manual update instructions")
+				if !strings.Contains(output, "The shell integration is already set up using the eval method") {
+					t.Error("Expected message about eval method")
 				}
-				if !strings.Contains(output, "gw()") {
-					t.Error("Expected shell function code to be displayed")
+				if !strings.Contains(output, "If you need to update or modify the integration") {
+					t.Error("Expected update instructions")
 				}
 			},
 		},
@@ -212,10 +218,7 @@ func TestInitCommand_ShellIntegration(t *testing.T) {
 			if tt.existingRc {
 				existingContent := `# Existing content
 # gw shell integration
-gw() {
-    # Old version of the function
-    command gw "$@"
-}
+eval "$(gw shell-integration --show-script --shell=bash)"
 `
 				if err := os.WriteFile(rcPath, []byte(existingContent), 0644); err != nil {
 					t.Fatalf("Failed to create existing rc file: %v", err)
@@ -248,8 +251,8 @@ gw() {
 				content, err := os.ReadFile(rcPath)
 				if err != nil {
 					t.Errorf("Expected rc file to be created/updated")
-				} else if !strings.Contains(string(content), "gw()") {
-					t.Errorf("Expected shell function in rc file")
+				} else if !strings.Contains(string(content), "gw shell-integration --show-script") {
+					t.Errorf("Expected shell integration command in rc file")
 				}
 			}
 		})
