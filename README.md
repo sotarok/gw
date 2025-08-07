@@ -66,6 +66,15 @@ make install
 
 ## Usage
 
+### Initialize configuration
+
+```bash
+# Run interactive configuration setup
+gw init
+```
+
+This will create a `~/.gwrc` file with your preferences.
+
 ### Create a new worktree
 
 ```bash
@@ -129,7 +138,42 @@ Safety checks include:
 
 ## Configuration
 
-Future versions will support configuration via `.gwconfig` file for:
+The `gw` tool can be configured via `~/.gwrc` file. Run `gw init` to create the configuration interactively.
+
+### Configuration Options
+
+- **auto_cd**: Automatically change to the new worktree directory after creation (default: true)
+
+Example `~/.gwrc`:
+```
+# gw configuration file
+auto_cd = true
+```
+
+### Shell Integration
+
+To enable automatic directory changing after creating worktrees, you need to set up shell integration:
+
+#### Quick Setup
+
+Add one of these lines to your shell configuration file:
+
+```bash
+# For Bash (~/.bashrc)
+eval "$(gw shell-integration --show-script --shell=bash)"
+
+# For Zsh (~/.zshrc)
+eval "$(gw shell-integration --show-script --shell=zsh)"
+
+# For Fish (~/.config/fish/config.fish)
+gw shell-integration --show-script --shell=fish | source
+```
+
+This method ensures you always have the latest shell integration code. See [SHELL_INTEGRATION.md](SHELL_INTEGRATION.md) for more details.
+
+### Future Configuration Options
+
+Future versions will support additional configuration:
 - Default base branch
 - Custom worktree location
 - Package manager preferences

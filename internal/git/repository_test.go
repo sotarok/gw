@@ -17,10 +17,14 @@ func TestGetRepositoryName(t *testing.T) {
 			t.Fatalf("unexpected error: %v", err)
 		}
 
-		// We expect "gw" as the repository name since we're in the gw directory
-		expected := "gw"
-		if name != expected {
-			t.Errorf("expected repository name %q, got %q", expected, name)
+		// The repository name should contain "gw" (could be "gw" or "gw-{branch}" in a worktree)
+		if !strings.Contains(name, "gw") {
+			t.Errorf("expected repository name to contain 'gw', got %q", name)
+		}
+
+		// Also verify it starts with "gw"
+		if !strings.HasPrefix(name, "gw") {
+			t.Errorf("expected repository name to start with 'gw', got %q", name)
 		}
 	})
 

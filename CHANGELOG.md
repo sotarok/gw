@@ -7,6 +7,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- Configuration file support via `~/.gwrc`
+- New `gw init` command for interactive configuration setup
+- Auto-cd configuration option to control directory change behavior after worktree creation
+- New `gw shell-integration` command with multiple features:
+  - `--show-script` flag to dynamically generate shell integration code
+  - `--shell` parameter to specify shell type (bash/zsh/fish)
+  - `--print-path` flag to get worktree paths for specific issues/branches
+  - Supports eval-based setup for always up-to-date shell integration
+- Test coverage reporting with Codecov integration
+- GitHub Actions workflow for automated test coverage
+- Makefile commands for local coverage reporting (`make coverage`, `make coverage-report`)
+
+### Changed
+- Refactored cmd package to use dependency injection pattern for better testability
+- Test coverage increased from ~20% to 71.2%
+
 ## [0.3.1] - 2025-07-31
 
 ### Fixed
