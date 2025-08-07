@@ -13,6 +13,11 @@ func TestNewConfig(t *testing.T) {
 	if !config.AutoCD {
 		t.Error("Expected AutoCD to be true by default")
 	}
+
+	// Default value should be false for update-iterm2-tab
+	if config.UpdateITerm2Tab {
+		t.Error("Expected UpdateITerm2Tab to be false by default")
+	}
 }
 
 func TestLoadConfig_FileNotExists(t *testing.T) {
@@ -39,6 +44,7 @@ func TestLoadConfig_ValidFile(t *testing.T) {
 	// Write test config
 	configContent := `# gw configuration file
 auto_cd = false
+update_iterm2_tab = true
 `
 	if err := os.WriteFile(configPath, []byte(configContent), 0644); err != nil {
 		t.Fatalf("Failed to write test config: %v", err)
@@ -52,6 +58,10 @@ auto_cd = false
 	if config.AutoCD {
 		t.Error("Expected AutoCD to be false based on config file")
 	}
+
+	if !config.UpdateITerm2Tab {
+		t.Error("Expected UpdateITerm2Tab to be true based on config file")
+	}
 }
 
 func TestSaveConfig(t *testing.T) {
@@ -61,7 +71,8 @@ func TestSaveConfig(t *testing.T) {
 
 	// Create config with custom values
 	config := &Config{
-		AutoCD: false,
+		AutoCD:          false,
+		UpdateITerm2Tab: true,
 	}
 
 	err := config.Save(configPath)
@@ -83,6 +94,11 @@ func TestSaveConfig(t *testing.T) {
 	if loaded.AutoCD != config.AutoCD {
 		t.Errorf("Loaded config doesn't match saved config. Expected AutoCD=%v, got %v",
 			config.AutoCD, loaded.AutoCD)
+	}
+
+	if loaded.UpdateITerm2Tab != config.UpdateITerm2Tab {
+		t.Errorf("Loaded config doesn't match saved config. Expected UpdateITerm2Tab=%v, got %v",
+			config.UpdateITerm2Tab, loaded.UpdateITerm2Tab)
 	}
 }
 
@@ -129,6 +145,13 @@ auto_cd = false
 # Trailing comment
 `,
 			expectedAutoCD: false,
+		},
+		{
+			name: "with update_iterm2_tab configuration",
+			configContent: `auto_cd = true
+update_iterm2_tab = true
+`,
+			expectedAutoCD: true,
 		},
 		{
 			name: "unknown configuration key",
@@ -215,7 +238,7 @@ func TestSaveConfig_DirectoryCreation(t *testing.T) {
 		t.Error("Config file should have 0600 permissions")
 	}
 
-	expectedContent := "# gw configuration file\nauto_cd = true\n"
+	expectedContent := "# gw configuration file\nauto_cd = true\nupdate_iterm2_tab = false\n"
 	if string(content) != expectedContent {
 		t.Errorf("Expected content:\n%s\nGot:\n%s", expectedContent, string(content))
 	}

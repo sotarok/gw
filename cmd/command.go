@@ -10,6 +10,7 @@ import (
 	"github.com/sotarok/gw/internal/config"
 	"github.com/sotarok/gw/internal/detect"
 	"github.com/sotarok/gw/internal/git"
+	"github.com/sotarok/gw/internal/iterm2"
 	"github.com/sotarok/gw/internal/ui"
 )
 
@@ -70,6 +71,14 @@ func (c *StartCommand) Execute(issueNumber, baseBranch string) error {
 	// Check if worktree already exists
 	if wt, _ := c.deps.Git.GetWorktreeForIssue(issueNumber); wt != nil {
 		return fmt.Errorf("worktree for issue %s already exists at %s", issueNumber, wt.Path)
+	}
+
+	// Get repository name for iTerm2 tab
+	repoName, _ := c.deps.Git.GetRepositoryName()
+
+	// Update iTerm2 tab if configured
+	if c.config != nil && iterm2.ShouldUpdateTab(c.config.UpdateITerm2Tab) {
+		_ = iterm2.UpdateTabName(c.deps.Stdout, repoName, issueNumber)
 	}
 
 	// Get the original repository root before creating worktree
@@ -224,6 +233,12 @@ func (c *CheckoutCommand) Execute(branch string) error {
 		return fmt.Errorf("failed to get repository name: %w", err)
 	}
 
+	// Update iTerm2 tab if configured
+	if c.config != nil && iterm2.ShouldUpdateTab(c.config.UpdateITerm2Tab) {
+		identifier := iterm2.GetIdentifierFromBranch(branch)
+		_ = iterm2.UpdateTabName(c.deps.Stdout, repoName, identifier)
+	}
+
 	// Extract branch name without remote prefix
 	branchName := branch
 	if strings.HasPrefix(branch, "origin/") {
@@ -357,15 +372,28 @@ func (c *CheckoutCommand) selectBranch() (string, error) {
 
 // EndCommand handles the end command logic
 type EndCommand struct {
-	deps  *Dependencies
-	force bool
+	deps   *Dependencies
+	force  bool
+	config *config.Config
 }
 
 // NewEndCommand creates a new end command handler
 func NewEndCommand(deps *Dependencies, force bool) *EndCommand {
+	// Load config
+	cfg, _ := config.Load(config.GetConfigPath())
 	return &EndCommand{
-		deps:  deps,
-		force: force,
+		deps:   deps,
+		force:  force,
+		config: cfg,
+	}
+}
+
+// NewEndCommandWithConfig creates a new end command handler with explicit config
+func NewEndCommandWithConfig(deps *Dependencies, force bool, cfg *config.Config) *EndCommand {
+	return &EndCommand{
+		deps:   deps,
+		force:  force,
+		config: cfg,
 	}
 }
 
@@ -463,6 +491,12 @@ func (c *EndCommand) Execute(issueNumber string) error {
 	}
 
 	fmt.Fprintf(c.deps.Stdout, "✓ Successfully removed worktree for issue #%s\n", issueNumber)
+
+	// Reset iTerm2 tab if configured
+	if c.config != nil && iterm2.ShouldUpdateTab(c.config.UpdateITerm2Tab) {
+		_ = iterm2.ResetTabName(c.deps.Stdout)
+	}
+
 	return nil
 }
 

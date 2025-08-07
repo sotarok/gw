@@ -8,15 +8,21 @@ import (
 	"strings"
 )
 
+const (
+	trueValue = "true"
+)
+
 // Config represents the gw configuration
 type Config struct {
-	AutoCD bool `toml:"auto_cd"`
+	AutoCD          bool `toml:"auto_cd"`
+	UpdateITerm2Tab bool `toml:"update_iterm2_tab"`
 }
 
 // New creates a new Config with default values
 func New() *Config {
 	return &Config{
-		AutoCD: true, // Default to true for backward compatibility
+		AutoCD:          true,  // Default to true for backward compatibility
+		UpdateITerm2Tab: false, // Default to false to avoid unexpected behavior
 	}
 }
 
@@ -55,7 +61,9 @@ func Load(path string) (*Config, error) {
 
 		switch key {
 		case "auto_cd":
-			config.AutoCD = value == "true"
+			config.AutoCD = value == trueValue
+		case "update_iterm2_tab":
+			config.UpdateITerm2Tab = value == trueValue
 		}
 	}
 
@@ -76,7 +84,8 @@ func (c *Config) Save(path string) error {
 
 	content := fmt.Sprintf(`# gw configuration file
 auto_cd = %v
-`, c.AutoCD)
+update_iterm2_tab = %v
+`, c.AutoCD, c.UpdateITerm2Tab)
 
 	if err := os.WriteFile(path, []byte(content), 0600); err != nil {
 		return fmt.Errorf("failed to write config file: %w", err)

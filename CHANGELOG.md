@@ -19,6 +19,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Test coverage reporting with Codecov integration
 - GitHub Actions workflow for automated test coverage
 - Makefile commands for local coverage reporting (`make coverage`, `make coverage-report`)
+- iTerm2 tab name update feature:
+  - New `update_iterm2_tab` configuration option (default: false)
+  - Automatically updates tab name to "{repo name} {issue num/branch}" when creating/switching worktrees
+  - Resets tab name when removing worktrees
+  - Works with `gw start`, `gw checkout`, and `gw end` commands
+  - Only active when running in iTerm2 terminal
 
 ### Changed
 - Refactored cmd package to use dependency injection pattern for better testability

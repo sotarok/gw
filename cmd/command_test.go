@@ -8,6 +8,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/sotarok/gw/internal/config"
 	"github.com/sotarok/gw/internal/detect"
 	"github.com/sotarok/gw/internal/git"
 	"github.com/sotarok/gw/internal/ui"
@@ -337,13 +338,14 @@ func TestStartCommand_Execute(t *testing.T) {
 	defer os.Chdir(originalDir)
 
 	tests := []struct {
-		name          string
-		issueNumber   string
-		baseBranch    string
-		copyEnvs      bool
-		mockSetup     func() (*mockGit, *mockUI, *mockDetect, func())
-		expectedError string
-		checkOutput   func(t *testing.T, stdout, stderr string)
+		name            string
+		issueNumber     string
+		baseBranch      string
+		copyEnvs        bool
+		updateITerm2Tab bool
+		mockSetup       func() (*mockGit, *mockUI, *mockDetect, func())
+		expectedError   string
+		checkOutput     func(t *testing.T, stdout, stderr string)
 	}{
 		{
 			name:        "not in git repository",
@@ -516,6 +518,28 @@ func TestStartCommand_Execute(t *testing.T) {
 				}
 			},
 		},
+		{
+			name:            "updates iTerm2 tab when enabled",
+			issueNumber:     "789",
+			baseBranch:      "main",
+			updateITerm2Tab: true,
+			mockSetup: func() (*mockGit, *mockUI, *mockDetect, func()) {
+				tempDir, _ := os.MkdirTemp("", "gw-worktree-*")
+				return &mockGit{
+					isGitRepo:    true,
+					worktreePath: tempDir,
+				}, &mockUI{}, &mockDetect{}, func() { os.RemoveAll(tempDir) }
+			},
+			checkOutput: func(t *testing.T, stdout, stderr string) {
+				// Check for iTerm2 escape sequence in output
+				// Format: "\033]0;test-repo 789\007"
+				// Note: We can't test the actual escape sequence output without mocking
+				// but we can verify the command completes successfully
+				if !contains(stdout, "✨ Worktree ready at:") {
+					t.Error("Expected success message")
+				}
+			},
+		},
 	}
 
 	for _, tt := range tests {
@@ -546,7 +570,12 @@ func TestStartCommand_Execute(t *testing.T) {
 				Stderr: stderr,
 			}
 
-			cmd := NewStartCommand(deps, tt.copyEnvs)
+			// Create config for test
+			cfg := &config.Config{
+				AutoCD:          false,
+				UpdateITerm2Tab: tt.updateITerm2Tab,
+			}
+			cmd := NewStartCommandWithConfig(deps, tt.copyEnvs, cfg)
 			err = cmd.Execute(tt.issueNumber, tt.baseBranch)
 
 			// Check error
