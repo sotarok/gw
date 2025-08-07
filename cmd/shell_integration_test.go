@@ -88,15 +88,10 @@ func TestShellIntegrationCommand_Execute(t *testing.T) {
 			errorMsg:   "cannot use both --show-script and --print-path",
 		},
 		{
-			name:      "print-path with issue number",
-			printPath: "123",
-			checkOutput: func(t *testing.T, output string) {
-				// This test would need mock git implementation
-				// For now, we just check it doesn't error with "not implemented"
-				if strings.Contains(output, "error") {
-					t.Skip("Skipping print-path test without git mock")
-				}
-			},
+			name:      "print-path with non-existent worktree",
+			printPath: "99999", // Using a high number that's unlikely to exist
+			wantError: true,
+			// Don't check specific error message as it depends on whether we're in a git repo or not
 		},
 	}
 
@@ -119,10 +114,6 @@ func TestShellIntegrationCommand_Execute(t *testing.T) {
 					t.Errorf("Expected error message to contain %q, got %q", tt.errorMsg, err.Error())
 				}
 			} else if err != nil {
-				// Skip print-path tests that require git
-				if tt.printPath != "" && strings.Contains(err.Error(), "not in a git repository") {
-					t.Skip("Skipping print-path test outside git repository")
-				}
 				t.Errorf("Unexpected error: %v", err)
 			}
 
