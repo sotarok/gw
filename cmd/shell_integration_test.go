@@ -2,9 +2,114 @@ package cmd
 
 import (
 	"bytes"
+	"os"
 	"strings"
 	"testing"
 )
+
+func TestRunShellIntegration(t *testing.T) {
+	// Save original values
+	originalShowScript := shellIntegrationShowScript
+	originalShell := shellIntegrationShell
+	originalPrintPath := shellIntegrationPrintPath
+	defer func() {
+		shellIntegrationShowScript = originalShowScript
+		shellIntegrationShell = originalShell
+		shellIntegrationPrintPath = originalPrintPath
+	}()
+
+	tests := []struct {
+		name       string
+		showScript bool
+		shell      string
+		printPath  string
+		wantError  bool
+	}{
+		{
+			name:       "run with show-script flag",
+			showScript: true,
+			shell:      "bash",
+			wantError:  false,
+		},
+		{
+			name:      "run with print-path flag",
+			printPath: "test-123",
+			wantError: true, // Will error as we're not in a git repo
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Set global flags
+			shellIntegrationShowScript = tt.showScript
+			shellIntegrationShell = tt.shell
+			shellIntegrationPrintPath = tt.printPath
+
+			// Run the command
+			err := runShellIntegration(nil, []string{})
+
+			if tt.wantError {
+				if err == nil {
+					t.Error("Expected error but got none")
+				}
+			} else {
+				if err != nil {
+					t.Errorf("Unexpected error: %v", err)
+				}
+			}
+		})
+	}
+}
+
+func TestShellIntegrationCommand_DetectShell(t *testing.T) {
+	tests := []struct {
+		name     string
+		shellEnv string
+		expected string
+	}{
+		{
+			name:     "detects zsh",
+			shellEnv: "/usr/local/bin/zsh",
+			expected: "zsh",
+		},
+		{
+			name:     "detects bash",
+			shellEnv: "/bin/bash",
+			expected: "bash",
+		},
+		{
+			name:     "detects fish",
+			shellEnv: "/opt/local/bin/fish",
+			expected: "fish",
+		},
+		{
+			name:     "defaults to bash for unknown",
+			shellEnv: "/bin/sh",
+			expected: "bash",
+		},
+		{
+			name:     "handles empty SHELL env",
+			shellEnv: "",
+			expected: "bash",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Save and restore SHELL env
+			oldShell := os.Getenv("SHELL")
+			os.Setenv("SHELL", tt.shellEnv)
+			defer os.Setenv("SHELL", oldShell)
+
+			cmd := &ShellIntegrationCommand{}
+			result := cmd.detectShell()
+
+			if result != tt.expected {
+				t.Errorf("Expected %s, got %s", tt.expected, result)
+			}
+		})
+	}
+}
 
 func TestShellIntegrationCommand_Execute(t *testing.T) {
 	tests := []struct {

@@ -31,6 +31,7 @@ type mockGit struct {
 	GetWorktreeForIssueFn   func(string) (*git.WorktreeInfo, error)
 	HasUncommittedChangesFn func() (bool, error)
 	HasUnpushedCommitsFn    func() (bool, error)
+	IsMergedToOriginFn      func(string) (bool, error)
 }
 
 func (m *mockGit) IsGitRepository() bool {
@@ -113,6 +114,10 @@ func (m *mockGit) HasUnpushedCommits() (bool, error) {
 }
 
 func (m *mockGit) IsMergedToOrigin(targetBranch string) (bool, error) {
+	if m.IsMergedToOriginFn != nil {
+		return m.IsMergedToOriginFn(targetBranch)
+	}
+	// Default to merged unless overridden
 	return true, nil
 }
 
@@ -180,6 +185,151 @@ func (m *mockDetect) RunSetup(path string) error {
 }
 
 // Tests
+
+func TestEndCommand_PerformSafetyChecks(t *testing.T) {
+	tests := []struct {
+		name             string
+		mockSetup        func() *mockGit
+		expectedWarnings []string
+		checkStderr      bool
+	}{
+		{
+			name: "no warnings when everything is clean",
+			mockSetup: func() *mockGit {
+				return &mockGit{
+					HasUncommittedChangesFn: func() (bool, error) { return false, nil },
+					HasUnpushedCommitsFn:    func() (bool, error) { return false, nil },
+				}
+			},
+			expectedWarnings: []string{},
+		},
+		{
+			name: "warns about uncommitted changes",
+			mockSetup: func() *mockGit {
+				return &mockGit{
+					HasUncommittedChangesFn: func() (bool, error) { return true, nil },
+					HasUnpushedCommitsFn:    func() (bool, error) { return false, nil },
+				}
+			},
+			expectedWarnings: []string{"You have uncommitted changes"},
+		},
+		{
+			name: "warns about unpushed commits",
+			mockSetup: func() *mockGit {
+				return &mockGit{
+					HasUncommittedChangesFn: func() (bool, error) { return false, nil },
+					HasUnpushedCommitsFn:    func() (bool, error) { return true, nil },
+				}
+			},
+			expectedWarnings: []string{"You have unpushed commits"},
+		},
+		{
+			name: "multiple warnings",
+			mockSetup: func() *mockGit {
+				return &mockGit{
+					HasUncommittedChangesFn: func() (bool, error) { return true, nil },
+					HasUnpushedCommitsFn:    func() (bool, error) { return true, nil },
+					IsMergedToOriginFn:      func(targetBranch string) (bool, error) { return false, nil },
+				}
+			},
+			expectedWarnings: []string{
+				"You have uncommitted changes",
+				"You have unpushed commits",
+				"Branch is not merged to origin/main",
+			},
+		},
+		{
+			name: "handles errors checking uncommitted changes",
+			mockSetup: func() *mockGit {
+				return &mockGit{
+					HasUncommittedChangesFn: func() (bool, error) {
+						return false, fmt.Errorf("git command failed")
+					},
+					HasUnpushedCommitsFn: func() (bool, error) { return false, nil },
+				}
+			},
+			expectedWarnings: []string{}, // No warnings added on error
+			checkStderr:      true,
+		},
+		{
+			name: "handles errors checking unpushed commits",
+			mockSetup: func() *mockGit {
+				return &mockGit{
+					HasUncommittedChangesFn: func() (bool, error) { return false, nil },
+					HasUnpushedCommitsFn: func() (bool, error) {
+						return false, fmt.Errorf("no upstream branch")
+					},
+				}
+			},
+			expectedWarnings: []string{}, // No warnings added on error
+			checkStderr:      true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			stderr := &bytes.Buffer{}
+			mockGit := tt.mockSetup()
+
+			deps := &Dependencies{
+				Git:    mockGit,
+				Stderr: stderr,
+			}
+
+			cmd := NewEndCommand(deps, false)
+			warnings := cmd.performSafetyChecks()
+
+			// Check warnings count
+			if len(warnings) != len(tt.expectedWarnings) {
+				t.Errorf("Expected %d warnings, got %d: %v",
+					len(tt.expectedWarnings), len(warnings), warnings)
+			}
+
+			// Check warning messages
+			for i, expected := range tt.expectedWarnings {
+				if i >= len(warnings) {
+					break
+				}
+				if warnings[i] != expected {
+					t.Errorf("Warning %d: expected %q, got %q", i, expected, warnings[i])
+				}
+			}
+
+			// Check stderr output if there were errors
+			if tt.checkStderr && !strings.Contains(stderr.String(), "⚠ Warning:") {
+				t.Error("Expected warning in stderr for error cases")
+			}
+		})
+	}
+}
+
+func TestDefaultDependencies(t *testing.T) {
+	deps := DefaultDependencies()
+
+	if deps == nil {
+		t.Fatal("Expected non-nil dependencies")
+	}
+
+	if deps.Git == nil {
+		t.Error("Expected Git dependency to be initialized")
+	}
+
+	if deps.UI == nil {
+		t.Error("Expected UI dependency to be initialized")
+	}
+
+	if deps.Detect == nil {
+		t.Error("Expected Detect dependency to be initialized")
+	}
+
+	if deps.Stdout != os.Stdout {
+		t.Error("Expected Stdout to be os.Stdout")
+	}
+
+	if deps.Stderr != os.Stderr {
+		t.Error("Expected Stderr to be os.Stderr")
+	}
+}
 
 func TestStartCommand_Execute(t *testing.T) {
 	// Save and restore working directory
@@ -303,6 +453,66 @@ func TestStartCommand_Execute(t *testing.T) {
 				}
 				if !contains(stdout, "✨ Worktree ready at:") {
 					t.Error("Expected success message despite setup failure")
+				}
+			},
+		},
+		{
+			name:        "error creating worktree",
+			issueNumber: "123",
+			baseBranch:  "main",
+			mockSetup: func() (*mockGit, *mockUI, *mockDetect, func()) {
+				return &mockGit{
+					isGitRepo:           true,
+					createWorktreeError: fmt.Errorf("permission denied"),
+				}, &mockUI{}, &mockDetect{}, func() {}
+			},
+			expectedError: "permission denied",
+		},
+		{
+			name:        "error finding env files",
+			issueNumber: "123",
+			baseBranch:  "main",
+			mockSetup: func() (*mockGit, *mockUI, *mockDetect, func()) {
+				tempDir, _ := os.MkdirTemp("", "gw-worktree-*")
+				return &mockGit{
+					isGitRepo:    true,
+					worktreePath: tempDir,
+					findEnvError: fmt.Errorf("failed to find env files"),
+				}, &mockUI{}, &mockDetect{}, func() { os.RemoveAll(tempDir) }
+			},
+			checkOutput: func(t *testing.T, stdout, stderr string) {
+				if !contains(stderr, "⚠ Failed to handle env files") {
+					t.Error("Expected env files warning in stderr")
+				}
+				// Should still complete successfully
+				if !contains(stdout, "✨ Worktree ready at:") {
+					t.Error("Expected success message despite env files error")
+				}
+			},
+		},
+		{
+			name:        "error copying env files",
+			issueNumber: "123",
+			baseBranch:  "main",
+			copyEnvs:    true,
+			mockSetup: func() (*mockGit, *mockUI, *mockDetect, func()) {
+				tempDir, _ := os.MkdirTemp("", "gw-worktree-*")
+				return &mockGit{
+					isGitRepo:    true,
+					worktreePath: tempDir,
+					envFiles: []git.EnvFile{
+						{Path: ".env", AbsolutePath: "/repo/.env"},
+					},
+					copyEnvError: fmt.Errorf("permission denied"),
+				}, &mockUI{}, &mockDetect{}, func() { os.RemoveAll(tempDir) }
+			},
+			checkOutput: func(t *testing.T, stdout, stderr string) {
+				if !contains(stderr, "⚠ Failed to handle env files") {
+					t.Error("Expected env files warning in stderr")
+				}
+				// Should still complete successfully
+				if !contains(stdout, "✨ Worktree ready at:") {
+					t.Error("Expected success message despite copy error")
 				}
 			},
 		},
@@ -542,6 +752,19 @@ func TestEndCommand_Execute(t *testing.T) {
 			expectedError: "worktree not found for issue 123",
 		},
 		{
+			name:        "error changing to worktree directory",
+			issueNumber: "123",
+			mockSetup: func() (*mockGit, *mockUI, *mockDetect, func()) {
+				mockGitInstance := &mockGit{}
+				mockGitInstance.GetWorktreeForIssueFn = func(issueNumber string) (*git.WorktreeInfo, error) {
+					// Return a non-existent path
+					return &git.WorktreeInfo{Path: "/nonexistent/path"}, nil
+				}
+				return mockGitInstance, &mockUI{}, &mockDetect{}, func() {}
+			},
+			expectedError: "failed to change to worktree directory",
+		},
+		{
 			name:        "successful removal without warnings",
 			issueNumber: "123",
 			mockSetup: func() (*mockGit, *mockUI, *mockDetect, func()) {
@@ -705,8 +928,8 @@ func TestEndCommand_Execute(t *testing.T) {
 
 			// Check error
 			if tt.expectedError != "" {
-				if err == nil || err.Error() != tt.expectedError {
-					t.Errorf("Expected error %q, got %v", tt.expectedError, err)
+				if err == nil || !strings.Contains(err.Error(), tt.expectedError) {
+					t.Errorf("Expected error containing %q, got %v", tt.expectedError, err)
 				}
 			} else if err != nil {
 				t.Errorf("Unexpected error: %v", err)
