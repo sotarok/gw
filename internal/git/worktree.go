@@ -28,12 +28,20 @@ func CreateWorktree(issueNumber, baseBranch string) (string, error) {
 		return "", err
 	}
 
-	// Create worktree directory name
-	worktreeDir := fmt.Sprintf("../%s-%s", repoName, issueNumber)
+	// Get repository root directory
+	cmd := exec.Command("git", "rev-parse", "--show-toplevel")
+	output, err := cmd.Output()
+	if err != nil {
+		return "", fmt.Errorf("failed to get repository root: %w", err)
+	}
+	repoRoot := strings.TrimSpace(string(output))
+
+	// Create worktree directory path relative to repository root
+	worktreeDir := filepath.Join(repoRoot, "..", fmt.Sprintf("%s-%s", repoName, issueNumber))
 	branchName := fmt.Sprintf("%s/impl", issueNumber)
 
 	// Create the worktree
-	cmd := exec.Command("git", "worktree", "add", worktreeDir, "-b", branchName, baseBranch)
+	cmd = exec.Command("git", "worktree", "add", worktreeDir, "-b", branchName, baseBranch)
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 
@@ -61,7 +69,16 @@ func RemoveWorktree(issueNumber string) error {
 		return err
 	}
 
-	worktreeDir := fmt.Sprintf("../%s-%s", repoName, issueNumber)
+	// Get repository root directory
+	cmd := exec.Command("git", "rev-parse", "--show-toplevel")
+	output, err := cmd.Output()
+	if err != nil {
+		return fmt.Errorf("failed to get repository root: %w", err)
+	}
+	repoRoot := strings.TrimSpace(string(output))
+
+	// Create worktree directory path relative to repository root
+	worktreeDir := filepath.Join(repoRoot, "..", fmt.Sprintf("%s-%s", repoName, issueNumber))
 	return RemoveWorktreeByPath(worktreeDir)
 }
 
