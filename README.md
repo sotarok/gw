@@ -78,10 +78,16 @@ This will create a `~/.gwrc` file with your preferences.
 ### Create a new worktree
 
 ```bash
-# Create worktree for issue #123 based on main branch
+# Create worktree for issue #123 (creates branch "123/impl")
 gw start 123
 
-# Create worktree based on specific branch
+# Create worktree with custom branch name
+gw start 476/impl-migration-script
+
+# Create worktree for feature branch
+gw start feature/new-feature
+
+# Create worktree based on specific base branch
 gw start 456 develop
 
 # Create worktree and copy environment files
@@ -89,8 +95,8 @@ gw start 789 --copy-envs
 ```
 
 This will:
-1. Create a new worktree at `../{repository-name}-{issue-number}`
-2. Create a new branch `{issue-number}/impl`
+1. Create a new worktree at `../{repository-name}-{identifier}`
+2. Create a new branch (either `{issue-number}/impl` for numbers, or the exact branch name provided)
 3. Change to the new worktree directory
 4. Optionally copy untracked .env files from the original repository
 5. Automatically run package manager setup if detected

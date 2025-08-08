@@ -25,6 +25,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Resets tab name when removing worktrees
   - Works with `gw start`, `gw checkout`, and `gw end` commands
   - Only active when running in iTerm2 terminal
+- Support for custom branch names in `gw start` command:
+  - Accepts full branch names (e.g., `gw start 476/impl-migration-script`)
+  - Only appends `/impl` to pure numbers (e.g., `gw start 123` → branch `123/impl`)
+  - Properly sanitizes branch names for directory creation
 
 ### Changed
 - Refactored cmd package to use dependency injection pattern for better testability

@@ -9,11 +9,22 @@ var (
 )
 
 var startCmd = &cobra.Command{
-	Use:   "start <issue-number> [base-branch]",
-	Short: "Create a new worktree for the specified issue",
-	Long: `Creates a new git worktree for the specified issue number.
-The worktree will be created in a sibling directory named '{repository-name}-{issue-number}'.
-A new branch '{issue-number}/impl' will be created based on the specified base branch.`,
+	Use:   "start <issue-number-or-branch> [base-branch]",
+	Short: "Create a new worktree for the specified issue or branch",
+	Long: `Creates a new git worktree for the specified issue number or branch name.
+
+If only a number is provided (e.g., "123"), it creates:
+  - Branch: {issue-number}/impl
+  - Directory: ../{repository-name}-{issue-number}
+
+If a branch name with "/" is provided (e.g., "476/impl-migration-script"), it creates:
+  - Branch: Exactly as provided
+  - Directory: ../{repository-name}-{sanitized-branch-name}
+
+Examples:
+  gw start 123              # Creates branch "123/impl"
+  gw start 476/impl-migration-script  # Creates branch "476/impl-migration-script"
+  gw start feature/new-feature        # Creates branch "feature/new-feature"`,
 	Args: cobra.RangeArgs(1, 2),
 	RunE: runStart,
 }

@@ -17,8 +17,25 @@ type WorktreeInfo struct {
 	IsCurrent  bool
 }
 
+// DetermineWorktreeNames determines the branch name and directory suffix based on input
+// If input contains a slash, it's treated as a full branch name
+// Otherwise, "/impl" is appended to create the branch name
+func DetermineWorktreeNames(input string) (branchName, dirSuffix string) {
+	if strings.Contains(input, "/") {
+		// Input is a full branch name
+		branchName = input
+		// Sanitize for directory name
+		dirSuffix = SanitizeBranchNameForDirectory(input)
+	} else {
+		// Input is an issue number or simple identifier
+		branchName = fmt.Sprintf("%s/impl", input)
+		dirSuffix = input
+	}
+	return branchName, dirSuffix
+}
+
 // CreateWorktree creates a new git worktree
-func CreateWorktree(issueNumber, baseBranch string) (string, error) {
+func CreateWorktree(issueNumberOrBranch, baseBranch string) (string, error) {
 	if !IsGitRepository() {
 		return "", fmt.Errorf("not in a git repository")
 	}
@@ -28,9 +45,11 @@ func CreateWorktree(issueNumber, baseBranch string) (string, error) {
 		return "", err
 	}
 
+	// Determine branch name and directory suffix
+	branchName, dirSuffix := DetermineWorktreeNames(issueNumberOrBranch)
+
 	// Create worktree directory name
-	worktreeDir := fmt.Sprintf("../%s-%s", repoName, issueNumber)
-	branchName := fmt.Sprintf("%s/impl", issueNumber)
+	worktreeDir := fmt.Sprintf("../%s-%s", repoName, dirSuffix)
 
 	// Create the worktree
 	cmd := exec.Command("git", "worktree", "add", worktreeDir, "-b", branchName, baseBranch)
@@ -50,8 +69,8 @@ func CreateWorktree(issueNumber, baseBranch string) (string, error) {
 	return absPath, nil
 }
 
-// RemoveWorktree removes a git worktree by issue number
-func RemoveWorktree(issueNumber string) error {
+// RemoveWorktree removes a git worktree by issue number or branch name
+func RemoveWorktree(issueNumberOrBranch string) error {
 	if !IsGitRepository() {
 		return fmt.Errorf("not in a git repository")
 	}
@@ -61,7 +80,10 @@ func RemoveWorktree(issueNumber string) error {
 		return err
 	}
 
-	worktreeDir := fmt.Sprintf("../%s-%s", repoName, issueNumber)
+	// Determine directory suffix
+	_, dirSuffix := DetermineWorktreeNames(issueNumberOrBranch)
+
+	worktreeDir := fmt.Sprintf("../%s-%s", repoName, dirSuffix)
 	return RemoveWorktreeByPath(worktreeDir)
 }
 
@@ -138,14 +160,17 @@ func ListWorktrees() ([]WorktreeInfo, error) {
 	return worktrees, nil
 }
 
-// GetWorktreeForIssue finds a worktree for a specific issue number
-func GetWorktreeForIssue(issueNumber string) (*WorktreeInfo, error) {
+// GetWorktreeForIssue finds a worktree for a specific issue number or branch name
+func GetWorktreeForIssue(issueNumberOrBranch string) (*WorktreeInfo, error) {
 	repoName, err := GetRepositoryName()
 	if err != nil {
 		return nil, err
 	}
 
-	targetPath := fmt.Sprintf("%s-%s", repoName, issueNumber)
+	// Determine directory suffix
+	_, dirSuffix := DetermineWorktreeNames(issueNumberOrBranch)
+
+	targetPath := fmt.Sprintf("%s-%s", repoName, dirSuffix)
 
 	worktrees, err := ListWorktrees()
 	if err != nil {
@@ -158,7 +183,7 @@ func GetWorktreeForIssue(issueNumber string) (*WorktreeInfo, error) {
 		}
 	}
 
-	return nil, fmt.Errorf("worktree for issue %s not found", issueNumber)
+	return nil, fmt.Errorf("worktree for %s not found", issueNumberOrBranch)
 }
 
 // CreateWorktreeFromBranch creates a new git worktree from an existing branch
