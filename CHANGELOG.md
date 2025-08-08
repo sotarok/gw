@@ -34,6 +34,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Refactored cmd package to use dependency injection pattern for better testability
 - Test coverage increased from ~20% to 71.2%
 
+### Fixed
+- Worktrees are now created relative to repository root directory, not current working directory
+
 ## [0.3.1] - 2025-07-31
 
 ### Fixed
