@@ -17,6 +17,7 @@ A convenient CLI tool for managing Git worktrees with automatic package manager 
 - Interactive worktree selection for removal
 - Interactive branch selection for checkout
 - Safety checks before removing worktrees (uncommitted changes, unpushed commits, merge status)
+- iTerm2 tab name integration - automatically update tab names when switching worktrees
 - Cross-platform support (macOS, Linux)
 
 ## Installation
@@ -149,12 +150,21 @@ The `gw` tool can be configured via `~/.gwrc` file. Run `gw init` to create the 
 ### Configuration Options
 
 - **auto_cd**: Automatically change to the new worktree directory after creation (default: true)
+- **update_iterm2_tab**: Update iTerm2 tab name when creating/switching/removing worktrees (default: false)
 
 Example `~/.gwrc`:
 ```
 # gw configuration file
 auto_cd = true
+update_iterm2_tab = false
 ```
+
+#### iTerm2 Tab Integration
+
+When `update_iterm2_tab` is enabled and you're using iTerm2:
+- Tab name is updated to "{repository-name} {issue-number/branch-name}" when creating or switching worktrees
+- Tab name is reset when removing worktrees
+- Only works when running in iTerm2 terminal (automatically detected)
 
 ### Shell Integration
 
@@ -195,7 +205,8 @@ gw/
 │   ├── git/          # Git operations
 │   ├── detect/       # Package manager detection
 │   ├── ui/           # Interactive UI components
-│   └── config/       # Configuration management
+│   ├── config/       # Configuration management
+│   └── iterm2/       # iTerm2 integration
 ├── main.go
 └── go.mod
 ```
