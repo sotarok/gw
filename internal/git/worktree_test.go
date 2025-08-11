@@ -60,8 +60,8 @@ func TestCreateWorktree(t *testing.T) {
 				t.Fatalf("Failed to change to repo dir: %v", err)
 			}
 
-			// Initialize repository
-			cmd := exec.Command("git", "init")
+			// Initialize repository with main branch
+			cmd := exec.Command("git", "init", "-b", "main")
 			if err := cmd.Run(); err != nil {
 				t.Fatalf("Failed to init git repo: %v", err)
 			}
