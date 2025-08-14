@@ -6,6 +6,8 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/charmbracelet/bubbles/key"
+	tea "github.com/charmbracelet/bubbletea"
 	"github.com/sotarok/gw/internal/config"
 	"github.com/spf13/cobra"
 	"github.com/stretchr/testify/assert"
@@ -296,5 +298,176 @@ func TestConfigModelMethods(t *testing.T) {
 		view := model.View()
 		// Should contain list view and help view
 		assert.Contains(t, view, "\n")
+	})
+}
+
+func TestConfigModelUpdate(t *testing.T) {
+	setupModel := func() *configModel {
+		cfg := config.New()
+		model := newConfigModel(cfg, "/tmp/.gwrc")
+		// Set dimensions to avoid initialization state
+		model.width = 80
+		model.height = 24
+		return &model
+	}
+
+	t.Run("WindowSizeMsg updates dimensions", func(t *testing.T) {
+		model := setupModel()
+
+		msg := tea.WindowSizeMsg{Width: 100, Height: 30}
+		newModel, cmd := model.Update(msg)
+
+		updatedModel := newModel.(*configModel)
+		assert.Equal(t, 100, updatedModel.width)
+		assert.Equal(t, 30, updatedModel.height)
+		assert.Nil(t, cmd)
+	})
+
+	t.Run("Quit key returns quit command", func(t *testing.T) {
+		model := setupModel()
+
+		msg := tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'q'}}
+		_, cmd := model.Update(msg)
+
+		assert.NotNil(t, cmd)
+		// The quit command is a special tea.Quit command
+		assert.IsType(t, tea.QuitMsg{}, cmd())
+	})
+
+	t.Run("Toggle key toggles selected item", func(t *testing.T) {
+		model := setupModel()
+
+		// Get initial value of first item
+		items := model.list.Items()
+		initialItem := items[0].(configItem)
+		initialValue := initialItem.value
+
+		// Send Enter key to toggle
+		msg := tea.KeyMsg{Type: tea.KeyEnter}
+		newModel, cmd := model.Update(msg)
+
+		updatedModel := newModel.(*configModel)
+		updatedItems := updatedModel.list.Items()
+		updatedItem := updatedItems[0].(configItem)
+
+		// Value should be toggled
+		assert.Equal(t, !initialValue, updatedItem.value)
+		assert.Nil(t, cmd)
+	})
+
+	t.Run("Toggle with space key", func(t *testing.T) {
+		model := setupModel()
+
+		// Get initial value of first item
+		items := model.list.Items()
+		initialItem := items[0].(configItem)
+		initialValue := initialItem.value
+
+		// Send Space key to toggle
+		msg := tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{' '}}
+		newModel, cmd := model.Update(msg)
+
+		updatedModel := newModel.(*configModel)
+		updatedItems := updatedModel.list.Items()
+		updatedItem := updatedItems[0].(configItem)
+
+		// Value should be toggled
+		assert.Equal(t, !initialValue, updatedItem.value)
+		assert.Nil(t, cmd)
+	})
+
+	t.Run("Save key saves configuration", func(t *testing.T) {
+		// Create a temp file for config
+		tmpDir := t.TempDir()
+		configPath := filepath.Join(tmpDir, ".gwrc")
+
+		cfg := config.New()
+		model := newConfigModel(cfg, configPath)
+		model.width = 80
+		model.height = 24
+
+		// Send 's' key to save
+		msg := tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'s'}}
+		newModel, cmd := model.Update(msg)
+
+		updatedModel := newModel.(*configModel)
+		assert.Equal(t, "Configuration saved!", updatedModel.list.Title)
+		assert.Nil(t, cmd)
+
+		// Verify file was created
+		_, err := os.Stat(configPath)
+		assert.NoError(t, err)
+	})
+
+	t.Run("Save key handles error", func(t *testing.T) {
+		// Use an invalid path that can't be written
+		cfg := config.New()
+		model := newConfigModel(cfg, "/invalid/path/that/does/not/exist/.gwrc")
+		model.width = 80
+		model.height = 24
+
+		// Send 's' key to save
+		msg := tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'s'}}
+		newModel, cmd := model.Update(msg)
+
+		updatedModel := newModel.(*configModel)
+		assert.Contains(t, updatedModel.list.Title, "Error saving config")
+		assert.Nil(t, cmd)
+	})
+
+	t.Run("Help key toggles help", func(t *testing.T) {
+		model := setupModel()
+		initialShowAll := model.help.ShowAll
+
+		// Send '?' key to toggle help
+		msg := tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'?'}}
+		newModel, cmd := model.Update(msg)
+
+		updatedModel := newModel.(*configModel)
+		assert.Equal(t, !initialShowAll, updatedModel.help.ShowAll)
+		assert.Nil(t, cmd)
+	})
+
+	t.Run("Other keys are passed to list", func(t *testing.T) {
+		model := setupModel()
+
+		// Send a down arrow key
+		msg := tea.KeyMsg{Type: tea.KeyDown}
+		newModel, _ := model.Update(msg)
+
+		// The list component should handle navigation
+		// We can't easily test the internal list state, but we can verify
+		// that the model is returned and no error occurs
+		assert.NotNil(t, newModel)
+	})
+
+	t.Run("Ctrl+C also quits", func(t *testing.T) {
+		model := setupModel()
+
+		msg := tea.KeyMsg{Type: tea.KeyCtrlC}
+		_, cmd := model.Update(msg)
+
+		assert.NotNil(t, cmd)
+		// The quit command is a special tea.Quit command
+		assert.IsType(t, tea.QuitMsg{}, cmd())
+	})
+}
+
+func TestKeyBindings(t *testing.T) {
+	t.Run("key bindings are properly configured", func(t *testing.T) {
+		// Test that our key bindings match what we expect
+		assert.True(t, key.Matches(tea.KeyMsg{Type: tea.KeyUp}, keys.Up))
+		assert.True(t, key.Matches(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'k'}}, keys.Up))
+
+		assert.True(t, key.Matches(tea.KeyMsg{Type: tea.KeyDown}, keys.Down))
+		assert.True(t, key.Matches(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'j'}}, keys.Down))
+
+		assert.True(t, key.Matches(tea.KeyMsg{Type: tea.KeyEnter}, keys.Toggle))
+		assert.True(t, key.Matches(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{' '}}, keys.Toggle))
+
+		assert.True(t, key.Matches(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'s'}}, keys.Save))
+		assert.True(t, key.Matches(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'q'}}, keys.Quit))
+		assert.True(t, key.Matches(tea.KeyMsg{Type: tea.KeyCtrlC}, keys.Quit))
+		assert.True(t, key.Matches(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'?'}}, keys.Help))
 	})
 }
