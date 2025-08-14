@@ -9,6 +9,13 @@ import (
 )
 
 func TestCreateWorktree(t *testing.T) {
+	// Save original working directory first
+	originalDir, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("Failed to get current dir: %v", err)
+	}
+	defer os.Chdir(originalDir)
+
 	tests := []struct {
 		name               string
 		input              string
