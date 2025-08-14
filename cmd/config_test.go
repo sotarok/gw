@@ -274,7 +274,7 @@ func TestConfigModelMethods(t *testing.T) {
 	t.Run("Init returns nil", func(t *testing.T) {
 		cfg := config.New()
 		model := newConfigModel(cfg, "/tmp/.gwrc")
-		
+
 		cmd := model.Init()
 		assert.Nil(t, cmd)
 	})
@@ -282,7 +282,7 @@ func TestConfigModelMethods(t *testing.T) {
 	t.Run("View with zero width", func(t *testing.T) {
 		cfg := config.New()
 		model := newConfigModel(cfg, "/tmp/.gwrc")
-		
+
 		view := model.View()
 		assert.Equal(t, "Initializing...", view)
 	})
@@ -292,7 +292,7 @@ func TestConfigModelMethods(t *testing.T) {
 		model := newConfigModel(cfg, "/tmp/.gwrc")
 		model.width = 80
 		model.height = 24
-		
+
 		view := model.View()
 		// Should contain list view and help view
 		assert.Contains(t, view, "\n")
