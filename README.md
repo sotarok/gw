@@ -72,9 +72,16 @@ make install
 ```bash
 # Run interactive configuration setup
 gw init
+
+# View and edit configuration interactively
+gw config
+
+# List configuration values (non-interactive)
+gw config --list
 ```
 
-This will create a `~/.gwrc` file with your preferences.
+The `gw init` command creates a `~/.gwrc` file with your preferences through an interactive setup.
+The `gw config` command allows you to view and modify your configuration at any time.
 
 ### Create a new worktree
 
@@ -145,7 +152,24 @@ Safety checks include:
 
 ## Configuration
 
-The `gw` tool can be configured via `~/.gwrc` file. Run `gw init` to create the configuration interactively.
+The `gw` tool can be configured via `~/.gwrc` file. Use `gw init` for initial setup or `gw config` to modify settings at any time.
+
+### Managing Configuration
+
+```bash
+# Interactive configuration editor (TUI)
+gw config
+
+# List current configuration
+gw config --list
+```
+
+The interactive config editor allows you to:
+- Navigate settings with arrow keys or j/k
+- Toggle boolean values with Enter or Space
+- Save changes with 's'
+- Quit with 'q'
+- View help with '?'
 
 ### Configuration Options
 
