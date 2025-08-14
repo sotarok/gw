@@ -243,3 +243,78 @@ func TestSaveConfig_DirectoryCreation(t *testing.T) {
 		t.Errorf("Expected content:\n%s\nGot:\n%s", expectedContent, string(content))
 	}
 }
+
+func TestGetConfigItems(t *testing.T) {
+	config := &Config{
+		AutoCD:          true,
+		UpdateITerm2Tab: false,
+	}
+
+	items := config.GetConfigItems()
+
+	// Should return 2 items
+	if len(items) != 2 {
+		t.Fatalf("Expected 2 config items, got %d", len(items))
+	}
+
+	// Check auto_cd item
+	autoCDItem := items[0]
+	if autoCDItem.Key != "auto_cd" {
+		t.Errorf("Expected first item key to be 'auto_cd', got '%s'", autoCDItem.Key)
+	}
+	if autoCDItem.Value != true {
+		t.Errorf("Expected auto_cd value to be true, got %v", autoCDItem.Value)
+	}
+	if autoCDItem.Default != true {
+		t.Errorf("Expected auto_cd default to be true, got %v", autoCDItem.Default)
+	}
+	if autoCDItem.Description == "" {
+		t.Error("Expected auto_cd to have a description")
+	}
+
+	// Check update_iterm2_tab item
+	iterm2Item := items[1]
+	if iterm2Item.Key != "update_iterm2_tab" {
+		t.Errorf("Expected second item key to be 'update_iterm2_tab', got '%s'", iterm2Item.Key)
+	}
+	if iterm2Item.Value != false {
+		t.Errorf("Expected update_iterm2_tab value to be false, got %v", iterm2Item.Value)
+	}
+	if iterm2Item.Default != false {
+		t.Errorf("Expected update_iterm2_tab default to be false, got %v", iterm2Item.Default)
+	}
+	if iterm2Item.Description == "" {
+		t.Error("Expected update_iterm2_tab to have a description")
+	}
+}
+
+func TestSetConfigItem(t *testing.T) {
+	config := New()
+
+	// Test setting auto_cd
+	err := config.SetConfigItem("auto_cd", false)
+	if err != nil {
+		t.Errorf("Failed to set auto_cd: %v", err)
+	}
+	if config.AutoCD != false {
+		t.Errorf("Expected AutoCD to be false after setting, got %v", config.AutoCD)
+	}
+
+	// Test setting update_iterm2_tab
+	err = config.SetConfigItem("update_iterm2_tab", true)
+	if err != nil {
+		t.Errorf("Failed to set update_iterm2_tab: %v", err)
+	}
+	if config.UpdateITerm2Tab != true {
+		t.Errorf("Expected UpdateITerm2Tab to be true after setting, got %v", config.UpdateITerm2Tab)
+	}
+
+	// Test setting unknown key
+	err = config.SetConfigItem("unknown_key", true)
+	if err == nil {
+		t.Error("Expected error when setting unknown key")
+	}
+	if err != nil && err.Error() != "unknown configuration key: unknown_key" {
+		t.Errorf("Expected specific error message for unknown key, got: %v", err)
+	}
+}
