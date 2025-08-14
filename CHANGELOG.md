@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- New `gw config` command for viewing and editing configuration interactively
+  - Interactive TUI with arrow/j/k navigation for browsing settings
+  - Toggle boolean values with Enter/Space keys
+  - Save changes with 's' key
+  - Non-interactive mode with `--list` flag for CI/scripting
+  - Shows configuration descriptions and default values
+  - Visual indicators (✅/❌) for boolean settings
+
 ## [0.4.0] - 2025-08-14
 
 ### Added

@@ -10,7 +10,19 @@ import (
 
 const (
 	trueValue = "true"
+
+	// Config keys
+	autoCDKey          = "auto_cd"
+	updateITerm2TabKey = "update_iterm2_tab"
 )
+
+// Item represents a single configuration item with metadata
+type Item struct {
+	Key         string
+	Value       bool
+	Description string
+	Default     bool
+}
 
 // Config represents the gw configuration
 type Config struct {
@@ -60,9 +72,9 @@ func Load(path string) (*Config, error) {
 		value := strings.TrimSpace(parts[1])
 
 		switch key {
-		case "auto_cd":
+		case autoCDKey:
 			config.AutoCD = value == trueValue
-		case "update_iterm2_tab":
+		case updateITerm2TabKey:
 			config.UpdateITerm2Tab = value == trueValue
 		}
 	}
@@ -102,4 +114,35 @@ func GetConfigPath() string {
 		home = os.Getenv("HOME")
 	}
 	return filepath.Join(home, ".gwrc")
+}
+
+// GetConfigItems returns all configuration items with their descriptions
+func (c *Config) GetConfigItems() []Item {
+	return []Item{
+		{
+			Key:         autoCDKey,
+			Value:       c.AutoCD,
+			Description: "Automatically change directory to the new worktree after creation",
+			Default:     true,
+		},
+		{
+			Key:         updateITerm2TabKey,
+			Value:       c.UpdateITerm2Tab,
+			Description: "Update iTerm2 tab title with worktree information (macOS only)",
+			Default:     false,
+		},
+	}
+}
+
+// SetConfigItem sets a configuration value by key
+func (c *Config) SetConfigItem(key string, value bool) error {
+	switch key {
+	case autoCDKey:
+		c.AutoCD = value
+	case updateITerm2TabKey:
+		c.UpdateITerm2Tab = value
+	default:
+		return fmt.Errorf("unknown configuration key: %s", key)
+	}
+	return nil
 }
