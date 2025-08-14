@@ -202,3 +202,204 @@ func TestBranchExists(t *testing.T) {
 		}
 	})
 }
+
+func TestDeleteBranch(t *testing.T) {
+	t.Run("successfully deletes existing branch", func(t *testing.T) {
+		// Create a temporary git repository for testing
+		tempDir, err := os.MkdirTemp("", "test-delete-branch")
+		if err != nil {
+			t.Fatalf("failed to create temp dir: %v", err)
+		}
+		defer os.RemoveAll(tempDir)
+
+		// Save current directory
+		originalDir, err := os.Getwd()
+		if err != nil {
+			t.Fatalf("failed to get current dir: %v", err)
+		}
+		defer func() {
+			_ = os.Chdir(originalDir)
+		}()
+
+		// Change to temp directory and setup git repo
+		if err := os.Chdir(tempDir); err != nil {
+			t.Fatalf("failed to change dir: %v", err)
+		}
+
+		// Initialize git repo
+		if err := RunCommand("git init"); err != nil {
+			t.Fatalf("failed to init git repo: %v", err)
+		}
+
+		// Configure git
+		if err := RunCommand("git config user.email 'test@example.com' && git config user.name 'Test User'"); err != nil {
+			t.Fatalf("failed to configure git: %v", err)
+		}
+
+		// Create initial commit
+		if err := os.WriteFile("README.md", []byte("test"), 0644); err != nil {
+			t.Fatalf("failed to create file: %v", err)
+		}
+		if err := RunCommand("git add . && git commit -m 'initial commit'"); err != nil {
+			t.Fatalf("failed to create commit: %v", err)
+		}
+
+		// Create a test branch
+		if err := RunCommand("git checkout -b test-branch"); err != nil {
+			t.Fatalf("failed to create branch: %v", err)
+		}
+
+		// Switch back to main/master
+		if err := RunCommand("git checkout -"); err != nil {
+			t.Fatalf("failed to switch back to main: %v", err)
+		}
+
+		// Verify branch exists before deletion
+		exists, err := BranchExists("test-branch")
+		if err != nil {
+			t.Fatalf("failed to check branch existence: %v", err)
+		}
+		if !exists {
+			t.Fatal("test-branch should exist before deletion")
+		}
+
+		// Delete the branch
+		err = DeleteBranch("test-branch")
+		if err != nil {
+			t.Fatalf("failed to delete branch: %v", err)
+		}
+
+		// Verify branch no longer exists
+		exists, err = BranchExists("test-branch")
+		if err != nil {
+			t.Fatalf("failed to check branch existence after deletion: %v", err)
+		}
+		if exists {
+			t.Error("test-branch should not exist after deletion")
+		}
+	})
+
+	t.Run("returns error when deleting non-existent branch", func(t *testing.T) {
+		// Create a temporary git repository for testing
+		tempDir, err := os.MkdirTemp("", "test-delete-nonexistent")
+		if err != nil {
+			t.Fatalf("failed to create temp dir: %v", err)
+		}
+		defer os.RemoveAll(tempDir)
+
+		// Save current directory
+		originalDir, err := os.Getwd()
+		if err != nil {
+			t.Fatalf("failed to get current dir: %v", err)
+		}
+		defer func() {
+			_ = os.Chdir(originalDir)
+		}()
+
+		// Change to temp directory and setup git repo
+		if err := os.Chdir(tempDir); err != nil {
+			t.Fatalf("failed to change dir: %v", err)
+		}
+
+		// Initialize git repo
+		if err := RunCommand("git init"); err != nil {
+			t.Fatalf("failed to init git repo: %v", err)
+		}
+
+		// Configure git
+		if err := RunCommand("git config user.email 'test@example.com' && git config user.name 'Test User'"); err != nil {
+			t.Fatalf("failed to configure git: %v", err)
+		}
+
+		// Create initial commit
+		if err := os.WriteFile("README.md", []byte("test"), 0644); err != nil {
+			t.Fatalf("failed to create file: %v", err)
+		}
+		if err := RunCommand("git add . && git commit -m 'initial commit'"); err != nil {
+			t.Fatalf("failed to create commit: %v", err)
+		}
+
+		// Try to delete non-existent branch
+		err = DeleteBranch("non-existent-branch")
+		if err == nil {
+			t.Error("expected error when deleting non-existent branch")
+		}
+		if !strings.Contains(err.Error(), "failed to delete branch") {
+			t.Errorf("expected error to contain 'failed to delete branch', got: %v", err)
+		}
+	})
+
+	t.Run("force deletes unmerged branch", func(t *testing.T) {
+		// Create a temporary git repository for testing
+		tempDir, err := os.MkdirTemp("", "test-delete-unmerged")
+		if err != nil {
+			t.Fatalf("failed to create temp dir: %v", err)
+		}
+		defer os.RemoveAll(tempDir)
+
+		// Save current directory
+		originalDir, err := os.Getwd()
+		if err != nil {
+			t.Fatalf("failed to get current dir: %v", err)
+		}
+		defer func() {
+			_ = os.Chdir(originalDir)
+		}()
+
+		// Change to temp directory and setup git repo
+		if err := os.Chdir(tempDir); err != nil {
+			t.Fatalf("failed to change dir: %v", err)
+		}
+
+		// Initialize git repo
+		if err := RunCommand("git init"); err != nil {
+			t.Fatalf("failed to init git repo: %v", err)
+		}
+
+		// Configure git
+		if err := RunCommand("git config user.email 'test@example.com' && git config user.name 'Test User'"); err != nil {
+			t.Fatalf("failed to configure git: %v", err)
+		}
+
+		// Create initial commit
+		if err := os.WriteFile("README.md", []byte("test"), 0644); err != nil {
+			t.Fatalf("failed to create file: %v", err)
+		}
+		if err := RunCommand("git add . && git commit -m 'initial commit'"); err != nil {
+			t.Fatalf("failed to create commit: %v", err)
+		}
+
+		// Create a test branch with unmerged changes
+		if err := RunCommand("git checkout -b unmerged-branch"); err != nil {
+			t.Fatalf("failed to create branch: %v", err)
+		}
+
+		// Add a commit to the branch
+		if err := os.WriteFile("test.txt", []byte("unmerged changes"), 0644); err != nil {
+			t.Fatalf("failed to create file: %v", err)
+		}
+		if err := RunCommand("git add . && git commit -m 'unmerged changes'"); err != nil {
+			t.Fatalf("failed to create commit: %v", err)
+		}
+
+		// Switch back to main/master
+		if err := RunCommand("git checkout -"); err != nil {
+			t.Fatalf("failed to switch back to main: %v", err)
+		}
+
+		// Delete the unmerged branch (should work with -D flag)
+		err = DeleteBranch("unmerged-branch")
+		if err != nil {
+			t.Fatalf("failed to force delete unmerged branch: %v", err)
+		}
+
+		// Verify branch no longer exists
+		exists, err := BranchExists("unmerged-branch")
+		if err != nil {
+			t.Fatalf("failed to check branch existence after deletion: %v", err)
+		}
+		if exists {
+			t.Error("unmerged-branch should not exist after force deletion")
+		}
+	})
+}
