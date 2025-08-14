@@ -164,19 +164,19 @@ func TestDetermineWorktreeNames(t *testing.T) {
 
 func TestListWorktrees(t *testing.T) {
 	t.Run("lists worktrees correctly", func(t *testing.T) {
+		// Save and restore working directory first
+		originalDir, err := os.Getwd()
+		if err != nil {
+			t.Fatalf("failed to get current dir: %v", err)
+		}
+		defer os.Chdir(originalDir)
+
 		// Create a temporary git repository
 		tempDir, err := os.MkdirTemp("", "test-list-worktrees")
 		if err != nil {
 			t.Fatalf("failed to create temp dir: %v", err)
 		}
 		defer os.RemoveAll(tempDir)
-
-		// Save and restore working directory
-		originalDir, err := os.Getwd()
-		if err != nil {
-			t.Fatalf("failed to get current dir: %v", err)
-		}
-		defer os.Chdir(originalDir)
 
 		// Initialize git repo
 		if err := os.Chdir(tempDir); err != nil {
@@ -219,19 +219,19 @@ func TestListWorktrees(t *testing.T) {
 
 func TestRemoveWorktree(t *testing.T) {
 	t.Run("removes worktree successfully", func(t *testing.T) {
+		// Save and restore working directory first
+		originalDir, err := os.Getwd()
+		if err != nil {
+			t.Fatalf("failed to get current dir: %v", err)
+		}
+		defer os.Chdir(originalDir)
+
 		// Create a temporary git repository
 		tempDir, err := os.MkdirTemp("", "test-remove-worktree")
 		if err != nil {
 			t.Fatalf("failed to create temp dir: %v", err)
 		}
 		defer os.RemoveAll(tempDir)
-
-		// Save and restore working directory
-		originalDir, err := os.Getwd()
-		if err != nil {
-			t.Fatalf("failed to get current dir: %v", err)
-		}
-		defer os.Chdir(originalDir)
 
 		// Initialize git repo
 		if err := os.Chdir(tempDir); err != nil {
@@ -284,19 +284,19 @@ func TestRemoveWorktree(t *testing.T) {
 	})
 
 	t.Run("fails when not in git repository", func(t *testing.T) {
+		// Save and restore working directory first
+		originalDir, err := os.Getwd()
+		if err != nil {
+			t.Fatalf("failed to get current dir: %v", err)
+		}
+		defer os.Chdir(originalDir)
+
 		// Create a non-git directory
 		tempDir, err := os.MkdirTemp("", "test-non-git")
 		if err != nil {
 			t.Fatalf("failed to create temp dir: %v", err)
 		}
 		defer os.RemoveAll(tempDir)
-
-		// Save and restore working directory
-		originalDir, err := os.Getwd()
-		if err != nil {
-			t.Fatalf("failed to get current dir: %v", err)
-		}
-		defer os.Chdir(originalDir)
 
 		if err := os.Chdir(tempDir); err != nil {
 			t.Fatalf("failed to change dir: %v", err)
@@ -315,19 +315,19 @@ func TestRemoveWorktree(t *testing.T) {
 
 func TestRemoveWorktreeByPath(t *testing.T) {
 	t.Run("removes worktree by path successfully", func(t *testing.T) {
+		// Save and restore working directory first
+		originalDir, err := os.Getwd()
+		if err != nil {
+			t.Fatalf("failed to get current dir: %v", err)
+		}
+		defer os.Chdir(originalDir)
+
 		// Create a temporary git repository
 		tempDir, err := os.MkdirTemp("", "test-remove-by-path")
 		if err != nil {
 			t.Fatalf("failed to create temp dir: %v", err)
 		}
 		defer os.RemoveAll(tempDir)
-
-		// Save and restore working directory
-		originalDir, err := os.Getwd()
-		if err != nil {
-			t.Fatalf("failed to get current dir: %v", err)
-		}
-		defer os.Chdir(originalDir)
 
 		// Initialize git repo
 		if err := os.Chdir(tempDir); err != nil {
@@ -377,19 +377,19 @@ func TestRemoveWorktreeByPath(t *testing.T) {
 
 func TestGetWorktreeForIssue(t *testing.T) {
 	t.Run("finds existing worktree", func(t *testing.T) {
+		// Save and restore working directory first
+		originalDir, err := os.Getwd()
+		if err != nil {
+			t.Fatalf("failed to get current dir: %v", err)
+		}
+		defer os.Chdir(originalDir)
+
 		// Create a temporary git repository
 		tempDir, err := os.MkdirTemp("", "test-get-worktree")
 		if err != nil {
 			t.Fatalf("failed to create temp dir: %v", err)
 		}
 		defer os.RemoveAll(tempDir)
-
-		// Save and restore working directory
-		originalDir, err := os.Getwd()
-		if err != nil {
-			t.Fatalf("failed to get current dir: %v", err)
-		}
-		defer os.Chdir(originalDir)
 
 		// Initialize git repo
 		if err := os.Chdir(tempDir); err != nil {
@@ -442,19 +442,19 @@ func TestGetWorktreeForIssue(t *testing.T) {
 	})
 
 	t.Run("returns error for non-existent worktree", func(t *testing.T) {
+		// Save and restore working directory first
+		originalDir, err := os.Getwd()
+		if err != nil {
+			t.Fatalf("failed to get current dir: %v", err)
+		}
+		defer os.Chdir(originalDir)
+
 		// Create a temporary git repository
 		tempDir, err := os.MkdirTemp("", "test-nonexistent-worktree")
 		if err != nil {
 			t.Fatalf("failed to create temp dir: %v", err)
 		}
 		defer os.RemoveAll(tempDir)
-
-		// Save and restore working directory
-		originalDir, err := os.Getwd()
-		if err != nil {
-			t.Fatalf("failed to get current dir: %v", err)
-		}
-		defer os.Chdir(originalDir)
 
 		// Initialize git repo
 		if err := os.Chdir(tempDir); err != nil {
@@ -491,19 +491,19 @@ func TestGetWorktreeForIssue(t *testing.T) {
 
 func TestCreateWorktreeFromBranch(t *testing.T) {
 	t.Run("creates worktree from local branch", func(t *testing.T) {
+		// Save and restore working directory first
+		originalDir, err := os.Getwd()
+		if err != nil {
+			t.Fatalf("failed to get current dir: %v", err)
+		}
+		defer os.Chdir(originalDir)
+
 		// Create a temporary git repository
 		tempDir, err := os.MkdirTemp("", "test-create-from-branch")
 		if err != nil {
 			t.Fatalf("failed to create temp dir: %v", err)
 		}
 		defer os.RemoveAll(tempDir)
-
-		// Save and restore working directory
-		originalDir, err := os.Getwd()
-		if err != nil {
-			t.Fatalf("failed to get current dir: %v", err)
-		}
-		defer os.Chdir(originalDir)
 
 		// Initialize git repo
 		if err := os.Chdir(tempDir); err != nil {
@@ -569,19 +569,19 @@ func TestCreateWorktreeFromBranch(t *testing.T) {
 	})
 
 	t.Run("fails when not in git repository", func(t *testing.T) {
+		// Save and restore working directory first
+		originalDir, err := os.Getwd()
+		if err != nil {
+			t.Fatalf("failed to get current dir: %v", err)
+		}
+		defer os.Chdir(originalDir)
+
 		// Create a non-git directory
 		tempDir, err := os.MkdirTemp("", "test-non-git")
 		if err != nil {
 			t.Fatalf("failed to create temp dir: %v", err)
 		}
 		defer os.RemoveAll(tempDir)
-
-		// Save and restore working directory
-		originalDir, err := os.Getwd()
-		if err != nil {
-			t.Fatalf("failed to get current dir: %v", err)
-		}
-		defer os.Chdir(originalDir)
 
 		if err := os.Chdir(tempDir); err != nil {
 			t.Fatalf("failed to change dir: %v", err)
