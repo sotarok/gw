@@ -33,6 +33,7 @@ type mockGit struct {
 	HasUncommittedChangesFn func() (bool, error)
 	HasUnpushedCommitsFn    func() (bool, error)
 	IsMergedToOriginFn      func(string) (bool, error)
+	DeleteBranchFn          func(string) error
 }
 
 func (m *mockGit) IsGitRepository() bool {
@@ -140,6 +141,13 @@ func (m *mockGit) RunCommand(command string) error {
 func (m *mockGit) SanitizeBranchNameForDirectory(branch string) string {
 	// Simple sanitization for testing
 	return strings.ReplaceAll(branch, "/", "_")
+}
+
+func (m *mockGit) DeleteBranch(branch string) error {
+	if m.DeleteBranchFn != nil {
+		return m.DeleteBranchFn(branch)
+	}
+	return nil
 }
 
 type mockUI struct {
@@ -967,6 +975,214 @@ func TestEndCommand_Execute(t *testing.T) {
 			// Check output
 			if tt.checkOutput != nil {
 				tt.checkOutput(t, stdout.String(), stderr.String())
+			}
+		})
+	}
+}
+
+func TestEndCommand_BranchDeletion(t *testing.T) {
+	// Save and restore working directory
+	originalDir, _ := os.Getwd()
+	defer os.Chdir(originalDir)
+
+	tests := []struct {
+		name               string
+		issueNumber        string
+		autoRemoveBranch   bool
+		force              bool
+		mockSetup          func() (*mockGit, *mockUI, *mockDetect, func())
+		expectedBranchCall string // expected branch name passed to DeleteBranch
+		expectNoDeletion   bool   // if true, DeleteBranch should not be called
+		expectedError      string
+	}{
+		{
+			name:             "auto-remove disabled - branch not deleted",
+			issueNumber:      "123",
+			autoRemoveBranch: false,
+			mockSetup: func() (*mockGit, *mockUI, *mockDetect, func()) {
+				tempDir, _ := os.MkdirTemp("", "gw-worktree-*")
+				mockGitInstance := &mockGit{
+					worktreePath: tempDir,
+				}
+				mockGitInstance.GetWorktreeForIssueFn = func(issueNumber string) (*git.WorktreeInfo, error) {
+					return &git.WorktreeInfo{
+						Path:   tempDir,
+						Branch: "123/impl",
+					}, nil
+				}
+				deleteCalled := false
+				mockGitInstance.DeleteBranchFn = func(branch string) error {
+					deleteCalled = true
+					t.Error("DeleteBranch should not be called when auto-remove is disabled")
+					return nil
+				}
+				return mockGitInstance, &mockUI{}, &mockDetect{}, func() {
+					os.RemoveAll(tempDir)
+					if deleteCalled {
+						t.Error("DeleteBranch was called when it shouldn't have been")
+					}
+				}
+			},
+			expectNoDeletion: true,
+		},
+		{
+			name:             "auto-remove enabled - branch deleted successfully",
+			issueNumber:      "123",
+			autoRemoveBranch: true,
+			mockSetup: func() (*mockGit, *mockUI, *mockDetect, func()) {
+				tempDir, _ := os.MkdirTemp("", "gw-worktree-*")
+				mockGitInstance := &mockGit{
+					worktreePath: tempDir,
+				}
+				mockGitInstance.GetWorktreeForIssueFn = func(issueNumber string) (*git.WorktreeInfo, error) {
+					return &git.WorktreeInfo{
+						Path:   tempDir,
+						Branch: "123/impl",
+					}, nil
+				}
+				var deletedBranch string
+				mockGitInstance.DeleteBranchFn = func(branch string) error {
+					deletedBranch = branch
+					return nil
+				}
+				return mockGitInstance, &mockUI{}, &mockDetect{}, func() {
+					os.RemoveAll(tempDir)
+					if deletedBranch != "123/impl" {
+						t.Errorf("Expected branch '123/impl' to be deleted, got '%s'", deletedBranch)
+					}
+				}
+			},
+			expectedBranchCall: "123/impl",
+		},
+		{
+			name:             "auto-remove enabled - branch deletion fails",
+			issueNumber:      "123",
+			autoRemoveBranch: true,
+			mockSetup: func() (*mockGit, *mockUI, *mockDetect, func()) {
+				tempDir, _ := os.MkdirTemp("", "gw-worktree-*")
+				mockGitInstance := &mockGit{
+					worktreePath: tempDir,
+				}
+				mockGitInstance.GetWorktreeForIssueFn = func(issueNumber string) (*git.WorktreeInfo, error) {
+					return &git.WorktreeInfo{
+						Path:   tempDir,
+						Branch: "123/impl",
+					}, nil
+				}
+				mockGitInstance.DeleteBranchFn = func(branch string) error {
+					return fmt.Errorf("branch is checked out in another worktree")
+				}
+				return mockGitInstance, &mockUI{}, &mockDetect{}, func() {
+					os.RemoveAll(tempDir)
+				}
+			},
+			expectedBranchCall: "123/impl",
+			// Branch deletion error should not fail the command, just show warning
+		},
+		{
+			name:             "auto-remove with custom branch name",
+			issueNumber:      "456",
+			autoRemoveBranch: true,
+			mockSetup: func() (*mockGit, *mockUI, *mockDetect, func()) {
+				tempDir, _ := os.MkdirTemp("", "gw-worktree-*")
+				mockGitInstance := &mockGit{
+					worktreePath: tempDir,
+				}
+				mockGitInstance.GetWorktreeForIssueFn = func(issueNumber string) (*git.WorktreeInfo, error) {
+					return &git.WorktreeInfo{
+						Path:   tempDir,
+						Branch: "feature/issue-456",
+					}, nil
+				}
+				var deletedBranch string
+				mockGitInstance.DeleteBranchFn = func(branch string) error {
+					deletedBranch = branch
+					return nil
+				}
+				return mockGitInstance, &mockUI{}, &mockDetect{}, func() {
+					os.RemoveAll(tempDir)
+					if deletedBranch != "feature/issue-456" {
+						t.Errorf("Expected branch 'feature/issue-456' to be deleted, got '%s'", deletedBranch)
+					}
+				}
+			},
+			expectedBranchCall: "feature/issue-456",
+		},
+		{
+			name:             "auto-remove with safety checks and force",
+			issueNumber:      "789",
+			autoRemoveBranch: true,
+			force:            true,
+			mockSetup: func() (*mockGit, *mockUI, *mockDetect, func()) {
+				tempDir, _ := os.MkdirTemp("", "gw-worktree-*")
+				mockGitInstance := &mockGit{
+					worktreePath: tempDir,
+				}
+				mockGitInstance.GetWorktreeForIssueFn = func(issueNumber string) (*git.WorktreeInfo, error) {
+					return &git.WorktreeInfo{
+						Path:   tempDir,
+						Branch: "789/impl",
+					}, nil
+				}
+				mockGitInstance.HasUncommittedChangesFn = func() (bool, error) { return true, nil }
+				var deletedBranch string
+				mockGitInstance.DeleteBranchFn = func(branch string) error {
+					deletedBranch = branch
+					return nil
+				}
+				return mockGitInstance, &mockUI{}, &mockDetect{}, func() {
+					os.RemoveAll(tempDir)
+					if deletedBranch != "789/impl" {
+						t.Errorf("Expected branch '789/impl' to be deleted with force, got '%s'", deletedBranch)
+					}
+				}
+			},
+			expectedBranchCall: "789/impl",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Change to test directory
+			testDir := t.TempDir()
+			err := os.Chdir(testDir)
+			if err != nil {
+				t.Fatalf("Failed to change to test directory: %v", err)
+			}
+
+			mockGit, mockUI, mockDetect, cleanup := tt.mockSetup()
+			defer cleanup()
+			stdout := &bytes.Buffer{}
+			stderr := &bytes.Buffer{}
+
+			deps := &Dependencies{
+				Git:    mockGit,
+				UI:     mockUI,
+				Detect: mockDetect,
+				Stdout: stdout,
+				Stderr: stderr,
+			}
+
+			// Create config with auto-remove setting
+			cfg := &config.Config{
+				AutoRemoveBranch: tt.autoRemoveBranch,
+			}
+
+			cmd := NewEndCommandWithConfig(deps, tt.force, cfg)
+			err = cmd.Execute(tt.issueNumber)
+
+			// Check error
+			if tt.expectedError != "" {
+				if err == nil || !strings.Contains(err.Error(), tt.expectedError) {
+					t.Errorf("Expected error containing %q, got %v", tt.expectedError, err)
+				}
+			} else if err != nil {
+				t.Errorf("Unexpected error: %v", err)
+			}
+
+			// Verify success message appears
+			if err == nil && !strings.Contains(stdout.String(), "Successfully removed worktree") {
+				t.Error("Expected success message in output")
 			}
 		})
 	}

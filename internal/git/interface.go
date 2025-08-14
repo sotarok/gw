@@ -18,6 +18,7 @@ type Interface interface {
 	// Branch operations
 	BranchExists(branch string) (bool, error)
 	ListAllBranches() ([]string, error)
+	DeleteBranch(branch string) error
 
 	// Status operations
 	HasUncommittedChanges() (bool, error)
@@ -89,6 +90,10 @@ func (c *DefaultClient) BranchExists(branch string) (bool, error) {
 
 func (c *DefaultClient) ListAllBranches() ([]string, error) {
 	return ListAllBranches()
+}
+
+func (c *DefaultClient) DeleteBranch(branch string) error {
+	return DeleteBranch(branch)
 }
 
 // Status operations
