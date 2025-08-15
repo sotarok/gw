@@ -149,6 +149,28 @@ func TestDetectPackageManager(t *testing.T) {
 		}
 	})
 
+	t.Run("detects composer with composer.json", func(t *testing.T) {
+		tempDir, err := os.MkdirTemp("", "test-composer")
+		if err != nil {
+			t.Fatalf("failed to create temp dir: %v", err)
+		}
+		defer os.RemoveAll(tempDir)
+
+		// Create composer.json
+		if err := os.WriteFile(filepath.Join(tempDir, "composer.json"), []byte("{\"name\":\"test/project\"}"), 0644); err != nil {
+			t.Fatalf("failed to create composer.json: %v", err)
+		}
+
+		pm, err := DetectPackageManager(tempDir)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+
+		if pm.Name != "composer" {
+			t.Errorf("expected composer, got %s", pm.Name)
+		}
+	})
+
 	t.Run("returns error when no package manager found", func(t *testing.T) {
 		tempDir, err := os.MkdirTemp("", "test-none")
 		if err != nil {
