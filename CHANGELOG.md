@@ -15,6 +15,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Non-interactive mode with `--list` flag for CI/scripting
   - Shows configuration descriptions and default values
   - Visual indicators (✅/❌) for boolean settings
+- New `auto_remove_branch` configuration option for automatic branch deletion
+  - When enabled, automatically deletes the local branch after successful worktree removal
+  - Works similarly to GitHub's "Automatically delete head branches" feature
+  - Default value is false to avoid unexpected behavior
+  - Branch deletion errors are non-fatal and only show warnings
 
 ## [0.4.0] - 2025-08-14
 

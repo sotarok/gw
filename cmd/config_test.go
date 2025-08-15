@@ -40,7 +40,7 @@ func TestConfigCommand(t *testing.T) {
 
 		// Verify the list has the correct items
 		items := model.list.Items()
-		assert.Len(t, items, 2)
+		assert.Len(t, items, 3)
 
 		// Check auto_cd item
 		item0 := items[0].(configItem)
@@ -129,7 +129,7 @@ func TestConfigIntegration(t *testing.T) {
 		}
 
 		items := cfg.GetConfigItems()
-		assert.Len(t, items, 2)
+		assert.Len(t, items, 3)
 
 		// Check auto_cd
 		assert.Equal(t, "auto_cd", items[0].Key)

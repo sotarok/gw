@@ -18,6 +18,11 @@ func TestNewConfig(t *testing.T) {
 	if config.UpdateITerm2Tab {
 		t.Error("Expected UpdateITerm2Tab to be false by default")
 	}
+
+	// Default value should be false for auto-remove-branch
+	if config.AutoRemoveBranch {
+		t.Error("Expected AutoRemoveBranch to be false by default")
+	}
 }
 
 func TestLoadConfig_FileNotExists(t *testing.T) {
@@ -45,6 +50,7 @@ func TestLoadConfig_ValidFile(t *testing.T) {
 	configContent := `# gw configuration file
 auto_cd = false
 update_iterm2_tab = true
+auto_remove_branch = true
 `
 	if err := os.WriteFile(configPath, []byte(configContent), 0644); err != nil {
 		t.Fatalf("Failed to write test config: %v", err)
@@ -62,6 +68,10 @@ update_iterm2_tab = true
 	if !config.UpdateITerm2Tab {
 		t.Error("Expected UpdateITerm2Tab to be true based on config file")
 	}
+
+	if !config.AutoRemoveBranch {
+		t.Error("Expected AutoRemoveBranch to be true based on config file")
+	}
 }
 
 func TestSaveConfig(t *testing.T) {
@@ -71,8 +81,9 @@ func TestSaveConfig(t *testing.T) {
 
 	// Create config with custom values
 	config := &Config{
-		AutoCD:          false,
-		UpdateITerm2Tab: true,
+		AutoCD:           false,
+		UpdateITerm2Tab:  true,
+		AutoRemoveBranch: true,
 	}
 
 	err := config.Save(configPath)
@@ -99,6 +110,11 @@ func TestSaveConfig(t *testing.T) {
 	if loaded.UpdateITerm2Tab != config.UpdateITerm2Tab {
 		t.Errorf("Loaded config doesn't match saved config. Expected UpdateITerm2Tab=%v, got %v",
 			config.UpdateITerm2Tab, loaded.UpdateITerm2Tab)
+	}
+
+	if loaded.AutoRemoveBranch != config.AutoRemoveBranch {
+		t.Errorf("Loaded config doesn't match saved config. Expected AutoRemoveBranch=%v, got %v",
+			config.AutoRemoveBranch, loaded.AutoRemoveBranch)
 	}
 }
 
@@ -238,7 +254,7 @@ func TestSaveConfig_DirectoryCreation(t *testing.T) {
 		t.Error("Config file should have 0600 permissions")
 	}
 
-	expectedContent := "# gw configuration file\nauto_cd = true\nupdate_iterm2_tab = false\n"
+	expectedContent := "# gw configuration file\nauto_cd = true\nupdate_iterm2_tab = false\nauto_remove_branch = false\n"
 	if string(content) != expectedContent {
 		t.Errorf("Expected content:\n%s\nGot:\n%s", expectedContent, string(content))
 	}
@@ -246,15 +262,16 @@ func TestSaveConfig_DirectoryCreation(t *testing.T) {
 
 func TestGetConfigItems(t *testing.T) {
 	config := &Config{
-		AutoCD:          true,
-		UpdateITerm2Tab: false,
+		AutoCD:           true,
+		UpdateITerm2Tab:  false,
+		AutoRemoveBranch: true,
 	}
 
 	items := config.GetConfigItems()
 
-	// Should return 2 items
-	if len(items) != 2 {
-		t.Fatalf("Expected 2 config items, got %d", len(items))
+	// Should return 3 items
+	if len(items) != 3 {
+		t.Fatalf("Expected 3 config items, got %d", len(items))
 	}
 
 	// Check auto_cd item
@@ -286,6 +303,21 @@ func TestGetConfigItems(t *testing.T) {
 	if iterm2Item.Description == "" {
 		t.Error("Expected update_iterm2_tab to have a description")
 	}
+
+	// Check auto_remove_branch item
+	autoRemoveItem := items[2]
+	if autoRemoveItem.Key != "auto_remove_branch" {
+		t.Errorf("Expected third item key to be 'auto_remove_branch', got '%s'", autoRemoveItem.Key)
+	}
+	if autoRemoveItem.Value != true {
+		t.Errorf("Expected auto_remove_branch value to be true, got %v", autoRemoveItem.Value)
+	}
+	if autoRemoveItem.Default != false {
+		t.Errorf("Expected auto_remove_branch default to be false, got %v", autoRemoveItem.Default)
+	}
+	if autoRemoveItem.Description == "" {
+		t.Error("Expected auto_remove_branch to have a description")
+	}
 }
 
 func TestSetConfigItem(t *testing.T) {
@@ -307,6 +339,15 @@ func TestSetConfigItem(t *testing.T) {
 	}
 	if config.UpdateITerm2Tab != true {
 		t.Errorf("Expected UpdateITerm2Tab to be true after setting, got %v", config.UpdateITerm2Tab)
+	}
+
+	// Test setting auto_remove_branch
+	err = config.SetConfigItem("auto_remove_branch", true)
+	if err != nil {
+		t.Errorf("Failed to set auto_remove_branch: %v", err)
+	}
+	if config.AutoRemoveBranch != true {
+		t.Errorf("Expected AutoRemoveBranch to be true after setting, got %v", config.AutoRemoveBranch)
 	}
 
 	// Test setting unknown key

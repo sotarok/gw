@@ -12,8 +12,9 @@ const (
 	trueValue = "true"
 
 	// Config keys
-	autoCDKey          = "auto_cd"
-	updateITerm2TabKey = "update_iterm2_tab"
+	autoCDKey           = "auto_cd"
+	updateITerm2TabKey  = "update_iterm2_tab"
+	autoRemoveBranchKey = "auto_remove_branch"
 )
 
 // Item represents a single configuration item with metadata
@@ -26,15 +27,17 @@ type Item struct {
 
 // Config represents the gw configuration
 type Config struct {
-	AutoCD          bool `toml:"auto_cd"`
-	UpdateITerm2Tab bool `toml:"update_iterm2_tab"`
+	AutoCD           bool `toml:"auto_cd"`
+	UpdateITerm2Tab  bool `toml:"update_iterm2_tab"`
+	AutoRemoveBranch bool `toml:"auto_remove_branch"`
 }
 
 // New creates a new Config with default values
 func New() *Config {
 	return &Config{
-		AutoCD:          true,  // Default to true for backward compatibility
-		UpdateITerm2Tab: false, // Default to false to avoid unexpected behavior
+		AutoCD:           true,  // Default to true for backward compatibility
+		UpdateITerm2Tab:  false, // Default to false to avoid unexpected behavior
+		AutoRemoveBranch: false, // Default to false to avoid unexpected behavior
 	}
 }
 
@@ -76,6 +79,8 @@ func Load(path string) (*Config, error) {
 			config.AutoCD = value == trueValue
 		case updateITerm2TabKey:
 			config.UpdateITerm2Tab = value == trueValue
+		case autoRemoveBranchKey:
+			config.AutoRemoveBranch = value == trueValue
 		}
 	}
 
@@ -97,7 +102,8 @@ func (c *Config) Save(path string) error {
 	content := fmt.Sprintf(`# gw configuration file
 auto_cd = %v
 update_iterm2_tab = %v
-`, c.AutoCD, c.UpdateITerm2Tab)
+auto_remove_branch = %v
+`, c.AutoCD, c.UpdateITerm2Tab, c.AutoRemoveBranch)
 
 	if err := os.WriteFile(path, []byte(content), 0600); err != nil {
 		return fmt.Errorf("failed to write config file: %w", err)
@@ -131,6 +137,12 @@ func (c *Config) GetConfigItems() []Item {
 			Description: "Update iTerm2 tab title with worktree information (macOS only)",
 			Default:     false,
 		},
+		{
+			Key:         autoRemoveBranchKey,
+			Value:       c.AutoRemoveBranch,
+			Description: "Automatically delete local branch after successful worktree removal",
+			Default:     false,
+		},
 	}
 }
 
@@ -141,6 +153,8 @@ func (c *Config) SetConfigItem(key string, value bool) error {
 		c.AutoCD = value
 	case updateITerm2TabKey:
 		c.UpdateITerm2Tab = value
+	case autoRemoveBranchKey:
+		c.AutoRemoveBranch = value
 	default:
 		return fmt.Errorf("unknown configuration key: %s", key)
 	}

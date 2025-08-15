@@ -22,29 +22,62 @@ func TestInitCommand_Execute(t *testing.T) {
 		checkConfig   func(t *testing.T, cfg *config.Config)
 	}{
 		{
-			name:      "user selects auto-cd true",
-			userInput: "y\ny\n", // Enable auto-cd, enable shell integration
+			name:      "user selects all true",
+			userInput: "y\ny\ny\ny\n", // Enable auto-cd, enable iterm2, enable auto-remove, enable shell integration
 			checkConfig: func(t *testing.T, cfg *config.Config) {
 				if !cfg.AutoCD {
 					t.Error("Expected AutoCD to be true")
 				}
-			},
-		},
-		{
-			name:      "user selects auto-cd false",
-			userInput: "n\n",
-			checkConfig: func(t *testing.T, cfg *config.Config) {
-				if cfg.AutoCD {
-					t.Error("Expected AutoCD to be false")
+				if !cfg.UpdateITerm2Tab {
+					t.Error("Expected UpdateITerm2Tab to be true")
+				}
+				if !cfg.AutoRemoveBranch {
+					t.Error("Expected AutoRemoveBranch to be true")
 				}
 			},
 		},
 		{
-			name:      "user uses default (press enter)",
-			userInput: "\ny\n", // Use default (true), enable shell integration
+			name:      "user selects all false",
+			userInput: "n\nn\nn\n", // Disable all
+			checkConfig: func(t *testing.T, cfg *config.Config) {
+				if cfg.AutoCD {
+					t.Error("Expected AutoCD to be false")
+				}
+				if cfg.UpdateITerm2Tab {
+					t.Error("Expected UpdateITerm2Tab to be false")
+				}
+				if cfg.AutoRemoveBranch {
+					t.Error("Expected AutoRemoveBranch to be false")
+				}
+			},
+		},
+		{
+			name:      "user uses defaults (press enter)",
+			userInput: "\n\n\ny\n", // Use defaults (true, false, false), enable shell integration
 			checkConfig: func(t *testing.T, cfg *config.Config) {
 				if !cfg.AutoCD {
 					t.Error("Expected AutoCD to be true (default)")
+				}
+				if cfg.UpdateITerm2Tab {
+					t.Error("Expected UpdateITerm2Tab to be false (default)")
+				}
+				if cfg.AutoRemoveBranch {
+					t.Error("Expected AutoRemoveBranch to be false (default)")
+				}
+			},
+		},
+		{
+			name:      "mixed selections",
+			userInput: "n\ny\ny\n", // Disable auto-cd, enable iterm2, enable auto-remove
+			checkConfig: func(t *testing.T, cfg *config.Config) {
+				if cfg.AutoCD {
+					t.Error("Expected AutoCD to be false")
+				}
+				if !cfg.UpdateITerm2Tab {
+					t.Error("Expected UpdateITerm2Tab to be true")
+				}
+				if !cfg.AutoRemoveBranch {
+					t.Error("Expected AutoRemoveBranch to be true")
 				}
 			},
 		},
@@ -110,7 +143,7 @@ func TestInitCommand_ExistingConfig(t *testing.T) {
 	}
 
 	// Setup mock stdin/stdout
-	stdin := strings.NewReader("y\n\ny\n") // Confirm overwrite, use default (true), enable shell integration
+	stdin := strings.NewReader("y\n\n\n\ny\n") // Confirm overwrite, use defaults (true, false, false), enable shell integration
 	stdout := &bytes.Buffer{}
 	stderr := &bytes.Buffer{}
 
@@ -384,7 +417,7 @@ func TestInitCommand_ShellIntegration(t *testing.T) {
 	}{
 		{
 			name:           "user enables auto-cd and shell integration added automatically",
-			userInput:      "y\ny\n", // Enable auto-cd, enable shell integration
+			userInput:      "y\nn\nn\ny\n", // Enable auto-cd, disable iterm2, disable auto-remove, enable shell integration
 			shellPath:      "/bin/bash",
 			expectRcUpdate: true, // Now writes to rc file
 			checkOutput: func(t *testing.T, output string) {
@@ -398,7 +431,7 @@ func TestInitCommand_ShellIntegration(t *testing.T) {
 		},
 		{
 			name:           "user enables auto-cd but declines shell integration instructions",
-			userInput:      "y\nn\n", // Enable auto-cd, decline shell integration instructions
+			userInput:      "y\nn\nn\nn\n", // Enable auto-cd, disable iterm2, disable auto-remove, decline shell integration
 			shellPath:      "/bin/bash",
 			expectRcUpdate: false,
 			checkOutput: func(t *testing.T, output string) {
@@ -412,7 +445,7 @@ func TestInitCommand_ShellIntegration(t *testing.T) {
 		},
 		{
 			name:           "user disables auto-cd, no shell integration prompt",
-			userInput:      "n\n", // Disable auto-cd
+			userInput:      "n\nn\nn\n", // Disable auto-cd, disable iterm2, disable auto-remove
 			shellPath:      "/bin/bash",
 			expectRcUpdate: false,
 			checkOutput: func(t *testing.T, output string) {
@@ -423,18 +456,15 @@ func TestInitCommand_ShellIntegration(t *testing.T) {
 		},
 		{
 			name:           "shell integration already exists - shows update instructions",
-			userInput:      "y\ny\n", // Enable auto-cd, enable shell integration
+			userInput:      "y\nn\nn\ny\n", // Enable auto-cd, disable iterm2, disable auto-remove, enable shell integration
 			shellPath:      "/bin/bash",
 			expectRcUpdate: false, // Should not update because it already exists
 			existingRc:     true,
 			checkOutput: func(t *testing.T, output string) {
-				if !strings.Contains(output, "⚠️  Shell integration already exists") {
+				if !strings.Contains(output, "⚠ Shell integration already exists") {
 					t.Error("Expected warning about existing shell integration")
 				}
-				if !strings.Contains(output, "The shell integration is already set up using the eval method") {
-					t.Error("Expected message about eval method")
-				}
-				if !strings.Contains(output, "If you need to update or modify the integration") {
+				if !strings.Contains(output, "To update or reinstall") {
 					t.Error("Expected update instructions")
 				}
 			},

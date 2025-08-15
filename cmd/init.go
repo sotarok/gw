@@ -93,21 +93,17 @@ func (c *InitCommand) Execute() error {
 		fmt.Fprintln(c.stdout)
 	}
 
-	// Create new config
+	// Create new config with defaults
 	cfg := config.New()
 
-	// Ask about auto-cd
-	fmt.Fprintln(c.stdout, "When creating a new worktree, do you want to automatically change to that directory?")
-	fmt.Fprint(c.stdout, "Auto-cd to new worktree? (Y/n): ")
+	// Get all config items from the config definition
+	items := cfg.GetConfigItems()
 
-	response, err := reader.ReadString('\n')
-	if err != nil {
-		return fmt.Errorf("failed to read input: %w", err)
-	}
-
-	response = strings.TrimSpace(strings.ToLower(response))
-	if response == "n" || response == no {
-		cfg.AutoCD = false
+	// Prompt for each configuration item
+	for _, item := range items {
+		if err := c.promptForConfigItem(reader, cfg, item); err != nil {
+			return err
+		}
 	}
 
 	// Save configuration
@@ -119,7 +115,11 @@ func (c *InitCommand) Execute() error {
 	fmt.Fprintf(c.stdout, "Configuration saved to %s\n", c.configPath)
 	fmt.Fprintln(c.stdout)
 	fmt.Fprintln(c.stdout, "Configuration summary:")
-	fmt.Fprintf(c.stdout, "  Auto-cd to new worktree: %v\n", cfg.AutoCD)
+
+	// Show summary of all settings
+	for _, item := range cfg.GetConfigItems() {
+		fmt.Fprintf(c.stdout, "  %s: %v\n", item.Description, item.Value)
+	}
 
 	// If auto-cd is enabled, offer shell integration
 	if cfg.AutoCD {
@@ -130,6 +130,65 @@ func (c *InitCommand) Execute() error {
 	}
 
 	return nil
+}
+
+func (c *InitCommand) promptForConfigItem(reader *bufio.Reader, cfg *config.Config, item config.Item) error {
+	fmt.Fprintln(c.stdout)
+	fmt.Fprintln(c.stdout, item.Description)
+
+	// Format the prompt with default value
+	prompt := fmt.Sprintf("Enable %s? ", formatKeyForPrompt(item.Key))
+	if item.Default {
+		prompt += "(Y/n): "
+	} else {
+		prompt += "(y/N): "
+	}
+
+	fmt.Fprint(c.stdout, prompt)
+
+	response, err := reader.ReadString('\n')
+	if err != nil {
+		return fmt.Errorf("failed to read input: %w", err)
+	}
+
+	response = strings.TrimSpace(strings.ToLower(response))
+
+	// Determine the value based on response and default
+	var newValue bool
+	if response == "" {
+		// Use default if no input
+		newValue = item.Default
+	} else if response == "y" || response == yes {
+		newValue = true
+	} else if response == "n" || response == no {
+		newValue = false
+	} else {
+		// Invalid input, use default
+		fmt.Fprintf(c.stdout, "Invalid input, using default: %v\n", item.Default)
+		newValue = item.Default
+	}
+
+	// Update the config value
+	if err := cfg.SetConfigItem(item.Key, newValue); err != nil {
+		return fmt.Errorf("failed to set %s: %w", item.Key, err)
+	}
+
+	return nil
+}
+
+// formatKeyForPrompt converts config key to human-readable format
+func formatKeyForPrompt(key string) string {
+	// Convert snake_case to human readable
+	switch key {
+	case "auto_cd":
+		return "auto-cd"
+	case "update_iterm2_tab":
+		return "iTerm2 tab updates"
+	case "auto_remove_branch":
+		return "auto-remove branch"
+	default:
+		return strings.ReplaceAll(key, "_", " ")
+	}
 }
 
 func (c *InitCommand) offerShellIntegration(reader *bufio.Reader) error {
@@ -287,16 +346,13 @@ func (c *InitCommand) showManualInstructions(shell string) error {
 
 func (c *InitCommand) showUpdateInstructions(rcPath, shell string) error {
 	fmt.Fprintln(c.stdout)
-	fmt.Fprintf(c.stdout, "⚠️  Shell integration already exists in %s\n", rcPath)
+	fmt.Fprintln(c.stdout, "⚠ Shell integration already exists in your configuration.")
+	fmt.Fprintf(c.stdout, "  File: %s\n", rcPath)
 	fmt.Fprintln(c.stdout)
-	fmt.Fprintln(c.stdout, "The shell integration is already set up using the eval method.")
-	fmt.Fprintln(c.stdout, "This means you're always using the latest version automatically!")
-	fmt.Fprintln(c.stdout)
-	fmt.Fprintln(c.stdout, "If you need to update or modify the integration, please edit:")
-	fmt.Fprintf(c.stdout, "  %s\n", rcPath)
-	fmt.Fprintln(c.stdout)
-	fmt.Fprintln(c.stdout, "Look for the line containing:")
-	fmt.Fprintf(c.stdout, "  %s\n", c.getEvalCommand(shell))
+	fmt.Fprintln(c.stdout, "To update or reinstall, please:")
+	fmt.Fprintln(c.stdout, "1. Remove the existing gw shell integration from your file")
+	fmt.Fprintln(c.stdout, "2. Add the following line:")
+	fmt.Fprintf(c.stdout, "   %s\n", c.getEvalCommand(shell))
 
 	return nil
 }

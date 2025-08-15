@@ -86,3 +86,14 @@ func BranchExists(branch string) (bool, error) {
 
 	return false, nil
 }
+
+// DeleteBranch deletes a local git branch
+func DeleteBranch(branch string) error {
+	// Use -D flag to force delete even if not merged
+	cmd := exec.Command("git", "branch", "-D", branch)
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		return fmt.Errorf("failed to delete branch %s: %s", branch, string(output))
+	}
+	return nil
+}

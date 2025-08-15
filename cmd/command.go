@@ -400,6 +400,7 @@ func NewEndCommandWithConfig(deps *Dependencies, force bool, cfg *config.Config)
 // Execute runs the end command
 func (c *EndCommand) Execute(issueNumber string) error {
 	var worktreePath string
+	var branchName string
 	var isInteractiveMode bool
 
 	if issueNumber == "" {
@@ -417,6 +418,7 @@ func (c *EndCommand) Execute(issueNumber string) error {
 			issueNumber = parts[0]
 		}
 		worktreePath = selected.Path
+		branchName = selected.Branch
 		isInteractiveMode = true
 	} else {
 		// Find the worktree for this issue
@@ -425,6 +427,7 @@ func (c *EndCommand) Execute(issueNumber string) error {
 			return err
 		}
 		worktreePath = wt.Path
+		branchName = wt.Branch
 		isInteractiveMode = false
 	}
 
@@ -491,6 +494,17 @@ func (c *EndCommand) Execute(issueNumber string) error {
 	}
 
 	fmt.Fprintf(c.deps.Stdout, "✓ Successfully removed worktree for issue #%s\n", issueNumber)
+
+	// Delete the branch if auto-remove is enabled
+	if c.config != nil && c.config.AutoRemoveBranch && branchName != "" {
+		fmt.Fprintf(c.deps.Stdout, "Deleting branch %s...\n", branchName)
+		if err := c.deps.Git.DeleteBranch(branchName); err != nil {
+			// Don't fail the command, just warn
+			fmt.Fprintf(c.deps.Stderr, "⚠ Failed to delete branch %s: %v\n", branchName, err)
+		} else {
+			fmt.Fprintf(c.deps.Stdout, "✓ Successfully deleted branch %s\n", branchName)
+		}
+	}
 
 	// Reset iTerm2 tab if configured
 	if c.config != nil && iterm2.ShouldUpdateTab(c.config.UpdateITerm2Tab) {
