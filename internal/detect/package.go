@@ -8,9 +8,10 @@ import (
 )
 
 const (
-	npmName  = "npm"
-	yarnName = "yarn"
-	pnpmName = "pnpm"
+	npmName      = "npm"
+	yarnName     = "yarn"
+	pnpmName     = "pnpm"
+	composerName = "composer"
 )
 
 // PackageManager represents a supported package manager
@@ -35,6 +36,11 @@ var packageManagers = []PackageManager{
 		Name:       pnpmName,
 		LockFile:   "pnpm-lock.yaml",
 		InstallCmd: []string{"pnpm", "install"},
+	},
+	{
+		Name:       composerName,
+		LockFile:   "composer.json",
+		InstallCmd: []string{"composer", "install"},
 	},
 	{
 		Name:       "cargo",
