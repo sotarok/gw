@@ -12,7 +12,7 @@ A convenient CLI tool for managing Git worktrees with automatic package manager 
 
 - Create worktrees with simple commands
 - Checkout existing branches as worktrees
-- Automatic detection and setup of package managers (npm, yarn, pnpm, cargo, go, pip, bundler)
+- Automatic detection and setup of package managers (npm, yarn, pnpm, cargo, go, pip, bundler, composer)
 - Copy untracked environment files (.env, .env.local, etc.) to new worktrees
 - Interactive worktree selection for removal
 - Interactive branch selection for checkout
