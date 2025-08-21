@@ -3,7 +3,6 @@ package detect
 import (
 	"fmt"
 	"os"
-	"os/exec"
 	"path/filepath"
 )
 
@@ -109,6 +108,11 @@ func DetectPackageManager(dir string) (*PackageManager, error) {
 
 // RunSetup runs the setup command for the detected package manager
 func RunSetup(dir string) error {
+	return RunSetupWithExecutor(dir, NewDefaultExecutor())
+}
+
+// RunSetupWithExecutor runs the setup command with a custom executor
+func RunSetupWithExecutor(dir string, executor CommandExecutor) error {
 	pm, err := DetectPackageManager(dir)
 	if err != nil {
 		// No package manager found, but that's okay
@@ -118,12 +122,7 @@ func RunSetup(dir string) error {
 
 	fmt.Printf("Detected %s, running setup...\n", pm.Name)
 
-	cmd := exec.Command(pm.InstallCmd[0], pm.InstallCmd[1:]...)
-	cmd.Dir = dir
-	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
-
-	if err := cmd.Run(); err != nil {
+	if err := executor.Execute(dir, pm.InstallCmd[0], pm.InstallCmd[1:]); err != nil {
 		return fmt.Errorf("failed to run %s: %w", pm.Name, err)
 	}
 
