@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.5.0] - 2025-08-21
+
 ### Added
 - New `gw config` command for viewing and editing configuration interactively
   - Interactive TUI with arrow/j/k navigation for browsing settings
@@ -20,6 +22,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Works similarly to GitHub's "Automatically delete head branches" feature
   - Default value is false to avoid unexpected behavior
   - Branch deletion errors are non-fatal and only show warnings
+- Composer support for automatic dependency installation (Thanks [@zonuexe](https://github.com/zonuexe)! #10)
+  - Detects PHP projects with composer.json
+  - Automatically runs `composer install` when setting up worktrees
+
+### Changed
+- Improved test coverage significantly:
+  - Added comprehensive tests for DefaultClient in interface.go
+  - Increased internal/git package coverage from 42.9% to 79.2%
+  - Added tests for config Update method
+  - Added tests for gw config command
 
 ## [0.4.0] - 2025-08-14
 
