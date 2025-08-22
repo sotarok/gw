@@ -4,6 +4,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -16,19 +17,25 @@ func runGitCommand(t *testing.T, dir string, args ...string) {
 	}
 }
 
+const (
+	defaultMainBranch   = "main"
+	defaultMasterBranch = "master"
+)
+
 // Helper function to get the default branch name (main or master)
 func getDefaultBranchName(t *testing.T, dir string) string {
-	cmd := exec.Command("git", "symbolic-ref", "HEAD")
+	cmd := exec.Command("git", "symbolic-ref", "--short", "HEAD")
 	cmd.Dir = dir
 	output, err := cmd.Output()
 	if err != nil {
-		t.Fatalf("Failed to get default branch: %v", err)
+		// If we can't get the branch name, assume main
+		return defaultMainBranch
 	}
-	branch := string(output)
-	if branch == "refs/heads/main\n" {
-		return "main"
+	branch := strings.TrimSpace(string(output))
+	if branch == "" {
+		return defaultMainBranch
 	}
-	return "master"
+	return branch
 }
 
 func TestFindUntrackedEnvFiles(t *testing.T) {
