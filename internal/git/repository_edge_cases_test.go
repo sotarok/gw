@@ -37,9 +37,12 @@ func TestListAllBranches_EdgeCases(t *testing.T) {
 		runGitCommand(t, tmpDir, "add", "test.txt")
 		runGitCommand(t, tmpDir, "commit", "-m", "Initial commit")
 
+		// Get the default branch name
+		defaultBranch := getDefaultBranchName(t, tmpDir)
+
 		// Add remote and push
 		runGitCommand(t, tmpDir, "remote", "add", "origin", remoteDir)
-		runGitCommand(t, tmpDir, "push", "-u", "origin", "main")
+		runGitCommand(t, tmpDir, "push", "-u", "origin", defaultBranch)
 
 		// Create and push additional branches
 		runGitCommand(t, tmpDir, "checkout", "-b", "feature-1")
@@ -188,9 +191,12 @@ func TestBranchExists_EdgeCases(t *testing.T) {
 		runGitCommand(t, tmpDir, "add", "test.txt")
 		runGitCommand(t, tmpDir, "commit", "-m", "Initial commit")
 
+		// Get the default branch name
+		defaultBranch := getDefaultBranchName(t, tmpDir)
+
 		// Add remote and push
 		runGitCommand(t, tmpDir, "remote", "add", "origin", remoteDir)
-		runGitCommand(t, tmpDir, "push", "-u", "origin", "main")
+		runGitCommand(t, tmpDir, "push", "-u", "origin", defaultBranch)
 
 		// Create remote-only branch
 		runGitCommand(t, tmpDir, "checkout", "-b", "remote-only")
@@ -198,7 +204,7 @@ func TestBranchExists_EdgeCases(t *testing.T) {
 		runGitCommand(t, tmpDir, "add", "test.txt")
 		runGitCommand(t, tmpDir, "commit", "-m", "Remote branch")
 		runGitCommand(t, tmpDir, "push", "-u", "origin", "remote-only")
-		runGitCommand(t, tmpDir, "checkout", "main")
+		runGitCommand(t, tmpDir, "checkout", defaultBranch)
 		runGitCommand(t, tmpDir, "branch", "-D", "remote-only") // Delete local branch
 
 		// Change to the repository directory
@@ -207,12 +213,12 @@ func TestBranchExists_EdgeCases(t *testing.T) {
 		os.Chdir(tmpDir)
 
 		// Check local branch exists
-		exists, err := BranchExists("main")
+		exists, err := BranchExists(defaultBranch)
 		if err != nil {
 			t.Fatalf("BranchExists failed: %v", err)
 		}
 		if !exists {
-			t.Error("Expected main branch to exist")
+			t.Errorf("Expected %s branch to exist", defaultBranch)
 		}
 
 		// Check remote-only branch exists

@@ -77,20 +77,23 @@ func TestCreateWorktree_EdgeCases(t *testing.T) {
 		runGitCommand(t, tmpDir, "add", "test.txt")
 		runGitCommand(t, tmpDir, "commit", "-m", "Initial commit")
 
+		// Get the default branch name
+		defaultBranch := getDefaultBranchName(t, tmpDir)
+
 		// Change to the repository directory
 		originalDir, _ := os.Getwd()
 		defer os.Chdir(originalDir)
 		os.Chdir(tmpDir)
 
 		// Create a worktree first
-		worktreePath, err := CreateWorktree("123", "main")
+		worktreePath, err := CreateWorktree("123", defaultBranch)
 		if err != nil {
 			t.Fatalf("Failed to create first worktree: %v", err)
 		}
 		defer os.RemoveAll(worktreePath)
 
 		// Try to create the same worktree again - should fail
-		_, err = CreateWorktree("123", "main")
+		_, err = CreateWorktree("123", defaultBranch)
 		if err == nil {
 			t.Error("Expected error when creating duplicate worktree")
 		}
@@ -115,13 +118,16 @@ func TestCreateWorktree_EdgeCases(t *testing.T) {
 		runGitCommand(t, tmpDir, "add", "test.txt")
 		runGitCommand(t, tmpDir, "commit", "-m", "Initial commit")
 
+		// Get the default branch name
+		defaultBranch := getDefaultBranchName(t, tmpDir)
+
 		// Change to the repository directory
 		originalDir, _ := os.Getwd()
 		defer os.Chdir(originalDir)
 		os.Chdir(tmpDir)
 
 		// Create worktree
-		worktreePath, err := CreateWorktree("456", "main")
+		worktreePath, err := CreateWorktree("456", defaultBranch)
 		if err != nil {
 			t.Fatalf("Failed to create worktree: %v", err)
 		}
@@ -471,9 +477,12 @@ func TestCreateWorktreeFromBranch_EdgeCases(t *testing.T) {
 		runGitCommand(t, tmpDir, "add", "test.txt")
 		runGitCommand(t, tmpDir, "commit", "-m", "Initial commit")
 
+		// Get the default branch name
+		defaultBranch := getDefaultBranchName(t, tmpDir)
+
 		// Create a new branch
 		runGitCommand(t, tmpDir, "checkout", "-b", "feature-branch")
-		runGitCommand(t, tmpDir, "checkout", "main")
+		runGitCommand(t, tmpDir, "checkout", defaultBranch)
 
 		// Change to the repository directory
 		originalDir, _ := os.Getwd()
@@ -513,9 +522,12 @@ func TestCreateWorktreeFromBranch_EdgeCases(t *testing.T) {
 		runGitCommand(t, tmpDir, "add", "test.txt")
 		runGitCommand(t, tmpDir, "commit", "-m", "Initial commit")
 
+		// Get the default branch name
+		defaultBranch := getDefaultBranchName(t, tmpDir)
+
 		// Create a branch and a worktree for it
 		runGitCommand(t, tmpDir, "checkout", "-b", "test-branch")
-		runGitCommand(t, tmpDir, "checkout", "main")
+		runGitCommand(t, tmpDir, "checkout", defaultBranch)
 
 		// Change to the repository directory
 		originalDir, _ := os.Getwd()

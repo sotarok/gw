@@ -183,6 +183,9 @@ func TestIsMergedToOrigin_EdgeCases(t *testing.T) {
 		runGitCommand(t, tmpDir, "add", "test.txt")
 		runGitCommand(t, tmpDir, "commit", "-m", "Initial commit")
 
+		// Get the default branch name
+		defaultBranch := getDefaultBranchName(t, tmpDir)
+
 		// Create a new branch
 		runGitCommand(t, tmpDir, "checkout", "-b", "feature-branch")
 
@@ -199,10 +202,10 @@ func TestIsMergedToOrigin_EdgeCases(t *testing.T) {
 		defer os.RemoveAll(remoteDir)
 		runGitCommand(t, remoteDir, "init", "--bare")
 
-		// Add remote and push main branch only
+		// Add remote and push default branch only
 		runGitCommand(t, tmpDir, "remote", "add", "origin", remoteDir)
-		runGitCommand(t, tmpDir, "checkout", "main")
-		runGitCommand(t, tmpDir, "push", "origin", "main")
+		runGitCommand(t, tmpDir, "checkout", defaultBranch)
+		runGitCommand(t, tmpDir, "push", "origin", defaultBranch)
 		runGitCommand(t, tmpDir, "checkout", "feature-branch")
 
 		// Change to the repository directory
@@ -211,7 +214,7 @@ func TestIsMergedToOrigin_EdgeCases(t *testing.T) {
 		os.Chdir(tmpDir)
 
 		// Should return false when branch is not merged
-		merged, err := IsMergedToOrigin("main")
+		merged, err := IsMergedToOrigin(defaultBranch)
 		if err != nil {
 			t.Fatalf("IsMergedToOrigin failed: %v", err)
 		}
