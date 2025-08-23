@@ -23,7 +23,7 @@ const (
 )
 
 // Helper function to get the default branch name (main or master)
-func getDefaultBranchName(t *testing.T, dir string) string {
+func getDefaultBranchName(_ *testing.T, dir string) string {
 	cmd := exec.Command("git", "symbolic-ref", "--short", "HEAD")
 	cmd.Dir = dir
 	output, err := cmd.Output()
