@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- Fix `gw end` incorrectly warning about unpushed commits for merged branches with deleted remotes
+  - The command now correctly detects when a branch has been merged to main even if the remote branch was deleted
+  - This commonly occurs after PR merges with automatic branch deletion on GitHub
+
 ## [0.5.0] - 2025-08-21
 
 ### Added

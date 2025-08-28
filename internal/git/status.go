@@ -28,6 +28,16 @@ func HasUnpushedCommits() (bool, error) {
 	cmd := exec.Command("git", "rev-parse", "--abbrev-ref", branch+"@{upstream}")
 	if err := cmd.Run(); err != nil {
 		// No upstream branch configured
+		// Check if the branch is already merged to main/master
+		// This handles the case where the branch was merged and remote was deleted
+		merged, mergeErr := IsMergedToOrigin("main")
+		if mergeErr == nil && merged {
+			// Branch is merged, so no unpushed commits
+			return false, nil
+		}
+
+		// If we can't determine merge status or branch is not merged,
+		// assume there are unpushed commits for safety
 		return true, nil
 	}
 
