@@ -472,6 +472,141 @@ func TestHasUnpushedCommits(t *testing.T) {
 			t.Error("expected unpushed commits for branch with no upstream")
 		}
 	})
+
+	t.Run("returns false when branch is merged and remote deleted", func(t *testing.T) {
+		tempDir, cleanup := createTestRepo(t)
+		defer cleanup()
+
+		// Change to test repo
+		originalDir, err := os.Getwd()
+		if err != nil {
+			t.Fatalf("failed to get current dir: %v", err)
+		}
+		defer func() {
+			_ = os.Chdir(originalDir)
+		}()
+
+		if err := os.Chdir(tempDir); err != nil {
+			t.Fatalf("failed to change dir: %v", err)
+		}
+
+		// Create initial commit on main
+		testFile := filepath.Join(tempDir, "test.txt")
+		if err := os.WriteFile(testFile, []byte("test"), 0644); err != nil {
+			t.Fatalf("failed to create test file: %v", err)
+		}
+
+		cmd := exec.Command("git", "add", "test.txt")
+		if err := cmd.Run(); err != nil {
+			t.Fatalf("failed to add file: %v", err)
+		}
+
+		cmd = exec.Command("git", "commit", "-m", "initial")
+		if err := cmd.Run(); err != nil {
+			t.Fatalf("failed to commit: %v", err)
+		}
+
+		// Rename branch to main
+		cmd = exec.Command("git", "branch", "-m", "main")
+		_ = cmd.Run()
+
+		// Create a bare remote repository
+		remoteDir, err := os.MkdirTemp("", "test-remote")
+		if err != nil {
+			t.Fatalf("failed to create remote dir: %v", err)
+		}
+		defer os.RemoveAll(remoteDir)
+
+		cmd = exec.Command("git", "init", "--bare")
+		cmd.Dir = remoteDir
+		if err := cmd.Run(); err != nil {
+			t.Fatalf("failed to init bare repo: %v", err)
+		}
+
+		// Add remote and push main
+		cmd = exec.Command("git", "remote", "add", "origin", remoteDir)
+		if err := cmd.Run(); err != nil {
+			t.Fatalf("failed to add remote: %v", err)
+		}
+
+		cmd = exec.Command("git", "push", "-u", "origin", "main")
+		if err := cmd.Run(); err != nil {
+			t.Fatalf("failed to push main: %v", err)
+		}
+
+		// Create feature branch
+		cmd = exec.Command("git", "checkout", "-b", "feature")
+		if err := cmd.Run(); err != nil {
+			t.Fatalf("failed to create feature branch: %v", err)
+		}
+
+		// Add commit to feature branch
+		if err := os.WriteFile(testFile, []byte("feature content"), 0644); err != nil {
+			t.Fatalf("failed to modify file: %v", err)
+		}
+
+		cmd = exec.Command("git", "add", "test.txt")
+		if err := cmd.Run(); err != nil {
+			t.Fatalf("failed to add file: %v", err)
+		}
+
+		cmd = exec.Command("git", "commit", "-m", "feature commit")
+		if err := cmd.Run(); err != nil {
+			t.Fatalf("failed to commit: %v", err)
+		}
+
+		// Push feature branch
+		cmd = exec.Command("git", "push", "-u", "origin", "feature")
+		if err := cmd.Run(); err != nil {
+			t.Fatalf("failed to push feature: %v", err)
+		}
+
+		// Merge feature to main
+		cmd = exec.Command("git", "checkout", "main")
+		if err := cmd.Run(); err != nil {
+			t.Fatalf("failed to checkout main: %v", err)
+		}
+
+		cmd = exec.Command("git", "merge", "feature")
+		if err := cmd.Run(); err != nil {
+			t.Fatalf("failed to merge feature: %v", err)
+		}
+
+		// Push main with merged changes
+		cmd = exec.Command("git", "push", "origin", "main")
+		if err := cmd.Run(); err != nil {
+			t.Fatalf("failed to push: %v", err)
+		}
+
+		// Switch back to feature branch
+		cmd = exec.Command("git", "checkout", "feature")
+		if err := cmd.Run(); err != nil {
+			t.Fatalf("failed to checkout feature: %v", err)
+		}
+
+		// Delete remote branch (simulate PR merge with branch deletion)
+		cmd = exec.Command("git", "push", "origin", "--delete", "feature")
+		if err := cmd.Run(); err != nil {
+			t.Fatalf("failed to delete remote branch: %v", err)
+		}
+
+		// Unset the upstream to simulate the "[gone]" state
+		cmd = exec.Command("git", "branch", "--unset-upstream")
+		if err := cmd.Run(); err != nil {
+			t.Fatalf("failed to unset upstream: %v", err)
+		}
+
+		// Now check for unpushed commits
+		// Should return false because the branch is merged even though upstream is gone
+		hasUnpushed, err := HasUnpushedCommits()
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+
+		if hasUnpushed {
+			t.Error("expected no unpushed commits for merged branch with deleted remote")
+		}
+	})
 }
 
 func TestIsMergedToOrigin(t *testing.T) {
