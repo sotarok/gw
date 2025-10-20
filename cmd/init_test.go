@@ -23,7 +23,7 @@ func TestInitCommand_Execute(t *testing.T) {
 	}{
 		{
 			name:      "user selects all true",
-			userInput: "y\ny\ny\ny\n", // Enable auto-cd, enable iterm2, enable auto-remove, enable shell integration
+			userInput: "y\ny\ny\ny\ny\n", // Enable auto-cd, enable iterm2, enable auto-remove, enable copy-envs, enable shell integration
 			checkConfig: func(t *testing.T, cfg *config.Config) {
 				if !cfg.AutoCD {
 					t.Error("Expected AutoCD to be true")
@@ -34,11 +34,14 @@ func TestInitCommand_Execute(t *testing.T) {
 				if !cfg.AutoRemoveBranch {
 					t.Error("Expected AutoRemoveBranch to be true")
 				}
+				if cfg.CopyEnvs == nil || !*cfg.CopyEnvs {
+					t.Error("Expected CopyEnvs to be true")
+				}
 			},
 		},
 		{
 			name:      "user selects all false",
-			userInput: "n\nn\nn\n", // Disable all
+			userInput: "n\nn\nn\nn\n", // Disable all (auto-cd, iterm2, auto-remove, copy-envs)
 			checkConfig: func(t *testing.T, cfg *config.Config) {
 				if cfg.AutoCD {
 					t.Error("Expected AutoCD to be false")
@@ -49,11 +52,14 @@ func TestInitCommand_Execute(t *testing.T) {
 				if cfg.AutoRemoveBranch {
 					t.Error("Expected AutoRemoveBranch to be false")
 				}
+				if cfg.CopyEnvs != nil && *cfg.CopyEnvs {
+					t.Error("Expected CopyEnvs to be false")
+				}
 			},
 		},
 		{
 			name:      "user uses defaults (press enter)",
-			userInput: "\n\n\ny\n", // Use defaults (true, false, false), enable shell integration
+			userInput: "\n\n\n\ny\n", // Use defaults (true, false, false, false), enable shell integration
 			checkConfig: func(t *testing.T, cfg *config.Config) {
 				if !cfg.AutoCD {
 					t.Error("Expected AutoCD to be true (default)")
@@ -64,11 +70,12 @@ func TestInitCommand_Execute(t *testing.T) {
 				if cfg.AutoRemoveBranch {
 					t.Error("Expected AutoRemoveBranch to be false (default)")
 				}
+				// copy_envs default is nil (not configured), which is fine
 			},
 		},
 		{
 			name:      "mixed selections",
-			userInput: "n\ny\ny\n", // Disable auto-cd, enable iterm2, enable auto-remove
+			userInput: "n\ny\ny\nn\n", // Disable auto-cd, enable iterm2, enable auto-remove, disable copy-envs
 			checkConfig: func(t *testing.T, cfg *config.Config) {
 				if cfg.AutoCD {
 					t.Error("Expected AutoCD to be false")
@@ -78,6 +85,9 @@ func TestInitCommand_Execute(t *testing.T) {
 				}
 				if !cfg.AutoRemoveBranch {
 					t.Error("Expected AutoRemoveBranch to be true")
+				}
+				if cfg.CopyEnvs != nil && *cfg.CopyEnvs {
+					t.Error("Expected CopyEnvs to be false")
 				}
 			},
 		},
@@ -143,7 +153,7 @@ func TestInitCommand_ExistingConfig(t *testing.T) {
 	}
 
 	// Setup mock stdin/stdout
-	stdin := strings.NewReader("y\n\n\n\ny\n") // Confirm overwrite, use defaults (true, false, false), enable shell integration
+	stdin := strings.NewReader("y\n\n\n\n\ny\n") // Confirm overwrite, use defaults (true, false, false, false), enable shell integration
 	stdout := &bytes.Buffer{}
 	stderr := &bytes.Buffer{}
 
@@ -417,7 +427,7 @@ func TestInitCommand_ShellIntegration(t *testing.T) {
 	}{
 		{
 			name:           "user enables auto-cd and shell integration added automatically",
-			userInput:      "y\nn\nn\ny\n", // Enable auto-cd, disable iterm2, disable auto-remove, enable shell integration
+			userInput:      "y\nn\nn\nn\ny\n", // Enable auto-cd, disable iterm2, disable auto-remove, disable copy-envs, enable shell integration
 			shellPath:      "/bin/bash",
 			expectRcUpdate: true, // Now writes to rc file
 			checkOutput: func(t *testing.T, output string) {
@@ -431,7 +441,7 @@ func TestInitCommand_ShellIntegration(t *testing.T) {
 		},
 		{
 			name:           "user enables auto-cd but declines shell integration instructions",
-			userInput:      "y\nn\nn\nn\n", // Enable auto-cd, disable iterm2, disable auto-remove, decline shell integration
+			userInput:      "y\nn\nn\nn\nn\n", // Enable auto-cd, disable iterm2, disable auto-remove, disable copy-envs, decline shell integration
 			shellPath:      "/bin/bash",
 			expectRcUpdate: false,
 			checkOutput: func(t *testing.T, output string) {
@@ -445,7 +455,7 @@ func TestInitCommand_ShellIntegration(t *testing.T) {
 		},
 		{
 			name:           "user disables auto-cd, no shell integration prompt",
-			userInput:      "n\nn\nn\n", // Disable auto-cd, disable iterm2, disable auto-remove
+			userInput:      "n\nn\nn\nn\n", // Disable auto-cd, disable iterm2, disable auto-remove, disable copy-envs
 			shellPath:      "/bin/bash",
 			expectRcUpdate: false,
 			checkOutput: func(t *testing.T, output string) {
@@ -456,7 +466,7 @@ func TestInitCommand_ShellIntegration(t *testing.T) {
 		},
 		{
 			name:           "shell integration already exists - shows update instructions",
-			userInput:      "y\nn\nn\ny\n", // Enable auto-cd, disable iterm2, disable auto-remove, enable shell integration
+			userInput:      "y\nn\nn\nn\ny\n", // Enable auto-cd, disable iterm2, disable auto-remove, disable copy-envs, enable shell integration
 			shellPath:      "/bin/bash",
 			expectRcUpdate: false, // Should not update because it already exists
 			existingRc:     true,

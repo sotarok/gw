@@ -131,7 +131,11 @@ func (m *mockGit) FindUntrackedEnvFiles(repoPath string) ([]git.EnvFile, error) 
 }
 
 func (m *mockGit) CopyEnvFiles(envFiles []git.EnvFile, sourceRoot, destRoot string) error {
-	return m.copyEnvError
+	if m.copyEnvError != nil {
+		return m.copyEnvError
+	}
+	// Actually copy files for testing
+	return git.CopyEnvFiles(envFiles, sourceRoot, destRoot)
 }
 
 func (m *mockGit) RunCommand(command string) error {
@@ -153,6 +157,7 @@ func (m *mockGit) DeleteBranch(branch string) error {
 type mockUI struct {
 	confirmResult bool
 	confirmError  error
+	confirmCalled bool
 
 	// Override functions for custom behavior
 	ShowSelectorFn   func(string, []ui.SelectorItem) (*ui.SelectorItem, error)
@@ -174,6 +179,7 @@ func (m *mockUI) ShowSelector(title string, items []ui.SelectorItem) (*ui.Select
 }
 
 func (m *mockUI) ConfirmPrompt(message string) (bool, error) {
+	m.confirmCalled = true
 	return m.confirmResult, m.confirmError
 }
 
@@ -405,13 +411,19 @@ func TestStartCommand_Execute(t *testing.T) {
 			copyEnvs:    false,
 			mockSetup: func() (*mockGit, *mockUI, *mockDetect, func()) {
 				tempDir, _ := os.MkdirTemp("", "gw-worktree-*")
+				// Create a real env file in the current directory for testing
+				envFile := ".env.test"
+				os.WriteFile(envFile, []byte("TEST=value"), 0600)
 				return &mockGit{
-					isGitRepo:    true,
-					worktreePath: tempDir,
-					envFiles: []git.EnvFile{
-						{Path: ".env", AbsolutePath: "/repo/.env"},
-					},
-				}, &mockUI{confirmResult: true}, &mockDetect{}, func() { os.RemoveAll(tempDir) }
+						isGitRepo:    true,
+						worktreePath: tempDir,
+						envFiles: []git.EnvFile{
+							{Path: ".env.test", AbsolutePath: envFile},
+						},
+					}, &mockUI{confirmResult: true}, &mockDetect{}, func() {
+						os.RemoveAll(tempDir)
+						os.Remove(envFile)
+					}
 			},
 			checkOutput: func(t *testing.T, stdout, stderr string) {
 				if !contains(stdout, "Found 1 untracked environment file(s):") {
@@ -429,20 +441,26 @@ func TestStartCommand_Execute(t *testing.T) {
 			copyEnvs:    true,
 			mockSetup: func() (*mockGit, *mockUI, *mockDetect, func()) {
 				tempDir, _ := os.MkdirTemp("", "gw-worktree-*")
+				// Create a real env file in the current directory for testing
+				envFile := ".env.test2"
+				os.WriteFile(envFile, []byte("TEST=value"), 0600)
 				return &mockGit{
-					isGitRepo:    true,
-					worktreePath: tempDir,
-					envFiles: []git.EnvFile{
-						{Path: ".env", AbsolutePath: "/repo/.env"},
-					},
-				}, &mockUI{}, &mockDetect{}, func() { os.RemoveAll(tempDir) }
+						isGitRepo:    true,
+						worktreePath: tempDir,
+						envFiles: []git.EnvFile{
+							{Path: ".env.test2", AbsolutePath: envFile},
+						},
+					}, &mockUI{}, &mockDetect{}, func() {
+						os.RemoveAll(tempDir)
+						os.Remove(envFile)
+					}
 			},
 			checkOutput: func(t *testing.T, stdout, stderr string) {
 				if !contains(stdout, "Copying environment files:") {
-					t.Error("Expected copying message in stdout")
+					t.Errorf("Expected copying message in stdout, got:\n%s", stdout)
 				}
 				if !contains(stdout, "✓ Environment files copied successfully") {
-					t.Error("Expected copy success message in stdout")
+					t.Errorf("Expected copy success message in stdout, got:\n%s", stdout)
 				}
 			},
 		},
@@ -656,16 +674,22 @@ func TestCheckoutCommand_Execute(t *testing.T) {
 			copyEnvs: true,
 			mockSetup: func() (*mockGit, *mockUI, *mockDetect, func()) {
 				tempDir, _ := os.MkdirTemp("", "gw-worktree-*")
+				// Create a real env file in the current directory for testing
+				envFile := ".env.test3"
+				os.WriteFile(envFile, []byte("TEST=value"), 0600)
 				mockGitInstance := &mockGit{
 					isGitRepo: true,
 					envFiles: []git.EnvFile{
-						{Path: ".env", AbsolutePath: "/repo/.env"},
+						{Path: ".env.test3", AbsolutePath: envFile},
 					},
 				}
 				mockGitInstance.BranchExistsFn = func(branch string) (bool, error) {
 					return true, nil
 				}
-				return mockGitInstance, &mockUI{}, &mockDetect{}, func() { os.RemoveAll(tempDir) }
+				return mockGitInstance, &mockUI{}, &mockDetect{}, func() {
+					os.RemoveAll(tempDir)
+					os.Remove(envFile)
+				}
 			},
 			checkOutput: func(t *testing.T, stdout, stderr string) {
 				if !contains(stdout, "Copying environment files:") {
@@ -1186,6 +1210,137 @@ func TestEndCommand_BranchDeletion(t *testing.T) {
 			}
 		})
 	}
+}
+
+// Test copy_envs configuration priority
+func TestHandleEnvFiles_ConfigPriority(t *testing.T) {
+	tests := []struct {
+		name           string
+		configCopyEnvs *bool
+		copyEnvsFlag   bool
+		expectedPrompt bool
+		expectedCopy   bool
+		userResponse   bool
+	}{
+		{
+			name:           "flag set to true - always copy",
+			configCopyEnvs: nil,
+			copyEnvsFlag:   true,
+			expectedPrompt: false,
+			expectedCopy:   true,
+		},
+		{
+			name:           "flag set, config is false - flag overrides config",
+			configCopyEnvs: boolPtr(false),
+			copyEnvsFlag:   true,
+			expectedPrompt: false,
+			expectedCopy:   true,
+		},
+		{
+			name:           "config is true, flag not set - use config",
+			configCopyEnvs: boolPtr(true),
+			copyEnvsFlag:   false,
+			expectedPrompt: false,
+			expectedCopy:   true,
+		},
+		{
+			name:           "config is false, flag not set - use config (don't copy)",
+			configCopyEnvs: boolPtr(false),
+			copyEnvsFlag:   false,
+			expectedPrompt: false,
+			expectedCopy:   false,
+		},
+		{
+			name:           "neither config nor flag set - prompt user (yes)",
+			configCopyEnvs: nil,
+			copyEnvsFlag:   false,
+			expectedPrompt: true,
+			expectedCopy:   true,
+			userResponse:   true,
+		},
+		{
+			name:           "neither config nor flag set - prompt user (no)",
+			configCopyEnvs: nil,
+			copyEnvsFlag:   false,
+			expectedPrompt: true,
+			expectedCopy:   false,
+			userResponse:   false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Setup temporary directories
+			tempDir := t.TempDir()
+			originalDir := filepath.Join(tempDir, "original")
+			worktreeDir := filepath.Join(tempDir, "worktree")
+			os.MkdirAll(originalDir, 0755)
+			os.MkdirAll(worktreeDir, 0755)
+
+			// Create a test env file
+			envFile := filepath.Join(originalDir, ".env.local")
+			os.WriteFile(envFile, []byte("TEST=value"), 0600)
+
+			// Setup mocks
+			stdout := &bytes.Buffer{}
+			stderr := &bytes.Buffer{}
+			mockGit := &mockGit{
+				isGitRepo: true,
+				envFiles: []git.EnvFile{
+					{Path: ".env.local", AbsolutePath: envFile},
+				},
+			}
+
+			mockUI := &mockUI{
+				confirmResult: tt.userResponse,
+			}
+
+			deps := &Dependencies{
+				Git:    mockGit,
+				UI:     mockUI,
+				Detect: &mockDetect{},
+				Stdout: stdout,
+				Stderr: stderr,
+			}
+
+			cfg := &config.Config{
+				CopyEnvs: tt.configCopyEnvs,
+			}
+
+			// Execute handleEnvFiles
+			err := handleEnvFiles(deps, cfg, tt.copyEnvsFlag, originalDir, worktreeDir)
+			if err != nil {
+				t.Fatalf("handleEnvFiles failed: %v", err)
+			}
+
+			// Verify prompt behavior
+			if tt.expectedPrompt && !mockUI.confirmCalled {
+				t.Error("Expected user to be prompted, but wasn't")
+			}
+			if !tt.expectedPrompt && mockUI.confirmCalled {
+				t.Error("Expected no prompt, but user was prompted")
+			}
+
+			// Verify copy behavior
+			copiedFile := filepath.Join(worktreeDir, ".env.local")
+			fileExists := false
+			if _, err := os.Stat(copiedFile); err == nil {
+				fileExists = true
+			}
+
+			if tt.expectedCopy && !fileExists {
+				t.Errorf("Expected file to be copied, but it wasn't. Output:\n%s", stdout.String())
+			}
+			if !tt.expectedCopy && fileExists {
+				t.Error("Expected file not to be copied, but it was")
+			}
+		})
+	}
+}
+
+// Helper function to create a bool pointer
+func boolPtr(b bool) *bool {
+	return &b
 }
 
 // Helper functions
