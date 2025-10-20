@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- Add `copy_envs` configuration option for automatic .env file copying behavior
+  - Configure default behavior in `~/.gwrc` to avoid interactive prompts
+  - Three-tier priority system: `--copy-envs` flag > config setting > interactive prompt
+  - When unset, maintains existing interactive prompt behavior
+  - Can be toggled in `gw config` interactive UI or `gw init` setup wizard
+
 ### Fixed
 - Fix `gw end` incorrectly warning about unpushed commits for merged branches with deleted remotes
   - The command now correctly detects when a branch has been merged to main even if the remote branch was deleted
