@@ -15,6 +15,7 @@ const (
 	autoCDKey           = "auto_cd"
 	updateITerm2TabKey  = "update_iterm2_tab"
 	autoRemoveBranchKey = "auto_remove_branch"
+	copyEnvsKey         = "copy_envs"
 )
 
 // Item represents a single configuration item with metadata
@@ -27,9 +28,10 @@ type Item struct {
 
 // Config represents the gw configuration
 type Config struct {
-	AutoCD           bool `toml:"auto_cd"`
-	UpdateITerm2Tab  bool `toml:"update_iterm2_tab"`
-	AutoRemoveBranch bool `toml:"auto_remove_branch"`
+	AutoCD           bool  `toml:"auto_cd"`
+	UpdateITerm2Tab  bool  `toml:"update_iterm2_tab"`
+	AutoRemoveBranch bool  `toml:"auto_remove_branch"`
+	CopyEnvs         *bool `toml:"copy_envs"` // Pointer to distinguish between unset and false
 }
 
 // New creates a new Config with default values
@@ -38,6 +40,7 @@ func New() *Config {
 		AutoCD:           true,  // Default to true for backward compatibility
 		UpdateITerm2Tab:  false, // Default to false to avoid unexpected behavior
 		AutoRemoveBranch: false, // Default to false to avoid unexpected behavior
+		CopyEnvs:         nil,   // nil means not configured, will prompt user
 	}
 }
 
@@ -81,6 +84,9 @@ func Load(path string) (*Config, error) {
 			config.UpdateITerm2Tab = value == trueValue
 		case autoRemoveBranchKey:
 			config.AutoRemoveBranch = value == trueValue
+		case copyEnvsKey:
+			boolValue := value == trueValue
+			config.CopyEnvs = &boolValue
 		}
 	}
 
@@ -99,11 +105,18 @@ func (c *Config) Save(path string) error {
 		return fmt.Errorf("failed to create config directory: %w", err)
 	}
 
+	var copyEnvsStr string
+	if c.CopyEnvs != nil {
+		copyEnvsStr = fmt.Sprintf("copy_envs = %v\n", *c.CopyEnvs)
+	} else {
+		copyEnvsStr = "# copy_envs = false  # Uncomment to set default behavior\n"
+	}
+
 	content := fmt.Sprintf(`# gw configuration file
 auto_cd = %v
 update_iterm2_tab = %v
 auto_remove_branch = %v
-`, c.AutoCD, c.UpdateITerm2Tab, c.AutoRemoveBranch)
+%s`, c.AutoCD, c.UpdateITerm2Tab, c.AutoRemoveBranch, copyEnvsStr)
 
 	if err := os.WriteFile(path, []byte(content), 0600); err != nil {
 		return fmt.Errorf("failed to write config file: %w", err)
@@ -124,6 +137,11 @@ func GetConfigPath() string {
 
 // GetConfigItems returns all configuration items with their descriptions
 func (c *Config) GetConfigItems() []Item {
+	copyEnvsValue := false
+	if c.CopyEnvs != nil {
+		copyEnvsValue = *c.CopyEnvs
+	}
+
 	return []Item{
 		{
 			Key:         autoCDKey,
@@ -143,6 +161,12 @@ func (c *Config) GetConfigItems() []Item {
 			Description: "Automatically delete local branch after successful worktree removal",
 			Default:     false,
 		},
+		{
+			Key:         copyEnvsKey,
+			Value:       copyEnvsValue,
+			Description: "Automatically copy .env files to new worktrees (prompt if not set)",
+			Default:     false,
+		},
 	}
 }
 
@@ -155,6 +179,8 @@ func (c *Config) SetConfigItem(key string, value bool) error {
 		c.UpdateITerm2Tab = value
 	case autoRemoveBranchKey:
 		c.AutoRemoveBranch = value
+	case copyEnvsKey:
+		c.CopyEnvs = &value
 	default:
 		return fmt.Errorf("unknown configuration key: %s", key)
 	}

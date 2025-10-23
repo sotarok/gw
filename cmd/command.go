@@ -139,11 +139,15 @@ func (c *StartCommand) Execute(issueNumber, baseBranch string) error {
 }
 
 func (c *StartCommand) handleEnvFiles(originalDir, worktreePath string) error {
-	return handleEnvFiles(c.deps, c.copyEnvs, originalDir, worktreePath)
+	return handleEnvFiles(c.deps, c.config, c.copyEnvs, originalDir, worktreePath)
 }
 
 // handleEnvFiles is a common function for handling environment files
-func handleEnvFiles(deps *Dependencies, copyEnvs bool, originalDir, worktreePath string) error {
+// Priority order:
+// 1. If --copy-envs flag is set, always copy
+// 2. If config.CopyEnvs is set (true/false), use that value (unless flag overrides)
+// 3. If neither is set, prompt user (interactive mode)
+func handleEnvFiles(deps *Dependencies, cfg *config.Config, copyEnvsFlag bool, originalDir, worktreePath string) error {
 	envFiles, err := deps.Git.FindUntrackedEnvFiles(originalDir)
 	if err != nil {
 		return fmt.Errorf("failed to find env files: %w", err)
@@ -159,10 +163,24 @@ func handleEnvFiles(deps *Dependencies, copyEnvs bool, originalDir, worktreePath
 		filePaths[i] = f.Path
 	}
 
-	shouldCopy := copyEnvs
+	// Determine whether to copy based on priority
+	var shouldCopy bool
+	var needsPrompt bool
 
-	// If flag not set, ask user
-	if !copyEnvs {
+	if copyEnvsFlag {
+		// Priority 1: Flag is set, always copy
+		shouldCopy = true
+		needsPrompt = false
+	} else if cfg != nil && cfg.CopyEnvs != nil {
+		// Priority 2: Config is set, use config value
+		shouldCopy = *cfg.CopyEnvs
+		needsPrompt = false
+	} else {
+		// Priority 3: Neither flag nor config is set, prompt user
+		needsPrompt = true
+	}
+
+	if needsPrompt {
 		fmt.Fprintf(deps.Stdout, "\nFound %d untracked environment file(s):\n", len(envFiles))
 		deps.UI.ShowEnvFilesList(filePaths)
 
@@ -172,8 +190,8 @@ func handleEnvFiles(deps *Dependencies, copyEnvs bool, originalDir, worktreePath
 			return fmt.Errorf("failed to get user input: %w", err)
 		}
 		shouldCopy = confirmed
-	} else {
-		// When flag is set, also show the files being copied
+	} else if shouldCopy {
+		// When copy decision is made without prompting, show the files being copied
 		fmt.Fprintf(deps.Stdout, "\nCopying environment files:\n")
 		deps.UI.ShowEnvFilesList(filePaths)
 	}
@@ -312,7 +330,7 @@ func (c *CheckoutCommand) Execute(branch string) error {
 }
 
 func (c *CheckoutCommand) handleEnvFiles(originalDir, worktreePath string) error {
-	return handleEnvFiles(c.deps, c.copyEnvs, originalDir, worktreePath)
+	return handleEnvFiles(c.deps, c.config, c.copyEnvs, originalDir, worktreePath)
 }
 
 func (c *CheckoutCommand) selectBranch() (string, error) {

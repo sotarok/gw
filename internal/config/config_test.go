@@ -23,6 +23,11 @@ func TestNewConfig(t *testing.T) {
 	if config.AutoRemoveBranch {
 		t.Error("Expected AutoRemoveBranch to be false by default")
 	}
+
+	// Default value should be nil for copy-envs (not configured)
+	if config.CopyEnvs != nil {
+		t.Errorf("Expected CopyEnvs to be nil by default, got %v", config.CopyEnvs)
+	}
 }
 
 func TestLoadConfig_FileNotExists(t *testing.T) {
@@ -254,7 +259,11 @@ func TestSaveConfig_DirectoryCreation(t *testing.T) {
 		t.Error("Config file should have 0600 permissions")
 	}
 
-	expectedContent := "# gw configuration file\nauto_cd = true\nupdate_iterm2_tab = false\nauto_remove_branch = false\n"
+	expectedContent := "# gw configuration file\n" +
+		"auto_cd = true\n" +
+		"update_iterm2_tab = false\n" +
+		"auto_remove_branch = false\n" +
+		"# copy_envs = false  # Uncomment to set default behavior\n"
 	if string(content) != expectedContent {
 		t.Errorf("Expected content:\n%s\nGot:\n%s", expectedContent, string(content))
 	}
@@ -265,13 +274,14 @@ func TestGetConfigItems(t *testing.T) {
 		AutoCD:           true,
 		UpdateITerm2Tab:  false,
 		AutoRemoveBranch: true,
+		CopyEnvs:         nil,
 	}
 
 	items := config.GetConfigItems()
 
-	// Should return 3 items
-	if len(items) != 3 {
-		t.Fatalf("Expected 3 config items, got %d", len(items))
+	// Should return 4 items (added copy_envs)
+	if len(items) != 4 {
+		t.Fatalf("Expected 4 config items, got %d", len(items))
 	}
 
 	// Check auto_cd item
@@ -320,6 +330,161 @@ func TestGetConfigItems(t *testing.T) {
 	}
 }
 
+func TestLoadConfig_CopyEnvs(t *testing.T) {
+	tests := []struct {
+		name           string
+		configContent  string
+		expectedValue  *bool
+		expectedString string
+	}{
+		{
+			name: "copy_envs = true",
+			configContent: `# gw configuration file
+auto_cd = true
+copy_envs = true
+`,
+			expectedValue:  boolPtr(true),
+			expectedString: "true",
+		},
+		{
+			name: "copy_envs = false",
+			configContent: `# gw configuration file
+auto_cd = true
+copy_envs = false
+`,
+			expectedValue:  boolPtr(false),
+			expectedString: "false",
+		},
+		{
+			name: "copy_envs not set",
+			configContent: `# gw configuration file
+auto_cd = true
+`,
+			expectedValue:  nil,
+			expectedString: "nil",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			tempDir := t.TempDir()
+			configPath := filepath.Join(tempDir, ".gwrc")
+
+			if err := os.WriteFile(configPath, []byte(tt.configContent), 0644); err != nil {
+				t.Fatalf("Failed to write test config: %v", err)
+			}
+
+			config, err := Load(configPath)
+			if err != nil {
+				t.Fatalf("Failed to load config: %v", err)
+			}
+
+			if tt.expectedValue == nil {
+				if config.CopyEnvs != nil {
+					t.Errorf("Expected CopyEnvs to be nil, got %v", *config.CopyEnvs)
+				}
+			} else {
+				if config.CopyEnvs == nil {
+					t.Errorf("Expected CopyEnvs to be %v, got nil", *tt.expectedValue)
+				} else if *config.CopyEnvs != *tt.expectedValue {
+					t.Errorf("Expected CopyEnvs to be %v, got %v", *tt.expectedValue, *config.CopyEnvs)
+				}
+			}
+		})
+	}
+}
+
+func TestSaveConfig_CopyEnvs(t *testing.T) {
+	tests := []struct {
+		name             string
+		copyEnvs         *bool
+		expectedInFile   string
+		shouldContain    bool
+		shouldNotContain bool
+	}{
+		{
+			name:           "copy_envs = true",
+			copyEnvs:       boolPtr(true),
+			expectedInFile: "copy_envs = true",
+			shouldContain:  true,
+		},
+		{
+			name:           "copy_envs = false",
+			copyEnvs:       boolPtr(false),
+			expectedInFile: "copy_envs = false",
+			shouldContain:  true,
+		},
+		{
+			name:             "copy_envs not set (nil)",
+			copyEnvs:         nil,
+			expectedInFile:   "# copy_envs = false",
+			shouldNotContain: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			tempDir := t.TempDir()
+			configPath := filepath.Join(tempDir, ".gwrc")
+
+			config := &Config{
+				AutoCD:           true,
+				UpdateITerm2Tab:  false,
+				AutoRemoveBranch: false,
+				CopyEnvs:         tt.copyEnvs,
+			}
+
+			err := config.Save(configPath)
+			if err != nil {
+				t.Fatalf("Failed to save config: %v", err)
+			}
+
+			content, err := os.ReadFile(configPath)
+			if err != nil {
+				t.Fatalf("Failed to read saved config: %v", err)
+			}
+
+			contentStr := string(content)
+			if tt.shouldContain && !contains(contentStr, tt.expectedInFile) {
+				t.Errorf("Expected config to contain '%s', got:\n%s", tt.expectedInFile, contentStr)
+			}
+
+			// Verify we can load it back
+			loaded, err := Load(configPath)
+			if err != nil {
+				t.Fatalf("Failed to load saved config: %v", err)
+			}
+
+			if tt.copyEnvs == nil {
+				if loaded.CopyEnvs != nil {
+					t.Errorf("Expected loaded CopyEnvs to be nil, got %v", *loaded.CopyEnvs)
+				}
+			} else {
+				if loaded.CopyEnvs == nil {
+					t.Errorf("Expected loaded CopyEnvs to be %v, got nil", *tt.copyEnvs)
+				} else if *loaded.CopyEnvs != *tt.copyEnvs {
+					t.Errorf("Expected loaded CopyEnvs to be %v, got %v", *tt.copyEnvs, *loaded.CopyEnvs)
+				}
+			}
+		})
+	}
+}
+
+// Helper function to create a bool pointer
+func boolPtr(b bool) *bool {
+	return &b
+}
+
+// Helper function to check if a string contains a substring
+func contains(s, substr string) bool {
+	for i := 0; i <= len(s)-len(substr); i++ {
+		if s[i:i+len(substr)] == substr {
+			return true
+		}
+	}
+	return false
+}
+
 func TestSetConfigItem(t *testing.T) {
 	config := New()
 
@@ -348,6 +513,17 @@ func TestSetConfigItem(t *testing.T) {
 	}
 	if config.AutoRemoveBranch != true {
 		t.Errorf("Expected AutoRemoveBranch to be true after setting, got %v", config.AutoRemoveBranch)
+	}
+
+	// Test setting copy_envs
+	err = config.SetConfigItem("copy_envs", true)
+	if err != nil {
+		t.Errorf("Failed to set copy_envs: %v", err)
+	}
+	if config.CopyEnvs == nil {
+		t.Error("Expected CopyEnvs to be non-nil after setting")
+	} else if *config.CopyEnvs != true {
+		t.Errorf("Expected CopyEnvs to be true after setting, got %v", *config.CopyEnvs)
 	}
 
 	// Test setting unknown key
