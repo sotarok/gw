@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.5.2] - 2025-10-27
+
 ### Added
 - Add `copy_envs` configuration option for automatic .env file copying behavior
   - Configure default behavior in `~/.gwrc` to avoid interactive prompts
