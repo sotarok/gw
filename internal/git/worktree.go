@@ -118,10 +118,21 @@ func RemoveWorktreeByPath(worktreePath string, force bool) error {
 	args = append(args, worktreePath)
 
 	cmd := exec.Command("git", args...)
+	// Capture stderr to provide better error messages
+	var stderr strings.Builder
 	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
+	cmd.Stderr = &stderr
 
 	if err := cmd.Run(); err != nil {
+		stderrStr := stderr.String()
+		// Check if the error is due to uncommitted changes
+		if strings.Contains(stderrStr, "contains modified or untracked files") {
+			return fmt.Errorf("worktree contains uncommitted changes or untracked files\n\nTo force remove the worktree, use:\n  gw end <branch> -f")
+		}
+		// Display the original error message
+		if stderrStr != "" {
+			fmt.Fprint(os.Stderr, stderrStr)
+		}
 		return fmt.Errorf("failed to remove worktree: %w", err)
 	}
 

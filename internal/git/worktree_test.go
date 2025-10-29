@@ -570,6 +570,80 @@ func TestRemoveWorktreeWithForce(t *testing.T) {
 	})
 }
 
+func TestRemoveWorktreeErrorMessage(t *testing.T) {
+	t.Run("shows user-friendly error message for uncommitted changes", func(t *testing.T) {
+		// Save and restore working directory first
+		originalDir, err := os.Getwd()
+		if err != nil {
+			t.Fatalf("failed to get current dir: %v", err)
+		}
+		defer os.Chdir(originalDir)
+
+		// Create a temporary git repository
+		tempDir, err := os.MkdirTemp("", "test-error-message")
+		if err != nil {
+			t.Fatalf("failed to create temp dir: %v", err)
+		}
+		defer os.RemoveAll(tempDir)
+
+		// Initialize git repo
+		if err := os.Chdir(tempDir); err != nil {
+			t.Fatalf("failed to change dir: %v", err)
+		}
+
+		if err := RunCommand("git init"); err != nil {
+			t.Fatalf("failed to init git repo: %v", err)
+		}
+
+		// Configure git
+		if err := RunCommand("git config user.email 'test@example.com' && git config user.name 'Test User'"); err != nil {
+			t.Fatalf("failed to configure git: %v", err)
+		}
+
+		// Create initial commit
+		if err := os.WriteFile("README.md", []byte("test"), 0644); err != nil {
+			t.Fatalf("failed to create file: %v", err)
+		}
+		if err := RunCommand("git add . && git commit -m 'initial commit'"); err != nil {
+			t.Fatalf("failed to create commit: %v", err)
+		}
+
+		// Create main branch
+		if err := RunCommand("git checkout -b main"); err != nil {
+			// Might already be on main
+			_ = RunCommand("git branch -m main")
+		}
+
+		// Create worktree
+		worktreePath, err := CreateWorktree("888", "main")
+		if err != nil {
+			t.Fatalf("failed to create worktree: %v", err)
+		}
+		defer RemoveWorktreeByPath(worktreePath, true) // Force cleanup
+
+		// Add uncommitted changes to worktree
+		testFile := filepath.Join(worktreePath, "test.txt")
+		if err := os.WriteFile(testFile, []byte("uncommitted change"), 0644); err != nil {
+			t.Fatalf("failed to create test file: %v", err)
+		}
+
+		// Try to remove without force - should get user-friendly error
+		err = RemoveWorktree("888", false)
+		if err == nil {
+			t.Error("expected error when removing worktree with uncommitted changes")
+		} else {
+			errMsg := err.Error()
+			// Check that error message contains helpful text
+			if !strings.Contains(errMsg, "uncommitted changes") {
+				t.Errorf("error message should mention uncommitted changes, got: %v", errMsg)
+			}
+			if !strings.Contains(errMsg, "gw end") && !strings.Contains(errMsg, "-f") {
+				t.Errorf("error message should suggest using -f flag, got: %v", errMsg)
+			}
+		}
+	})
+}
+
 func TestCreateWorktreeFromBranch(t *testing.T) {
 	t.Run("creates worktree from local branch", func(t *testing.T) {
 		// Save and restore working directory first
