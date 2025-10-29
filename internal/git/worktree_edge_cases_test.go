@@ -142,7 +142,7 @@ func TestCreateWorktree_EdgeCases(t *testing.T) {
 
 func TestRemoveWorktree_EdgeCases(t *testing.T) {
 	t.Run("handles empty issue number", func(t *testing.T) {
-		err := RemoveWorktree("")
+		err := RemoveWorktree("", false)
 		if err == nil {
 			t.Error("Expected error with empty issue number")
 		}
@@ -162,7 +162,7 @@ func TestRemoveWorktree_EdgeCases(t *testing.T) {
 		os.Chdir(tmpDir)
 
 		// Should fail when GetWorktreeForIssue fails
-		err = RemoveWorktree("123")
+		err = RemoveWorktree("123", false)
 		if err == nil {
 			t.Error("Expected error when GetWorktreeForIssue fails")
 		}
@@ -193,7 +193,7 @@ func TestRemoveWorktree_EdgeCases(t *testing.T) {
 		os.Chdir(tmpDir)
 
 		// Try to remove non-existent worktree
-		err = RemoveWorktree("999")
+		err = RemoveWorktree("999", false)
 		if err == nil {
 			t.Error("Expected error when removing non-existent worktree")
 		}
@@ -204,7 +204,7 @@ func TestRemoveWorktree_EdgeCases(t *testing.T) {
 
 func TestRemoveWorktreeByPath_EdgeCases(t *testing.T) {
 	t.Run("handles empty path", func(t *testing.T) {
-		err := RemoveWorktreeByPath("")
+		err := RemoveWorktreeByPath("", false)
 		if err == nil {
 			t.Error("Expected error with empty path")
 		}
@@ -224,7 +224,7 @@ func TestRemoveWorktreeByPath_EdgeCases(t *testing.T) {
 		os.Chdir(tmpDir)
 
 		// Should fail when git command fails
-		err = RemoveWorktreeByPath("/some/path")
+		err = RemoveWorktreeByPath("/some/path", false)
 		if err == nil {
 			t.Error("Expected error when git command fails")
 		}

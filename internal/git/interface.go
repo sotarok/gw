@@ -10,8 +10,8 @@ type Interface interface {
 	// Worktree operations
 	CreateWorktree(issueNumber, baseBranch string) (string, error)
 	CreateWorktreeFromBranch(worktreePath, sourceBranch, targetBranch string) error
-	RemoveWorktree(issueNumber string) error
-	RemoveWorktreeByPath(worktreePath string) error
+	RemoveWorktree(issueNumber string, force bool) error
+	RemoveWorktreeByPath(worktreePath string, force bool) error
 	ListWorktrees() ([]WorktreeInfo, error)
 	GetWorktreeForIssue(issueNumber string) (*WorktreeInfo, error)
 
@@ -67,12 +67,12 @@ func (c *DefaultClient) CreateWorktreeFromBranch(worktreePath, sourceBranch, tar
 	return CreateWorktreeFromBranch(worktreePath, sourceBranch, targetBranch)
 }
 
-func (c *DefaultClient) RemoveWorktree(issueNumber string) error {
-	return RemoveWorktree(issueNumber)
+func (c *DefaultClient) RemoveWorktree(issueNumber string, force bool) error {
+	return RemoveWorktree(issueNumber, force)
 }
 
-func (c *DefaultClient) RemoveWorktreeByPath(worktreePath string) error {
-	return RemoveWorktreeByPath(worktreePath)
+func (c *DefaultClient) RemoveWorktreeByPath(worktreePath string, force bool) error {
+	return RemoveWorktreeByPath(worktreePath, force)
 }
 
 func (c *DefaultClient) ListWorktrees() ([]WorktreeInfo, error) {

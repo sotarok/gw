@@ -65,11 +65,11 @@ func (m *mockGit) CreateWorktreeFromBranch(worktreePath, sourceBranch, targetBra
 	return nil
 }
 
-func (m *mockGit) RemoveWorktree(issueNumber string) error {
+func (m *mockGit) RemoveWorktree(issueNumber string, force bool) error {
 	return nil
 }
 
-func (m *mockGit) RemoveWorktreeByPath(worktreePath string) error {
+func (m *mockGit) RemoveWorktreeByPath(worktreePath string, force bool) error {
 	return nil
 }
 

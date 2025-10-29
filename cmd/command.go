@@ -501,12 +501,12 @@ func (c *EndCommand) Execute(issueNumber string) error {
 	// Remove the worktree
 	if isInteractiveMode {
 		// Use the actual path when selected from interactive mode
-		if err := c.deps.Git.RemoveWorktreeByPath(worktreePath); err != nil {
+		if err := c.deps.Git.RemoveWorktreeByPath(worktreePath, c.force); err != nil {
 			return err
 		}
 	} else {
 		// Use issue number template when specified directly
-		if err := c.deps.Git.RemoveWorktree(issueNumber); err != nil {
+		if err := c.deps.Git.RemoveWorktree(issueNumber, c.force); err != nil {
 			return err
 		}
 	}

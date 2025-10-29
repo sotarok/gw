@@ -78,7 +78,7 @@ func CreateWorktree(issueNumberOrBranch, baseBranch string) (string, error) {
 }
 
 // RemoveWorktree removes a git worktree by issue number or branch name
-func RemoveWorktree(issueNumberOrBranch string) error {
+func RemoveWorktree(issueNumberOrBranch string, force bool) error {
 	if !IsGitRepository() {
 		return fmt.Errorf("not in a git repository")
 	}
@@ -101,17 +101,23 @@ func RemoveWorktree(issueNumberOrBranch string) error {
 
 	// Create worktree directory path relative to repository root
 	worktreeDir := filepath.Join(repoRoot, "..", fmt.Sprintf("%s-%s", repoName, dirSuffix))
-	return RemoveWorktreeByPath(worktreeDir)
+	return RemoveWorktreeByPath(worktreeDir, force)
 }
 
 // RemoveWorktreeByPath removes a git worktree by its path
-func RemoveWorktreeByPath(worktreePath string) error {
+func RemoveWorktreeByPath(worktreePath string, force bool) error {
 	if !IsGitRepository() {
 		return fmt.Errorf("not in a git repository")
 	}
 
-	// Remove the worktree
-	cmd := exec.Command("git", "worktree", "remove", worktreePath)
+	// Build command with optional force flag
+	args := []string{"worktree", "remove"}
+	if force {
+		args = append(args, "-f")
+	}
+	args = append(args, worktreePath)
+
+	cmd := exec.Command("git", args...)
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 

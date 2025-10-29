@@ -338,7 +338,7 @@ func TestDefaultClient_WorktreeOperations(t *testing.T) {
 	if err != nil {
 		t.Fatalf("CreateWorktree() failed: %v", err)
 	}
-	defer client.RemoveWorktreeByPath(worktreePath)
+	defer client.RemoveWorktreeByPath(worktreePath, false)
 
 	// Test ListWorktrees
 	worktrees, err := client.ListWorktrees()
@@ -359,7 +359,7 @@ func TestDefaultClient_WorktreeOperations(t *testing.T) {
 	}
 
 	// Test RemoveWorktree
-	err = client.RemoveWorktree("123")
+	err = client.RemoveWorktree("123", false)
 	if err != nil {
 		t.Fatalf("RemoveWorktree() failed: %v", err)
 	}
