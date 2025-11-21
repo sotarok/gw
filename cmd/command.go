@@ -690,6 +690,15 @@ func (c *CleanCommand) checkWorktree(info *git.WorktreeInfo, originalDir string)
 	// Check 1: Uncommitted changes
 	hasChanges, err := c.deps.Git.HasUncommittedChanges()
 	if err != nil {
+		// Check if this is a broken worktree (exit status 128 typically means git repository is invalid)
+		errMsg := err.Error()
+		if strings.Contains(errMsg, "exit status 128") || strings.Contains(errMsg, "not a git repository") {
+			status.Warnings = append(status.Warnings, "Worktree is not a valid git repository (metadata may be missing or corrupt)")
+			status.CanRemove = false
+			// Don't run further checks if the worktree is fundamentally broken
+			_ = os.Chdir(originalDir)
+			return status
+		}
 		status.Warnings = append(status.Warnings, fmt.Sprintf("Could not check uncommitted changes: %v", err))
 		status.CanRemove = false
 	} else if hasChanges {

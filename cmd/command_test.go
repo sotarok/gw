@@ -1902,3 +1902,58 @@ func TestCleanCommand_Execute_RemovalError(t *testing.T) {
 		t.Errorf("Expected failure count in stderr, got: %s", stderrOutput)
 	}
 }
+
+func TestCleanCommand_Execute_BrokenWorktree(t *testing.T) {
+	stdout := &bytes.Buffer{}
+	stderr := &bytes.Buffer{}
+
+	tmpDir := t.TempDir()
+	wt1 := filepath.Join(tmpDir, "wt1")
+	os.MkdirAll(wt1, 0755)
+
+	mockGit := &mockGit{
+		ListWorktreesFn: func() ([]git.WorktreeInfo, error) {
+			return []git.WorktreeInfo{
+				{Path: "/repo", Branch: "main"},
+				{Path: wt1, Branch: testBranch123},
+			}, nil
+		},
+		HasUncommittedChangesFn: func() (bool, error) {
+			// Simulate broken worktree with exit status 128
+			return false, fmt.Errorf("fatal: not a git repository: exit status 128")
+		},
+	}
+
+	mockUI := &mockUI{}
+
+	deps := &Dependencies{
+		Git:    mockGit,
+		UI:     mockUI,
+		Stdout: stdout,
+		Stderr: stderr,
+	}
+
+	cmd := NewCleanCommandWithConfig(deps, false, false, &config.Config{})
+
+	originalDir, _ := os.Getwd()
+	defer os.Chdir(originalDir)
+
+	err := cmd.Execute()
+
+	if err != nil {
+		t.Errorf("Expected no error, got: %v", err)
+	}
+
+	output := stdout.String()
+	if !contains(output, "Non-removable worktrees (1)") {
+		t.Errorf("Expected 'Non-removable worktrees (1)', got: %s", output)
+	}
+
+	if !contains(output, "Worktree is not a valid git repository") {
+		t.Errorf("Expected user-friendly error message about broken worktree, got: %s", output)
+	}
+
+	if !contains(output, "No worktrees to remove") {
+		t.Errorf("Expected 'No worktrees to remove' message, got: %s", output)
+	}
+}
