@@ -14,6 +14,14 @@ import (
 	"github.com/sotarok/gw/internal/ui"
 )
 
+// Symbol constants for consistent output formatting across commands
+const (
+	symbolSuccess = "✓"
+	symbolError   = "✗"
+	symbolWarning = "⚠"
+	symbolArrow   = "→"
+)
+
 // Dependencies holds all the dependencies for commands
 type Dependencies struct {
 	Git    git.Interface
