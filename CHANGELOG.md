@@ -14,23 +14,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Only removes worktrees that pass all three safety checks
   - `--force` flag to skip confirmation prompt
   - `--dry-run` flag to preview what would be removed without making changes
-  - Displays clear summary of removable and non-removable worktrees with reasons
+  - Displays concise summary showing only directory names instead of full paths
+  - Shows clear reasons for non-removable worktrees with visual separator (→)
+  - Multiple reasons are combined into a single line for better readability
+  - User-friendly error messages for broken worktrees (shows "invalid git repository" instead of cryptic "exit status 128")
   - Respects `auto_remove_branch` configuration for automatic branch cleanup
-
-### Changed
-- Improved `gw clean` command output for better readability
-  - Display only directory names instead of full paths
-  - Simplified section headers (e.g., "Removable (2)" instead of "Removable worktrees (2)")
-  - Combined multiple reasons into a single line with comma separation
-  - Shortened reason messages (e.g., "not merged" instead of "Not merged to origin/main")
-  - Removed redundant "merged to origin/main" message for removable worktrees
-  - Added visual separator (→) for non-removable reasons
-
-### Fixed
-- Improved error messages for broken worktrees in `gw clean`
-  - Now shows user-friendly message when worktree metadata is missing or corrupt
-  - Replaces cryptic "exit status 128" errors with concise "invalid git repository" message
-  - Helps users identify and handle orphaned worktrees more easily
 
 ## [0.5.2] - 2025-10-27
 
