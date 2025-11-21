@@ -16,6 +16,8 @@ import (
 
 // Mock implementations
 
+const testBranch123 = "123/impl"
+
 type mockGit struct {
 	isGitRepo           bool
 	worktreeExists      bool
@@ -34,6 +36,8 @@ type mockGit struct {
 	HasUnpushedCommitsFn    func() (bool, error)
 	IsMergedToOriginFn      func(string) (bool, error)
 	DeleteBranchFn          func(string) error
+	ListWorktreesFn         func() ([]git.WorktreeInfo, error)
+	RemoveWorktreeByPathFn  func(string) error
 }
 
 func (m *mockGit) IsGitRepository() bool {
@@ -70,10 +74,16 @@ func (m *mockGit) RemoveWorktree(issueNumber string) error {
 }
 
 func (m *mockGit) RemoveWorktreeByPath(worktreePath string) error {
+	if m.RemoveWorktreeByPathFn != nil {
+		return m.RemoveWorktreeByPathFn(worktreePath)
+	}
 	return nil
 }
 
 func (m *mockGit) ListWorktrees() ([]git.WorktreeInfo, error) {
+	if m.ListWorktreesFn != nil {
+		return m.ListWorktreesFn()
+	}
 	return nil, nil
 }
 
@@ -1347,4 +1357,548 @@ func boolPtr(b bool) *bool {
 
 func contains(s, substr string) bool {
 	return bytes.Contains([]byte(s), []byte(substr))
+}
+
+// CleanCommand tests
+
+func TestCleanCommand_Execute_NoWorktrees(t *testing.T) {
+	stdout := &bytes.Buffer{}
+	stderr := &bytes.Buffer{}
+
+	mockGit := &mockGit{
+		ListWorktreesFn: func() ([]git.WorktreeInfo, error) {
+			// Only the main worktree
+			return []git.WorktreeInfo{
+				{Path: "/repo", Branch: "main"},
+			}, nil
+		},
+	}
+
+	mockUI := &mockUI{}
+
+	deps := &Dependencies{
+		Git:    mockGit,
+		UI:     mockUI,
+		Stdout: stdout,
+		Stderr: stderr,
+	}
+
+	cmd := NewCleanCommandWithConfig(deps, false, false, &config.Config{})
+	err := cmd.Execute()
+
+	if err != nil {
+		t.Errorf("Expected no error, got: %v", err)
+	}
+
+	output := stdout.String()
+	if !contains(output, "No worktrees to remove") {
+		t.Errorf("Expected 'No worktrees to remove' message, got: %s", output)
+	}
+}
+
+func TestCleanCommand_Execute_AllRemovable(t *testing.T) {
+	stdout := &bytes.Buffer{}
+	stderr := &bytes.Buffer{}
+
+	tmpDir := t.TempDir()
+	wt1 := filepath.Join(tmpDir, "wt1")
+	wt2 := filepath.Join(tmpDir, "wt2")
+	os.MkdirAll(wt1, 0755)
+	os.MkdirAll(wt2, 0755)
+
+	removedPaths := []string{}
+
+	mockGit := &mockGit{
+		ListWorktreesFn: func() ([]git.WorktreeInfo, error) {
+			return []git.WorktreeInfo{
+				{Path: "/repo", Branch: "main"},
+				{Path: wt1, Branch: testBranch123},
+				{Path: wt2, Branch: "456/impl"},
+			}, nil
+		},
+		HasUncommittedChangesFn: func() (bool, error) {
+			return false, nil
+		},
+		HasUnpushedCommitsFn: func() (bool, error) {
+			return false, nil
+		},
+		IsMergedToOriginFn: func(branch string) (bool, error) {
+			return true, nil
+		},
+		RemoveWorktreeByPathFn: func(path string) error {
+			removedPaths = append(removedPaths, path)
+			return nil
+		},
+	}
+
+	mockUI := &mockUI{
+		confirmResult: true,
+	}
+
+	deps := &Dependencies{
+		Git:    mockGit,
+		UI:     mockUI,
+		Stdout: stdout,
+		Stderr: stderr,
+	}
+
+	cmd := NewCleanCommandWithConfig(deps, false, false, &config.Config{})
+
+	// Save and restore current directory
+	originalDir, _ := os.Getwd()
+	defer os.Chdir(originalDir)
+
+	err := cmd.Execute()
+
+	if err != nil {
+		t.Errorf("Expected no error, got: %v", err)
+	}
+
+	output := stdout.String()
+	if !contains(output, "Removable worktrees (2)") {
+		t.Errorf("Expected 'Removable worktrees (2)', got: %s", output)
+	}
+
+	if !contains(output, "Successfully removed 2 worktree(s)") {
+		t.Errorf("Expected success message for 2 worktrees, got: %s", output)
+	}
+
+	if len(removedPaths) != 2 {
+		t.Errorf("Expected 2 worktrees to be removed, got: %d", len(removedPaths))
+	}
+}
+
+func TestCleanCommand_Execute_MixedRemovability(t *testing.T) {
+	stdout := &bytes.Buffer{}
+	stderr := &bytes.Buffer{}
+
+	tmpDir := t.TempDir()
+	wt1 := filepath.Join(tmpDir, "wt1")
+	wt2 := filepath.Join(tmpDir, "wt2")
+	wt3 := filepath.Join(tmpDir, "wt3")
+	os.MkdirAll(wt1, 0755)
+	os.MkdirAll(wt2, 0755)
+	os.MkdirAll(wt3, 0755)
+
+	removedPaths := []string{}
+
+	mockGit := &mockGit{
+		ListWorktreesFn: func() ([]git.WorktreeInfo, error) {
+			return []git.WorktreeInfo{
+				{Path: "/repo", Branch: "main"},
+				{Path: wt1, Branch: testBranch123}, // Removable
+				{Path: wt2, Branch: "456/impl"},    // Has uncommitted changes
+				{Path: wt3, Branch: "789/impl"},    // Not merged
+			}, nil
+		},
+		HasUncommittedChangesFn: func() (bool, error) {
+			// Check current directory to determine which worktree we're checking
+			cwd, _ := os.Getwd()
+			if strings.Contains(cwd, "wt2") {
+				return true, nil
+			}
+			return false, nil
+		},
+		HasUnpushedCommitsFn: func() (bool, error) {
+			return false, nil
+		},
+		IsMergedToOriginFn: func(branch string) (bool, error) {
+			// Check current directory to determine which worktree we're checking
+			cwd, _ := os.Getwd()
+			if strings.Contains(cwd, "wt3") {
+				return false, nil
+			}
+			return true, nil
+		},
+		RemoveWorktreeByPathFn: func(path string) error {
+			removedPaths = append(removedPaths, path)
+			return nil
+		},
+	}
+
+	mockUI := &mockUI{
+		confirmResult: true,
+	}
+
+	deps := &Dependencies{
+		Git:    mockGit,
+		UI:     mockUI,
+		Stdout: stdout,
+		Stderr: stderr,
+	}
+
+	cmd := NewCleanCommandWithConfig(deps, false, false, &config.Config{})
+
+	originalDir, _ := os.Getwd()
+	defer os.Chdir(originalDir)
+
+	err := cmd.Execute()
+
+	if err != nil {
+		t.Errorf("Expected no error, got: %v", err)
+	}
+
+	output := stdout.String()
+	if !contains(output, "Removable worktrees (1)") {
+		t.Errorf("Expected 'Removable worktrees (1)', got: %s", output)
+	}
+
+	if !contains(output, "Non-removable worktrees (2)") {
+		t.Errorf("Expected 'Non-removable worktrees (2)', got: %s", output)
+	}
+
+	if !contains(output, "Has uncommitted changes") {
+		t.Errorf("Expected 'Has uncommitted changes' warning, got: %s", output)
+	}
+
+	if !contains(output, "Not merged to origin/main") {
+		t.Errorf("Expected 'Not merged to origin/main' warning, got: %s", output)
+	}
+
+	if len(removedPaths) != 1 {
+		t.Errorf("Expected 1 worktree to be removed, got: %d", len(removedPaths))
+	}
+
+	if len(removedPaths) > 0 && removedPaths[0] != wt1 {
+		t.Errorf("Expected wt1 to be removed, got: %s", removedPaths[0])
+	}
+}
+
+func TestCleanCommand_Execute_DryRun(t *testing.T) {
+	stdout := &bytes.Buffer{}
+	stderr := &bytes.Buffer{}
+
+	tmpDir := t.TempDir()
+	wt1 := filepath.Join(tmpDir, "wt1")
+	os.MkdirAll(wt1, 0755)
+
+	removedPaths := []string{}
+
+	mockGit := &mockGit{
+		ListWorktreesFn: func() ([]git.WorktreeInfo, error) {
+			return []git.WorktreeInfo{
+				{Path: "/repo", Branch: "main"},
+				{Path: wt1, Branch: testBranch123},
+			}, nil
+		},
+		HasUncommittedChangesFn: func() (bool, error) {
+			return false, nil
+		},
+		HasUnpushedCommitsFn: func() (bool, error) {
+			return false, nil
+		},
+		IsMergedToOriginFn: func(branch string) (bool, error) {
+			return true, nil
+		},
+		RemoveWorktreeByPathFn: func(path string) error {
+			removedPaths = append(removedPaths, path)
+			return nil
+		},
+	}
+
+	mockUI := &mockUI{}
+
+	deps := &Dependencies{
+		Git:    mockGit,
+		UI:     mockUI,
+		Stdout: stdout,
+		Stderr: stderr,
+	}
+
+	cmd := NewCleanCommandWithConfig(deps, false, true, &config.Config{})
+
+	originalDir, _ := os.Getwd()
+	defer os.Chdir(originalDir)
+
+	err := cmd.Execute()
+
+	if err != nil {
+		t.Errorf("Expected no error, got: %v", err)
+	}
+
+	output := stdout.String()
+	if !contains(output, "Dry-run mode: no changes made") {
+		t.Errorf("Expected 'Dry-run mode' message, got: %s", output)
+	}
+
+	if len(removedPaths) != 0 {
+		t.Errorf("Expected no worktrees to be removed in dry-run, got: %d", len(removedPaths))
+	}
+}
+
+func TestCleanCommand_Execute_UserDeclines(t *testing.T) {
+	stdout := &bytes.Buffer{}
+	stderr := &bytes.Buffer{}
+
+	tmpDir := t.TempDir()
+	wt1 := filepath.Join(tmpDir, "wt1")
+	os.MkdirAll(wt1, 0755)
+
+	removedPaths := []string{}
+
+	mockGit := &mockGit{
+		ListWorktreesFn: func() ([]git.WorktreeInfo, error) {
+			return []git.WorktreeInfo{
+				{Path: "/repo", Branch: "main"},
+				{Path: wt1, Branch: testBranch123},
+			}, nil
+		},
+		HasUncommittedChangesFn: func() (bool, error) {
+			return false, nil
+		},
+		HasUnpushedCommitsFn: func() (bool, error) {
+			return false, nil
+		},
+		IsMergedToOriginFn: func(branch string) (bool, error) {
+			return true, nil
+		},
+		RemoveWorktreeByPathFn: func(path string) error {
+			removedPaths = append(removedPaths, path)
+			return nil
+		},
+	}
+
+	mockUI := &mockUI{
+		confirmResult: false, // User declines
+	}
+
+	deps := &Dependencies{
+		Git:    mockGit,
+		UI:     mockUI,
+		Stdout: stdout,
+		Stderr: stderr,
+	}
+
+	cmd := NewCleanCommandWithConfig(deps, false, false, &config.Config{})
+
+	originalDir, _ := os.Getwd()
+	defer os.Chdir(originalDir)
+
+	err := cmd.Execute()
+
+	if err != nil {
+		t.Errorf("Expected no error, got: %v", err)
+	}
+
+	output := stdout.String()
+	if !contains(output, "Aborted") {
+		t.Errorf("Expected 'Aborted' message, got: %s", output)
+	}
+
+	if len(removedPaths) != 0 {
+		t.Errorf("Expected no worktrees to be removed when user declines, got: %d", len(removedPaths))
+	}
+}
+
+func TestCleanCommand_Execute_Force(t *testing.T) {
+	stdout := &bytes.Buffer{}
+	stderr := &bytes.Buffer{}
+
+	tmpDir := t.TempDir()
+	wt1 := filepath.Join(tmpDir, "wt1")
+	os.MkdirAll(wt1, 0755)
+
+	removedPaths := []string{}
+
+	mockGit := &mockGit{
+		ListWorktreesFn: func() ([]git.WorktreeInfo, error) {
+			return []git.WorktreeInfo{
+				{Path: "/repo", Branch: "main"},
+				{Path: wt1, Branch: testBranch123},
+			}, nil
+		},
+		HasUncommittedChangesFn: func() (bool, error) {
+			return false, nil
+		},
+		HasUnpushedCommitsFn: func() (bool, error) {
+			return false, nil
+		},
+		IsMergedToOriginFn: func(branch string) (bool, error) {
+			return true, nil
+		},
+		RemoveWorktreeByPathFn: func(path string) error {
+			removedPaths = append(removedPaths, path)
+			return nil
+		},
+	}
+
+	mockUI := &mockUI{
+		confirmResult: true,
+	}
+
+	deps := &Dependencies{
+		Git:    mockGit,
+		UI:     mockUI,
+		Stdout: stdout,
+		Stderr: stderr,
+	}
+
+	cmd := NewCleanCommandWithConfig(deps, true, false, &config.Config{}) // force = true
+
+	originalDir, _ := os.Getwd()
+	defer os.Chdir(originalDir)
+
+	err := cmd.Execute()
+
+	if err != nil {
+		t.Errorf("Expected no error, got: %v", err)
+	}
+
+	// When force is true, confirmCalled should be false
+	if mockUI.confirmCalled {
+		t.Error("Expected prompt not to be called when force is true")
+	}
+
+	if len(removedPaths) != 1 {
+		t.Errorf("Expected 1 worktree to be removed, got: %d", len(removedPaths))
+	}
+}
+
+func TestCleanCommand_Execute_WithBranchDeletion(t *testing.T) {
+	stdout := &bytes.Buffer{}
+	stderr := &bytes.Buffer{}
+
+	tmpDir := t.TempDir()
+	wt1 := filepath.Join(tmpDir, "wt1")
+	os.MkdirAll(wt1, 0755)
+
+	removedPaths := []string{}
+	deletedBranches := []string{}
+
+	mockGit := &mockGit{
+		ListWorktreesFn: func() ([]git.WorktreeInfo, error) {
+			return []git.WorktreeInfo{
+				{Path: "/repo", Branch: "main"},
+				{Path: wt1, Branch: testBranch123},
+			}, nil
+		},
+		HasUncommittedChangesFn: func() (bool, error) {
+			return false, nil
+		},
+		HasUnpushedCommitsFn: func() (bool, error) {
+			return false, nil
+		},
+		IsMergedToOriginFn: func(branch string) (bool, error) {
+			return true, nil
+		},
+		RemoveWorktreeByPathFn: func(path string) error {
+			removedPaths = append(removedPaths, path)
+			return nil
+		},
+		DeleteBranchFn: func(branch string) error {
+			deletedBranches = append(deletedBranches, branch)
+			return nil
+		},
+	}
+
+	mockUI := &mockUI{
+		confirmResult: true,
+	}
+
+	deps := &Dependencies{
+		Git:    mockGit,
+		UI:     mockUI,
+		Stdout: stdout,
+		Stderr: stderr,
+	}
+
+	cfg := &config.Config{
+		AutoRemoveBranch: true,
+	}
+
+	cmd := NewCleanCommandWithConfig(deps, false, false, cfg)
+
+	originalDir, _ := os.Getwd()
+	defer os.Chdir(originalDir)
+
+	err := cmd.Execute()
+
+	if err != nil {
+		t.Errorf("Expected no error, got: %v", err)
+	}
+
+	if len(deletedBranches) != 1 {
+		t.Errorf("Expected 1 branch to be deleted, got: %d", len(deletedBranches))
+	}
+
+	if len(deletedBranches) > 0 && deletedBranches[0] != testBranch123 {
+		t.Errorf("Expected branch '%s' to be deleted, got: %s", testBranch123, deletedBranches[0])
+	}
+
+	output := stdout.String()
+	if !contains(output, "Deleted branch "+testBranch123) {
+		t.Errorf("Expected branch deletion message, got: %s", output)
+	}
+}
+
+func TestCleanCommand_Execute_RemovalError(t *testing.T) {
+	stdout := &bytes.Buffer{}
+	stderr := &bytes.Buffer{}
+
+	tmpDir := t.TempDir()
+	wt1 := filepath.Join(tmpDir, "wt1")
+	wt2 := filepath.Join(tmpDir, "wt2")
+	os.MkdirAll(wt1, 0755)
+	os.MkdirAll(wt2, 0755)
+
+	mockGit := &mockGit{
+		ListWorktreesFn: func() ([]git.WorktreeInfo, error) {
+			return []git.WorktreeInfo{
+				{Path: "/repo", Branch: "main"},
+				{Path: wt1, Branch: testBranch123},
+				{Path: wt2, Branch: "456/impl"},
+			}, nil
+		},
+		HasUncommittedChangesFn: func() (bool, error) {
+			return false, nil
+		},
+		HasUnpushedCommitsFn: func() (bool, error) {
+			return false, nil
+		},
+		IsMergedToOriginFn: func(branch string) (bool, error) {
+			return true, nil
+		},
+		RemoveWorktreeByPathFn: func(path string) error {
+			if path == wt1 {
+				return fmt.Errorf("failed to remove")
+			}
+			return nil
+		},
+	}
+
+	mockUI := &mockUI{
+		confirmResult: true,
+	}
+
+	deps := &Dependencies{
+		Git:    mockGit,
+		UI:     mockUI,
+		Stdout: stdout,
+		Stderr: stderr,
+	}
+
+	cmd := NewCleanCommandWithConfig(deps, false, false, &config.Config{})
+
+	originalDir, _ := os.Getwd()
+	defer os.Chdir(originalDir)
+
+	err := cmd.Execute()
+
+	if err == nil {
+		t.Error("Expected error when removal fails, got nil")
+	}
+
+	stderrOutput := stderr.String()
+	if !contains(stderrOutput, "Failed to remove") {
+		t.Errorf("Expected error message in stderr, got: %s", stderrOutput)
+	}
+
+	stdoutOutput := stdout.String()
+	if !contains(stdoutOutput, "Successfully removed 1 worktree(s)") {
+		t.Errorf("Expected partial success message, got: %s", stdoutOutput)
+	}
+
+	if !contains(stderrOutput, "Failed to remove 1 worktree(s)") {
+		t.Errorf("Expected failure count in stderr, got: %s", stderrOutput)
+	}
 }
