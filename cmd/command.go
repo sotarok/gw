@@ -693,7 +693,7 @@ func (c *CleanCommand) checkWorktree(info *git.WorktreeInfo, originalDir string)
 		// Check if this is a broken worktree (exit status 128 typically means git repository is invalid)
 		errMsg := err.Error()
 		if strings.Contains(errMsg, "exit status 128") || strings.Contains(errMsg, "not a git repository") {
-			status.Warnings = append(status.Warnings, "Worktree is not a valid git repository (metadata may be missing or corrupt)")
+			status.Warnings = append(status.Warnings, "invalid git repository")
 			status.CanRemove = false
 			// Don't run further checks if the worktree is fundamentally broken
 			_ = os.Chdir(originalDir)
@@ -702,7 +702,7 @@ func (c *CleanCommand) checkWorktree(info *git.WorktreeInfo, originalDir string)
 		status.Warnings = append(status.Warnings, fmt.Sprintf("Could not check uncommitted changes: %v", err))
 		status.CanRemove = false
 	} else if hasChanges {
-		status.Warnings = append(status.Warnings, "Has uncommitted changes")
+		status.Warnings = append(status.Warnings, "uncommitted changes")
 		status.CanRemove = false
 	}
 
@@ -712,7 +712,7 @@ func (c *CleanCommand) checkWorktree(info *git.WorktreeInfo, originalDir string)
 		status.Warnings = append(status.Warnings, fmt.Sprintf("Could not check unpushed commits: %v", err))
 		status.CanRemove = false
 	} else if hasUnpushed {
-		status.Warnings = append(status.Warnings, "Has unpushed commits")
+		status.Warnings = append(status.Warnings, "unpushed commits")
 		status.CanRemove = false
 	}
 
@@ -722,7 +722,7 @@ func (c *CleanCommand) checkWorktree(info *git.WorktreeInfo, originalDir string)
 		status.Warnings = append(status.Warnings, fmt.Sprintf("Could not check merge status: %v", err))
 		status.CanRemove = false
 	} else if !isMerged {
-		status.Warnings = append(status.Warnings, "Not merged to origin/main")
+		status.Warnings = append(status.Warnings, "not merged")
 		status.CanRemove = false
 	}
 
@@ -747,20 +747,25 @@ func (c *CleanCommand) displayResults(statuses []*WorktreeStatus) {
 
 	// Display removable worktrees
 	if len(removable) > 0 {
-		fmt.Fprintf(c.deps.Stdout, "\n✓ Removable worktrees (%d):\n", len(removable))
+		fmt.Fprintf(c.deps.Stdout, "\n✓ Removable (%d)\n", len(removable))
 		for _, status := range removable {
-			fmt.Fprintf(c.deps.Stdout, "  • %s (%s) - merged to origin/main\n",
-				status.Info.Path, status.Info.Branch)
+			dirName := filepath.Base(status.Info.Path)
+			fmt.Fprintf(c.deps.Stdout, "  %s (%s)\n", dirName, status.Info.Branch)
 		}
 	}
 
 	// Display non-removable worktrees
 	if len(nonRemovable) > 0 {
-		fmt.Fprintf(c.deps.Stdout, "\n✗ Non-removable worktrees (%d):\n", len(nonRemovable))
-		for _, status := range nonRemovable {
-			fmt.Fprintf(c.deps.Stdout, "  • %s (%s)\n", status.Info.Path, status.Info.Branch)
-			for _, warning := range status.Warnings {
-				fmt.Fprintf(c.deps.Stdout, "    - %s\n", warning)
+		fmt.Fprintf(c.deps.Stdout, "\n✗ Non-removable (%d)\n", len(nonRemovable))
+		for i, status := range nonRemovable {
+			if i > 0 {
+				fmt.Fprintf(c.deps.Stdout, "\n")
+			}
+			dirName := filepath.Base(status.Info.Path)
+			fmt.Fprintf(c.deps.Stdout, "  %s (%s)\n", dirName, status.Info.Branch)
+			if len(status.Warnings) > 0 {
+				reasons := strings.Join(status.Warnings, ", ")
+				fmt.Fprintf(c.deps.Stdout, "    → %s\n", reasons)
 			}
 		}
 	}
@@ -776,16 +781,17 @@ func (c *CleanCommand) removeWorktrees(statuses []*WorktreeStatus) error {
 			continue
 		}
 
-		fmt.Fprintf(c.deps.Stdout, "Removing %s...\n", status.Info.Path)
+		dirName := filepath.Base(status.Info.Path)
+		fmt.Fprintf(c.deps.Stdout, "Removing %s...\n", dirName)
 
 		// Remove the worktree
 		if err := c.deps.Git.RemoveWorktreeByPath(status.Info.Path); err != nil {
-			fmt.Fprintf(c.deps.Stderr, "✗ Failed to remove %s: %v\n", status.Info.Path, err)
+			fmt.Fprintf(c.deps.Stderr, "✗ Failed to remove %s: %v\n", dirName, err)
 			failCount++
 			continue
 		}
 
-		fmt.Fprintf(c.deps.Stdout, "✓ Removed %s\n", status.Info.Path)
+		fmt.Fprintf(c.deps.Stdout, "✓ Removed %s\n", dirName)
 		successCount++
 
 		// Delete the branch if auto-remove is enabled

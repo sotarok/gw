@@ -1455,8 +1455,8 @@ func TestCleanCommand_Execute_AllRemovable(t *testing.T) {
 	}
 
 	output := stdout.String()
-	if !contains(output, "Removable worktrees (2)") {
-		t.Errorf("Expected 'Removable worktrees (2)', got: %s", output)
+	if !contains(output, "Removable (2)") {
+		t.Errorf("Expected 'Removable (2)', got: %s", output)
 	}
 
 	if !contains(output, "Successfully removed 2 worktree(s)") {
@@ -1539,20 +1539,20 @@ func TestCleanCommand_Execute_MixedRemovability(t *testing.T) {
 	}
 
 	output := stdout.String()
-	if !contains(output, "Removable worktrees (1)") {
-		t.Errorf("Expected 'Removable worktrees (1)', got: %s", output)
+	if !contains(output, "Removable (1)") {
+		t.Errorf("Expected 'Removable (1)', got: %s", output)
 	}
 
-	if !contains(output, "Non-removable worktrees (2)") {
-		t.Errorf("Expected 'Non-removable worktrees (2)', got: %s", output)
+	if !contains(output, "Non-removable (2)") {
+		t.Errorf("Expected 'Non-removable (2)', got: %s", output)
 	}
 
-	if !contains(output, "Has uncommitted changes") {
-		t.Errorf("Expected 'Has uncommitted changes' warning, got: %s", output)
+	if !contains(output, "uncommitted changes") {
+		t.Errorf("Expected 'uncommitted changes' warning, got: %s", output)
 	}
 
-	if !contains(output, "Not merged to origin/main") {
-		t.Errorf("Expected 'Not merged to origin/main' warning, got: %s", output)
+	if !contains(output, "not merged") {
+		t.Errorf("Expected 'not merged' warning, got: %s", output)
 	}
 
 	if len(removedPaths) != 1 {
@@ -1945,11 +1945,11 @@ func TestCleanCommand_Execute_BrokenWorktree(t *testing.T) {
 	}
 
 	output := stdout.String()
-	if !contains(output, "Non-removable worktrees (1)") {
-		t.Errorf("Expected 'Non-removable worktrees (1)', got: %s", output)
+	if !contains(output, "Non-removable (1)") {
+		t.Errorf("Expected 'Non-removable (1)', got: %s", output)
 	}
 
-	if !contains(output, "Worktree is not a valid git repository") {
+	if !contains(output, "invalid git repository") {
 		t.Errorf("Expected user-friendly error message about broken worktree, got: %s", output)
 	}
 
