@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- New `gw clean` command to batch remove merged worktrees
+  - Safely removes multiple worktrees that have been merged to origin/main
+  - Performs the same safety checks as `gw end`: uncommitted changes, unpushed commits, and merge status
+  - Only removes worktrees that pass all three safety checks
+  - `--force` flag to skip confirmation prompt
+  - `--dry-run` flag to preview what would be removed without making changes
+  - Displays concise summary showing only directory names instead of full paths
+  - Shows clear reasons for non-removable worktrees with visual separator (→)
+  - Multiple reasons are combined into a single line for better readability
+  - User-friendly error messages for broken worktrees (shows "invalid git repository" instead of cryptic "exit status 128")
+  - Respects `auto_remove_branch` configuration for automatic branch cleanup
+
 ## [0.5.2] - 2025-10-27
 
 ### Added
