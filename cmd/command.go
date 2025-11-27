@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/charmbracelet/lipgloss"
 	"github.com/sotarok/gw/internal/config"
 	"github.com/sotarok/gw/internal/detect"
 	"github.com/sotarok/gw/internal/git"
@@ -21,6 +22,20 @@ const (
 	symbolWarning = "⚠"
 	symbolArrow   = "→"
 )
+
+// Symbol styles for colored output (lipgloss handles NO_COLOR automatically)
+var (
+	styleSuccess = lipgloss.NewStyle().Foreground(lipgloss.Color("2")) // Green
+	styleError   = lipgloss.NewStyle().Foreground(lipgloss.Color("1")) // Red
+	styleWarning = lipgloss.NewStyle().Foreground(lipgloss.Color("3")) // Yellow
+	styleArrow   = lipgloss.NewStyle().Foreground(lipgloss.Color("4")) // Blue
+)
+
+// Colored symbol functions return symbols with appropriate colors
+func coloredSuccess() string { return styleSuccess.Render(symbolSuccess) }
+func coloredError() string   { return styleError.Render(symbolError) }
+func coloredWarning() string { return styleWarning.Render(symbolWarning) }
+func coloredArrow() string   { return styleArrow.Render(symbolArrow) }
 
 // Dependencies holds all the dependencies for commands
 type Dependencies struct {
@@ -107,7 +122,7 @@ func (c *StartCommand) Execute(issueNumber, baseBranch string) error {
 	}
 
 	if c.deps.Stdout != nil {
-		fmt.Fprintf(c.deps.Stdout, "✓ Created worktree at %s\n", worktreePath)
+		fmt.Fprintf(c.deps.Stdout, "%s Created worktree at %s\n", coloredSuccess(), worktreePath)
 	}
 
 	// Change to the new worktree directory for setup operations
@@ -116,7 +131,7 @@ func (c *StartCommand) Execute(issueNumber, baseBranch string) error {
 		if err := os.Chdir(worktreePath); err != nil {
 			// Don't fail the command, just log the error
 			if c.deps.Stderr != nil {
-				fmt.Fprintf(c.deps.Stderr, "⚠ Could not change to worktree directory: %v\n", err)
+				fmt.Fprintf(c.deps.Stderr, "%s Could not change to worktree directory: %v\n", coloredWarning(), err)
 			}
 		}
 	}
@@ -125,7 +140,7 @@ func (c *StartCommand) Execute(issueNumber, baseBranch string) error {
 	if err := c.handleEnvFiles(originalDir, worktreePath); err != nil {
 		// Don't fail the command, just warn
 		if c.deps.Stderr != nil {
-			fmt.Fprintf(c.deps.Stderr, "⚠ Failed to handle env files: %v\n", err)
+			fmt.Fprintf(c.deps.Stderr, "%s Failed to handle env files: %v\n", coloredWarning(), err)
 		}
 	}
 
@@ -133,7 +148,7 @@ func (c *StartCommand) Execute(issueNumber, baseBranch string) error {
 	if err := c.deps.Detect.RunSetup(worktreePath); err != nil {
 		// Don't fail if setup fails, just warn
 		if c.deps.Stderr != nil {
-			fmt.Fprintf(c.deps.Stderr, "⚠ Setup failed: %v\n", err)
+			fmt.Fprintf(c.deps.Stderr, "%s Setup failed: %v\n", coloredWarning(), err)
 		}
 	}
 
@@ -209,7 +224,7 @@ func handleEnvFiles(deps *Dependencies, cfg *config.Config, copyEnvsFlag bool, o
 		if err := deps.Git.CopyEnvFiles(envFiles, originalDir, worktreePath); err != nil {
 			return fmt.Errorf("failed to copy env files: %w", err)
 		}
-		fmt.Fprintf(deps.Stdout, "✓ Environment files copied successfully\n")
+		fmt.Fprintf(deps.Stdout, "%s Environment files copied successfully\n", coloredSuccess())
 	}
 
 	return nil
@@ -309,7 +324,7 @@ func (c *CheckoutCommand) Execute(branch string) error {
 		if err := os.Chdir(worktreePath); err != nil {
 			// Don't fail the command, just log the error
 			if c.deps.Stderr != nil {
-				fmt.Fprintf(c.deps.Stderr, "⚠ Could not change to worktree directory: %v\n", err)
+				fmt.Fprintf(c.deps.Stderr, "%s Could not change to worktree directory: %v\n", coloredWarning(), err)
 			}
 		}
 	}
@@ -317,13 +332,13 @@ func (c *CheckoutCommand) Execute(branch string) error {
 	// Handle environment files
 	if err := c.handleEnvFiles(originalDir, absolutePath); err != nil {
 		// Don't fail the command, just warn
-		fmt.Fprintf(c.deps.Stderr, "⚠ Failed to handle env files: %v\n", err)
+		fmt.Fprintf(c.deps.Stderr, "%s Failed to handle env files: %v\n", coloredWarning(), err)
 	}
 
 	// Run package manager setup
 	if err := c.deps.Detect.RunSetup(absolutePath); err != nil {
 		// Don't fail if setup fails, just warn
-		fmt.Fprintf(c.deps.Stderr, "⚠ Setup failed: %v\n", err)
+		fmt.Fprintf(c.deps.Stderr, "%s Setup failed: %v\n", coloredWarning(), err)
 	}
 
 	// Show completion message
@@ -479,7 +494,7 @@ func (c *EndCommand) Execute(issueNumber string) error {
 
 		// If there are warnings, ask for confirmation
 		if len(warnings) > 0 {
-			fmt.Fprintf(c.deps.Stdout, "\n⚠ Safety check warnings:\n")
+			fmt.Fprintf(c.deps.Stdout, "\n%s Safety check warnings:\n", coloredWarning())
 			for _, warning := range warnings {
 				fmt.Fprintf(c.deps.Stdout, "  • %s\n", warning)
 			}
@@ -519,16 +534,16 @@ func (c *EndCommand) Execute(issueNumber string) error {
 		}
 	}
 
-	fmt.Fprintf(c.deps.Stdout, "✓ Successfully removed worktree for issue #%s\n", issueNumber)
+	fmt.Fprintf(c.deps.Stdout, "%s Successfully removed worktree for issue #%s\n", coloredSuccess(), issueNumber)
 
 	// Delete the branch if auto-remove is enabled
 	if c.config != nil && c.config.AutoRemoveBranch && branchName != "" {
 		fmt.Fprintf(c.deps.Stdout, "Deleting branch %s...\n", branchName)
 		if err := c.deps.Git.DeleteBranch(branchName); err != nil {
 			// Don't fail the command, just warn
-			fmt.Fprintf(c.deps.Stderr, "⚠ Failed to delete branch %s: %v\n", branchName, err)
+			fmt.Fprintf(c.deps.Stderr, "%s Failed to delete branch %s: %v\n", coloredWarning(), branchName, err)
 		} else {
-			fmt.Fprintf(c.deps.Stdout, "✓ Successfully deleted branch %s\n", branchName)
+			fmt.Fprintf(c.deps.Stdout, "%s Successfully deleted branch %s\n", coloredSuccess(), branchName)
 		}
 	}
 
@@ -546,7 +561,7 @@ func (c *EndCommand) performSafetyChecks() []string {
 	// Check for uncommitted changes
 	hasChanges, err := c.deps.Git.HasUncommittedChanges()
 	if err != nil {
-		fmt.Fprintf(c.deps.Stderr, "⚠ Warning: Could not check for uncommitted changes: %v\n", err)
+		fmt.Fprintf(c.deps.Stderr, "%s Warning: Could not check for uncommitted changes: %v\n", coloredWarning(), err)
 	} else if hasChanges {
 		warnings = append(warnings, "You have uncommitted changes")
 	}
@@ -554,7 +569,7 @@ func (c *EndCommand) performSafetyChecks() []string {
 	// Check for unpushed commits
 	hasUnpushed, err := c.deps.Git.HasUnpushedCommits()
 	if err != nil {
-		fmt.Fprintf(c.deps.Stderr, "⚠ Warning: Could not check for unpushed commits: %v\n", err)
+		fmt.Fprintf(c.deps.Stderr, "%s Warning: Could not check for unpushed commits: %v\n", coloredWarning(), err)
 	} else if hasUnpushed {
 		warnings = append(warnings, "You have unpushed commits")
 	}
@@ -562,7 +577,7 @@ func (c *EndCommand) performSafetyChecks() []string {
 	// Check if merged to origin
 	isMerged, err := c.deps.Git.IsMergedToOrigin("main")
 	if err != nil {
-		fmt.Fprintf(c.deps.Stderr, "⚠ Warning: Could not check merge status: %v\n", err)
+		fmt.Fprintf(c.deps.Stderr, "%s Warning: Could not check merge status: %v\n", coloredWarning(), err)
 	} else if !isMerged {
 		warnings = append(warnings, "Branch is not merged to origin/main")
 	}
@@ -755,7 +770,7 @@ func (c *CleanCommand) displayResults(statuses []*WorktreeStatus) {
 
 	// Display removable worktrees
 	if len(removable) > 0 {
-		fmt.Fprintf(c.deps.Stdout, "\n✓ Removable (%d)\n", len(removable))
+		fmt.Fprintf(c.deps.Stdout, "\n%s Removable (%d)\n", coloredSuccess(), len(removable))
 		for _, status := range removable {
 			dirName := filepath.Base(status.Info.Path)
 			fmt.Fprintf(c.deps.Stdout, "  %s (%s)\n", dirName, status.Info.Branch)
@@ -764,7 +779,7 @@ func (c *CleanCommand) displayResults(statuses []*WorktreeStatus) {
 
 	// Display non-removable worktrees
 	if len(nonRemovable) > 0 {
-		fmt.Fprintf(c.deps.Stdout, "\n✗ Non-removable (%d)\n", len(nonRemovable))
+		fmt.Fprintf(c.deps.Stdout, "\n%s Non-removable (%d)\n", coloredError(), len(nonRemovable))
 		for i, status := range nonRemovable {
 			if i > 0 {
 				fmt.Fprintf(c.deps.Stdout, "\n")
@@ -773,7 +788,7 @@ func (c *CleanCommand) displayResults(statuses []*WorktreeStatus) {
 			fmt.Fprintf(c.deps.Stdout, "  %s (%s)\n", dirName, status.Info.Branch)
 			if len(status.Warnings) > 0 {
 				reasons := strings.Join(status.Warnings, ", ")
-				fmt.Fprintf(c.deps.Stdout, "    → %s\n", reasons)
+				fmt.Fprintf(c.deps.Stdout, "    %s %s\n", coloredArrow(), reasons)
 			}
 		}
 	}
@@ -794,12 +809,12 @@ func (c *CleanCommand) removeWorktrees(statuses []*WorktreeStatus) error {
 
 		// Remove the worktree
 		if err := c.deps.Git.RemoveWorktreeByPath(status.Info.Path); err != nil {
-			fmt.Fprintf(c.deps.Stderr, "✗ Failed to remove %s: %v\n", dirName, err)
+			fmt.Fprintf(c.deps.Stderr, "%s Failed to remove %s: %v\n", coloredError(), dirName, err)
 			failCount++
 			continue
 		}
 
-		fmt.Fprintf(c.deps.Stdout, "✓ Removed %s\n", dirName)
+		fmt.Fprintf(c.deps.Stdout, "%s Removed %s\n", coloredSuccess(), dirName)
 		successCount++
 
 		// Delete the branch if auto-remove is enabled
@@ -807,9 +822,9 @@ func (c *CleanCommand) removeWorktrees(statuses []*WorktreeStatus) error {
 			fmt.Fprintf(c.deps.Stdout, "Deleting branch %s...\n", status.Info.Branch)
 			if err := c.deps.Git.DeleteBranch(status.Info.Branch); err != nil {
 				// Don't fail the command, just warn
-				fmt.Fprintf(c.deps.Stderr, "⚠ Failed to delete branch %s: %v\n", status.Info.Branch, err)
+				fmt.Fprintf(c.deps.Stderr, "%s Failed to delete branch %s: %v\n", coloredWarning(), status.Info.Branch, err)
 			} else {
-				fmt.Fprintf(c.deps.Stdout, "✓ Deleted branch %s\n", status.Info.Branch)
+				fmt.Fprintf(c.deps.Stdout, "%s Deleted branch %s\n", coloredSuccess(), status.Info.Branch)
 			}
 		}
 	}
@@ -817,10 +832,10 @@ func (c *CleanCommand) removeWorktrees(statuses []*WorktreeStatus) error {
 	// Summary
 	fmt.Fprintf(c.deps.Stdout, "\n")
 	if successCount > 0 {
-		fmt.Fprintf(c.deps.Stdout, "✓ Successfully removed %d worktree(s)\n", successCount)
+		fmt.Fprintf(c.deps.Stdout, "%s Successfully removed %d worktree(s)\n", coloredSuccess(), successCount)
 	}
 	if failCount > 0 {
-		fmt.Fprintf(c.deps.Stderr, "✗ Failed to remove %d worktree(s)\n", failCount)
+		fmt.Fprintf(c.deps.Stderr, "%s Failed to remove %d worktree(s)\n", coloredError(), failCount)
 		return fmt.Errorf("failed to remove %d worktree(s)", failCount)
 	}
 

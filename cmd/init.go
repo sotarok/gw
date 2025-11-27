@@ -125,7 +125,7 @@ func (c *InitCommand) Execute() error {
 	if cfg.AutoCD {
 		if err := c.offerShellIntegration(reader); err != nil {
 			// Don't fail the command, just warn
-			fmt.Fprintf(c.stderr, "%s Shell integration setup failed: %v\n", symbolWarning, err)
+			fmt.Fprintf(c.stderr, "%s Shell integration setup failed: %v\n", coloredWarning(), err)
 		}
 	}
 
@@ -233,12 +233,12 @@ func (c *InitCommand) offerShellIntegration(reader *bufio.Reader) error {
 	// Add shell integration
 	if err := c.addShellIntegration(rcPath, shell); err != nil {
 		// If failed, show manual instructions
-		fmt.Fprintf(c.stderr, "%s Failed to add shell integration: %v\n", symbolWarning, err)
+		fmt.Fprintf(c.stderr, "%s Failed to add shell integration: %v\n", coloredWarning(), err)
 		return c.showManualInstructions(shell)
 	}
 
 	fmt.Fprintln(c.stdout)
-	fmt.Fprintf(c.stdout, "%s Shell integration added to %s\n", symbolSuccess, rcPath)
+	fmt.Fprintf(c.stdout, "%s Shell integration added to %s\n", coloredSuccess(), rcPath)
 	fmt.Fprintln(c.stdout, "Please restart your shell or run:")
 	fmt.Fprintf(c.stdout, "  source %s\n", rcPath)
 
@@ -346,7 +346,7 @@ func (c *InitCommand) showManualInstructions(shell string) error {
 
 func (c *InitCommand) showUpdateInstructions(rcPath, shell string) error {
 	fmt.Fprintln(c.stdout)
-	fmt.Fprintf(c.stdout, "%s Shell integration already exists in your configuration.\n", symbolWarning)
+	fmt.Fprintf(c.stdout, "%s Shell integration already exists in your configuration.\n", coloredWarning())
 	fmt.Fprintf(c.stdout, "  File: %s\n", rcPath)
 	fmt.Fprintln(c.stdout)
 	fmt.Fprintln(c.stdout, "To update or reinstall, please:")

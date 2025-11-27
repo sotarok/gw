@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+- Add colored output for status symbols (✓/✗/⚠/→) using lipgloss
+  - Automatically respects `NO_COLOR` environment variable and terminal capabilities
+
 ## [0.6.0] - 2025-11-25
 
 ### Added
