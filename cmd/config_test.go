@@ -76,11 +76,11 @@ func TestConfigCommand(t *testing.T) {
 			defaultVal:  true,
 		}
 
-		assert.Equal(t, "✅ auto cd", item.Title())
+		assert.Equal(t, "✓ auto cd", item.Title())
 		assert.Equal(t, "Automatically change directory (default: true)", item.Description())
 
 		item.value = false
-		assert.Equal(t, "❌ auto cd", item.Title())
+		assert.Equal(t, "✗ auto cd", item.Title())
 	})
 }
 

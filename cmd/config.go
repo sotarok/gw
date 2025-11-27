@@ -75,9 +75,9 @@ type configItem struct {
 }
 
 func (i configItem) Title() string {
-	status := "❌"
+	status := symbolError
 	if i.value {
-		status = "✅"
+		status = symbolSuccess
 	}
 	return fmt.Sprintf("%s %s", status, i.title)
 }
