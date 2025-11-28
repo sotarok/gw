@@ -7,6 +7,7 @@ import (
 
 	"github.com/sotarok/gw/internal/config"
 	"github.com/sotarok/gw/internal/iterm2"
+	"github.com/sotarok/gw/internal/spinner"
 )
 
 // EndCommand handles the end command logic
@@ -74,8 +75,6 @@ func (c *EndCommand) Execute(issueNumber string) error {
 		return fmt.Errorf("could not determine issue number")
 	}
 
-	fmt.Fprintf(c.deps.Stdout, "Checking worktree for issue #%s...\n", issueNumber)
-
 	// Change to the worktree directory to check status
 	originalDir, err := os.Getwd()
 	if err != nil {
@@ -88,7 +87,10 @@ func (c *EndCommand) Execute(issueNumber string) error {
 
 	// Perform safety checks unless forced
 	if !c.force {
+		sp := spinner.New(fmt.Sprintf("Checking worktree for issue #%s...", issueNumber), c.deps.Stdout)
+		sp.Start()
 		warnings := c.performSafetyChecks()
+		sp.Stop()
 
 		// If there are warnings, ask for confirmation
 		if len(warnings) > 0 {
@@ -117,19 +119,20 @@ func (c *EndCommand) Execute(issueNumber string) error {
 		return fmt.Errorf("failed to change back to original directory: %w", err)
 	}
 
-	fmt.Fprintf(c.deps.Stdout, "Removing worktree for issue #%s...\n", issueNumber)
-
-	// Remove the worktree
+	// Remove the worktree with spinner
+	sp := spinner.New(fmt.Sprintf("Removing worktree for issue #%s...", issueNumber), c.deps.Stdout)
+	sp.Start()
+	var removeErr error
 	if isInteractiveMode {
 		// Use the actual path when selected from interactive mode
-		if err := c.deps.Git.RemoveWorktreeByPath(worktreePath); err != nil {
-			return err
-		}
+		removeErr = c.deps.Git.RemoveWorktreeByPath(worktreePath)
 	} else {
 		// Use issue number template when specified directly
-		if err := c.deps.Git.RemoveWorktree(issueNumber); err != nil {
-			return err
-		}
+		removeErr = c.deps.Git.RemoveWorktree(issueNumber)
+	}
+	sp.Stop()
+	if removeErr != nil {
+		return removeErr
 	}
 
 	fmt.Fprintf(c.deps.Stdout, "%s Successfully removed worktree for issue #%s\n", coloredSuccess(), issueNumber)

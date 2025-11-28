@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+
+	"github.com/charmbracelet/lipgloss"
 )
 
 const (
@@ -126,6 +128,7 @@ func RunSetupWithExecutor(dir string, executor CommandExecutor) error {
 		return fmt.Errorf("failed to run %s: %w", pm.Name, err)
 	}
 
-	fmt.Printf("✓ %s setup completed\n", pm.Name)
+	successStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("2"))
+	fmt.Printf("%s %s setup completed\n", successStyle.Render("✓"), pm.Name)
 	return nil
 }

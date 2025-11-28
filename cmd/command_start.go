@@ -6,6 +6,7 @@ import (
 
 	"github.com/sotarok/gw/internal/config"
 	"github.com/sotarok/gw/internal/iterm2"
+	"github.com/sotarok/gw/internal/spinner"
 )
 
 // StartCommand handles the start command logic
@@ -61,13 +62,11 @@ func (c *StartCommand) Execute(issueNumber, baseBranch string) error {
 		return fmt.Errorf("failed to get current directory: %w", err)
 	}
 
-	// Print message if stdout is available
-	if c.deps.Stdout != nil {
-		fmt.Fprintf(c.deps.Stdout, "Creating worktree for issue #%s based on %s...\n", issueNumber, baseBranch)
-	}
-
-	// Create the worktree
+	// Create the worktree with spinner
+	sp := spinner.New(fmt.Sprintf("Creating worktree for issue #%s based on %s...", issueNumber, baseBranch), c.deps.Stdout)
+	sp.Start()
 	worktreePath, err := c.deps.Git.CreateWorktree(issueNumber, baseBranch)
+	sp.Stop()
 	if err != nil {
 		return err
 	}

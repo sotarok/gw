@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- Add CLI spinner for long-running operations
+  - Shows animated spinner during worktree creation, dependency installation, and safety checks
+  - Automatically disabled for non-TTY environments and respects `NO_COLOR`
+  - Falls back to simple text messages when spinner cannot be displayed
+
 ### Changed
 - Add colored output for status symbols (✓/✗/⚠/→) using lipgloss
   - Automatically respects `NO_COLOR` environment variable and terminal capabilities

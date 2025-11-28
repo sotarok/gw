@@ -8,6 +8,7 @@ import (
 
 	"github.com/sotarok/gw/internal/config"
 	"github.com/sotarok/gw/internal/iterm2"
+	"github.com/sotarok/gw/internal/spinner"
 	"github.com/sotarok/gw/internal/ui"
 )
 
@@ -87,10 +88,13 @@ func (c *CheckoutCommand) Execute(branch string) error {
 		return fmt.Errorf("failed to get current directory: %w", err)
 	}
 
-	// Create worktree
-	fmt.Fprintf(c.deps.Stdout, "Creating worktree for branch '%s'...\n", branch)
-	if err := c.deps.Git.CreateWorktreeFromBranch(worktreePath, branch, branchName); err != nil {
-		return fmt.Errorf("failed to create worktree: %w", err)
+	// Create worktree with spinner
+	sp := spinner.New(fmt.Sprintf("Creating worktree for branch '%s'...", branch), c.deps.Stdout)
+	sp.Start()
+	createErr := c.deps.Git.CreateWorktreeFromBranch(worktreePath, branch, branchName)
+	sp.Stop()
+	if createErr != nil {
+		return fmt.Errorf("failed to create worktree: %w", createErr)
 	}
 
 	// Change to the new worktree directory if auto-cd is enabled
@@ -138,8 +142,11 @@ func (c *CheckoutCommand) handleEnvFiles(originalDir, worktreePath string) error
 }
 
 func (c *CheckoutCommand) selectBranch() (string, error) {
-	// Get all branches (local and remote)
+	// Get all branches (local and remote) with spinner
+	sp := spinner.New("Fetching branches...", c.deps.Stdout)
+	sp.Start()
 	branches, err := c.deps.Git.ListAllBranches()
+	sp.Stop()
 	if err != nil {
 		return "", fmt.Errorf("failed to list branches: %w", err)
 	}

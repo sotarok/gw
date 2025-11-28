@@ -8,6 +8,7 @@ import (
 
 	"github.com/sotarok/gw/internal/config"
 	"github.com/sotarok/gw/internal/git"
+	"github.com/sotarok/gw/internal/spinner"
 )
 
 // WorktreeStatus holds the status of a worktree for the clean command
@@ -49,21 +50,21 @@ func NewCleanCommandWithConfig(deps *Dependencies, force, dryRun bool, cfg *conf
 
 // Execute runs the clean command
 func (c *CleanCommand) Execute() error {
-	fmt.Fprintf(c.deps.Stdout, "Checking worktrees...\n")
-
 	// Get all worktrees
 	worktrees, err := c.deps.Git.ListWorktrees()
 	if err != nil {
 		return fmt.Errorf("failed to list worktrees: %w", err)
 	}
 
-	// Filter out the main worktree and check each worktree
+	// Filter out the main worktree and check each worktree with spinner
 	statuses := make([]*WorktreeStatus, 0, len(worktrees))
 	originalDir, err := os.Getwd()
 	if err != nil {
 		return fmt.Errorf("failed to get current directory: %w", err)
 	}
 
+	sp := spinner.New("Checking worktrees...", c.deps.Stdout)
+	sp.Start()
 	for _, wt := range worktrees {
 		// Skip the main worktree (no branch or main/master branch)
 		if wt.Branch == "" || wt.Branch == defaultBaseBranch || wt.Branch == "master" {
@@ -73,6 +74,7 @@ func (c *CleanCommand) Execute() error {
 		status := c.checkWorktree(&wt, originalDir)
 		statuses = append(statuses, status)
 	}
+	sp.Stop()
 
 	// Display results
 	c.displayResults(statuses)
@@ -230,11 +232,14 @@ func (c *CleanCommand) removeWorktrees(statuses []*WorktreeStatus) error {
 		}
 
 		dirName := filepath.Base(status.Info.Path)
-		fmt.Fprintf(c.deps.Stdout, "Removing %s...\n", dirName)
 
-		// Remove the worktree
-		if err := c.deps.Git.RemoveWorktreeByPath(status.Info.Path); err != nil {
-			fmt.Fprintf(c.deps.Stderr, "%s Failed to remove %s: %v\n", coloredError(), dirName, err)
+		// Remove the worktree with spinner
+		sp := spinner.New(fmt.Sprintf("Removing %s...", dirName), c.deps.Stdout)
+		sp.Start()
+		removeErr := c.deps.Git.RemoveWorktreeByPath(status.Info.Path)
+		sp.Stop()
+		if removeErr != nil {
+			fmt.Fprintf(c.deps.Stderr, "%s Failed to remove %s: %v\n", coloredError(), dirName, removeErr)
 			failCount++
 			continue
 		}
