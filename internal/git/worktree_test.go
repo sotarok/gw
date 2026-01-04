@@ -681,6 +681,10 @@ func TestResolveBaseBranch(t *testing.T) {
 		if err := RunCommand("git init --bare"); err != nil {
 			t.Fatalf("failed to init bare repo: %v", err)
 		}
+		// Set default branch to main for the bare repo
+		if err := RunCommand("git symbolic-ref HEAD refs/heads/main"); err != nil {
+			t.Fatalf("failed to set HEAD: %v", err)
+		}
 
 		// Clone the remote
 		if err := os.Chdir(tempDir); err != nil {
@@ -702,10 +706,13 @@ func TestResolveBaseBranch(t *testing.T) {
 		if err := os.WriteFile("README.md", []byte("test"), 0644); err != nil {
 			t.Fatalf("failed to create file: %v", err)
 		}
+		if err := RunCommand("git checkout -b main"); err != nil {
+			t.Fatalf("failed to create main branch: %v", err)
+		}
 		if err := RunCommand("git add . && git commit -m 'initial commit'"); err != nil {
 			t.Fatalf("failed to create commit: %v", err)
 		}
-		if err := RunCommand("git push -u origin HEAD"); err != nil {
+		if err := RunCommand("git push -u origin main"); err != nil {
 			t.Fatalf("failed to push: %v", err)
 		}
 
@@ -776,6 +783,10 @@ func TestCreateWorktreeWithRemoteBaseBranch(t *testing.T) {
 		if err := RunCommand("git init --bare"); err != nil {
 			t.Fatalf("failed to init bare repo: %v", err)
 		}
+		// Set default branch to main for the bare repo
+		if err := RunCommand("git symbolic-ref HEAD refs/heads/main"); err != nil {
+			t.Fatalf("failed to set HEAD: %v", err)
+		}
 
 		// Clone the remote
 		if err := os.Chdir(tempDir); err != nil {
@@ -797,10 +808,13 @@ func TestCreateWorktreeWithRemoteBaseBranch(t *testing.T) {
 		if err := os.WriteFile("README.md", []byte("test"), 0644); err != nil {
 			t.Fatalf("failed to create file: %v", err)
 		}
+		if err := RunCommand("git checkout -b main"); err != nil {
+			t.Fatalf("failed to create main branch: %v", err)
+		}
 		if err := RunCommand("git add . && git commit -m 'initial commit'"); err != nil {
 			t.Fatalf("failed to create commit: %v", err)
 		}
-		if err := RunCommand("git push -u origin HEAD"); err != nil {
+		if err := RunCommand("git push -u origin main"); err != nil {
 			t.Fatalf("failed to push: %v", err)
 		}
 
