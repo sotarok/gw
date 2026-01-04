@@ -100,6 +100,11 @@ func TestBranchExists(t *testing.T) {
 			t.Fatalf("failed to get current branch: %v", err)
 		}
 
+		// Skip if in detached HEAD state (common in CI environments)
+		if currentBranch == "HEAD" {
+			t.Skip("Skipping test in detached HEAD state")
+		}
+
 		exists, err := BranchExists(currentBranch)
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)

@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- Fix `gw start` failing when base branch exists only on remote (not locally)
+  - Now automatically resolves `origin/<branch>` when the specified base branch doesn't exist locally but exists on remote
+  - Allows using fetched remote branches without needing to create local tracking branches first
+
 ## [0.6.1] - 2025-12-16
 
 ### Added

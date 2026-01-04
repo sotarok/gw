@@ -34,6 +34,32 @@ func DetermineWorktreeNames(input string) (branchName, dirSuffix string) {
 	return branchName, dirSuffix
 }
 
+// ResolveBaseBranch resolves the base branch, checking local first, then remote
+// Returns the resolved branch reference and whether it's a remote branch
+func ResolveBaseBranch(baseBranch string) (string, bool) {
+	// If the branch exists locally, use it as-is
+	if LocalBranchExists(baseBranch) {
+		return baseBranch, false
+	}
+
+	// If it already starts with origin/, check if it exists
+	if strings.HasPrefix(baseBranch, "origin/") {
+		if RemoteBranchExists(baseBranch) {
+			return baseBranch, true
+		}
+		return baseBranch, false
+	}
+
+	// Check if it exists as a remote branch
+	remoteBranch := "origin/" + baseBranch
+	if RemoteBranchExists(remoteBranch) {
+		return remoteBranch, true
+	}
+
+	// Return original if nothing found (let git handle the error)
+	return baseBranch, false
+}
+
 // CreateWorktree creates a new git worktree
 func CreateWorktree(issueNumberOrBranch, baseBranch string) (string, error) {
 	if !IsGitRepository() {
@@ -59,8 +85,11 @@ func CreateWorktree(issueNumberOrBranch, baseBranch string) (string, error) {
 	// Create worktree directory path relative to repository root
 	worktreeDir := filepath.Join(repoRoot, "..", fmt.Sprintf("%s-%s", repoName, dirSuffix))
 
+	// Resolve base branch (check local first, then remote)
+	resolvedBaseBranch, _ := ResolveBaseBranch(baseBranch)
+
 	// Create the worktree
-	cmd = exec.Command("git", "worktree", "add", worktreeDir, "-b", branchName, baseBranch)
+	cmd = exec.Command("git", "worktree", "add", worktreeDir, "-b", branchName, resolvedBaseBranch)
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 
