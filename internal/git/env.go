@@ -24,7 +24,7 @@ func FindUntrackedEnvFiles(repoPath string) ([]EnvFile, error) {
 		}
 
 		// Skip .git directory
-		if info.IsDir() && info.Name() == ".git" {
+		if info.IsDir() && info.Name() == gitDir {
 			return filepath.SkipDir
 		}
 

@@ -57,6 +57,120 @@ func TestGetRepositoryName(t *testing.T) {
 	})
 }
 
+func TestGetOriginalRepositoryName(t *testing.T) {
+	const testRepoName = "my-repo"
+
+	t.Run("returns original repository name even from worktree", func(t *testing.T) {
+		// Create a temporary git repository for testing
+		tempDir, err := os.MkdirTemp("", "test-original-repo")
+		if err != nil {
+			t.Fatalf("failed to create temp dir: %v", err)
+		}
+		defer os.RemoveAll(tempDir)
+
+		// Save current directory
+		originalDir, err := os.Getwd()
+		if err != nil {
+			t.Fatalf("failed to get current dir: %v", err)
+		}
+		defer func() {
+			_ = os.Chdir(originalDir)
+		}()
+
+		// Create the main repository directory
+		mainRepoPath := tempDir + "/" + testRepoName
+		if err := os.MkdirAll(mainRepoPath, 0755); err != nil {
+			t.Fatalf("failed to create main repo dir: %v", err)
+		}
+
+		// Change to main repo and initialize
+		if err := os.Chdir(mainRepoPath); err != nil {
+			t.Fatalf("failed to change to main repo dir: %v", err)
+		}
+
+		if err := RunCommand("git init"); err != nil {
+			t.Fatalf("failed to init git repo: %v", err)
+		}
+		if err := RunCommand("git config user.email 'test@example.com' && git config user.name 'Test User'"); err != nil {
+			t.Fatalf("failed to configure git: %v", err)
+		}
+		if err := os.WriteFile("README.md", []byte("test"), 0644); err != nil {
+			t.Fatalf("failed to create file: %v", err)
+		}
+		if err := RunCommand("git add . && git commit -m 'initial commit'"); err != nil {
+			t.Fatalf("failed to create commit: %v", err)
+		}
+
+		// Verify GetOriginalRepositoryName returns testRepoName from main repo
+		name, err := GetOriginalRepositoryName()
+		if err != nil {
+			t.Fatalf("unexpected error in main repo: %v", err)
+		}
+		if name != testRepoName {
+			t.Errorf("expected %q in main repo, got %q", testRepoName, name)
+		}
+
+		// Create a worktree
+		worktreeDirName := testRepoName + "-123"
+		worktreePath := tempDir + "/" + worktreeDirName
+		if err := RunCommand("git worktree add " + worktreePath + " -b 123/impl"); err != nil {
+			t.Fatalf("failed to create worktree: %v", err)
+		}
+		defer func() {
+			_ = os.Chdir(mainRepoPath)
+			_ = RunCommand("git worktree remove " + worktreePath)
+		}()
+
+		// Change to worktree directory
+		if err := os.Chdir(worktreePath); err != nil {
+			t.Fatalf("failed to change to worktree: %v", err)
+		}
+
+		// GetRepositoryName should return the worktree directory name
+		worktreeName, err := GetRepositoryName()
+		if err != nil {
+			t.Fatalf("unexpected error getting worktree name: %v", err)
+		}
+		if worktreeName != worktreeDirName {
+			t.Errorf("expected GetRepositoryName to return %q, got %q", worktreeDirName, worktreeName)
+		}
+
+		// GetOriginalRepositoryName should still return testRepoName
+		originalName, err := GetOriginalRepositoryName()
+		if err != nil {
+			t.Fatalf("unexpected error in worktree: %v", err)
+		}
+		if originalName != testRepoName {
+			t.Errorf("expected GetOriginalRepositoryName to return %q from worktree, got %q", testRepoName, originalName)
+		}
+	})
+
+	t.Run("returns error when not in git repository", func(t *testing.T) {
+		tempDir, err := os.MkdirTemp("", "test-non-git")
+		if err != nil {
+			t.Fatalf("failed to create temp dir: %v", err)
+		}
+		defer os.RemoveAll(tempDir)
+
+		originalDir, err := os.Getwd()
+		if err != nil {
+			t.Fatalf("failed to get current dir: %v", err)
+		}
+		defer func() {
+			_ = os.Chdir(originalDir)
+		}()
+
+		if err := os.Chdir(tempDir); err != nil {
+			t.Fatalf("failed to change dir: %v", err)
+		}
+
+		_, err = GetOriginalRepositoryName()
+		if err == nil {
+			t.Error("expected error when not in git repository, got nil")
+		}
+	})
+}
+
 func TestIsGitRepository(t *testing.T) {
 	t.Run("returns true in git repository", func(t *testing.T) {
 		// We're running this test in a git repository
