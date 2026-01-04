@@ -7,6 +7,11 @@ import (
 	"testing"
 )
 
+const (
+	mainBranch   = "main"
+	masterBranch = "master"
+)
+
 // Helper function to create a temporary git repository for testing
 func createTestRepo(t *testing.T) (string, func()) {
 	tempDir, err := os.MkdirTemp("", "test-git-repo")
@@ -213,7 +218,7 @@ func TestGetCurrentBranch(t *testing.T) {
 		}
 
 		// In a new repo, the default branch might be "master" or "main"
-		if branch != "master" && branch != "main" {
+		if branch != masterBranch && branch != mainBranch {
 			t.Errorf("expected 'master' or 'main', got %q", branch)
 		}
 	})
