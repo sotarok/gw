@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.6.2] - 2025-01-04
+
 ### Fixed
 - Fix `gw start` creating incorrectly named worktree directories when run from within a worktree
   - Previously running `gw start 456` from within `gw-123` worktree would create `gw-123-456`
