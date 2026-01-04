@@ -604,3 +604,252 @@ func TestCreateWorktreeFromBranch(t *testing.T) {
 		}
 	})
 }
+
+func TestResolveBaseBranch(t *testing.T) {
+	t.Run("returns local branch when it exists", func(t *testing.T) {
+		// Save and restore working directory first
+		originalDir, err := os.Getwd()
+		if err != nil {
+			t.Fatalf("failed to get current dir: %v", err)
+		}
+		defer os.Chdir(originalDir)
+
+		// Create a temporary git repository
+		tempDir, err := os.MkdirTemp("", "test-resolve-local")
+		if err != nil {
+			t.Fatalf("failed to create temp dir: %v", err)
+		}
+		defer os.RemoveAll(tempDir)
+
+		// Initialize git repo
+		if err := os.Chdir(tempDir); err != nil {
+			t.Fatalf("failed to change dir: %v", err)
+		}
+
+		if err := RunCommand("git init -b main"); err != nil {
+			t.Fatalf("failed to init git repo: %v", err)
+		}
+
+		// Configure git
+		if err := RunCommand("git config user.email 'test@example.com' && git config user.name 'Test User'"); err != nil {
+			t.Fatalf("failed to configure git: %v", err)
+		}
+
+		// Create initial commit
+		if err := os.WriteFile("README.md", []byte("test"), 0644); err != nil {
+			t.Fatalf("failed to create file: %v", err)
+		}
+		if err := RunCommand("git add . && git commit -m 'initial commit'"); err != nil {
+			t.Fatalf("failed to create commit: %v", err)
+		}
+
+		// Test that local branch "main" is resolved correctly
+		resolved, isRemote := ResolveBaseBranch("main")
+		if resolved != "main" {
+			t.Errorf("expected 'main', got %q", resolved)
+		}
+		if isRemote {
+			t.Error("expected isRemote to be false for local branch")
+		}
+	})
+
+	t.Run("returns origin prefix for remote-only branch", func(t *testing.T) {
+		// Save and restore working directory first
+		originalDir, err := os.Getwd()
+		if err != nil {
+			t.Fatalf("failed to get current dir: %v", err)
+		}
+		defer os.Chdir(originalDir)
+
+		// Create a temporary "remote" repository (bare)
+		tempDir, err := os.MkdirTemp("", "test-resolve-remote")
+		if err != nil {
+			t.Fatalf("failed to create temp dir: %v", err)
+		}
+		defer os.RemoveAll(tempDir)
+
+		remoteDir := filepath.Join(tempDir, "remote.git")
+		localDir := filepath.Join(tempDir, "local")
+
+		// Create bare repo (simulates remote)
+		if err := os.MkdirAll(remoteDir, 0755); err != nil {
+			t.Fatalf("failed to create remote dir: %v", err)
+		}
+		if err := os.Chdir(remoteDir); err != nil {
+			t.Fatalf("failed to change to remote dir: %v", err)
+		}
+		if err := RunCommand("git init --bare"); err != nil {
+			t.Fatalf("failed to init bare repo: %v", err)
+		}
+
+		// Clone the remote
+		if err := os.Chdir(tempDir); err != nil {
+			t.Fatalf("failed to change to temp dir: %v", err)
+		}
+		if err := RunCommand("git clone " + remoteDir + " local"); err != nil {
+			t.Fatalf("failed to clone: %v", err)
+		}
+
+		// Setup local repo
+		if err := os.Chdir(localDir); err != nil {
+			t.Fatalf("failed to change to local dir: %v", err)
+		}
+		if err := RunCommand("git config user.email 'test@example.com' && git config user.name 'Test User'"); err != nil {
+			t.Fatalf("failed to configure git: %v", err)
+		}
+
+		// Create initial commit on main and push
+		if err := os.WriteFile("README.md", []byte("test"), 0644); err != nil {
+			t.Fatalf("failed to create file: %v", err)
+		}
+		if err := RunCommand("git add . && git commit -m 'initial commit'"); err != nil {
+			t.Fatalf("failed to create commit: %v", err)
+		}
+		if err := RunCommand("git push -u origin HEAD"); err != nil {
+			t.Fatalf("failed to push: %v", err)
+		}
+
+		// Create a feature branch and push it (but don't keep it locally)
+		if err := RunCommand("git checkout -b remote-only-feature"); err != nil {
+			t.Fatalf("failed to create feature branch: %v", err)
+		}
+		if err := os.WriteFile("feature.txt", []byte("feature"), 0644); err != nil {
+			t.Fatalf("failed to create file: %v", err)
+		}
+		if err := RunCommand("git add . && git commit -m 'feature commit'"); err != nil {
+			t.Fatalf("failed to create commit: %v", err)
+		}
+		if err := RunCommand("git push -u origin remote-only-feature"); err != nil {
+			t.Fatalf("failed to push feature branch: %v", err)
+		}
+
+		// Switch back to main and delete local feature branch
+		if err := RunCommand("git checkout main"); err != nil {
+			t.Fatalf("failed to checkout main: %v", err)
+		}
+		if err := RunCommand("git branch -D remote-only-feature"); err != nil {
+			t.Fatalf("failed to delete local branch: %v", err)
+		}
+
+		// Fetch to ensure we have remote refs
+		if err := RunCommand("git fetch origin"); err != nil {
+			t.Fatalf("failed to fetch: %v", err)
+		}
+
+		// Test that remote-only branch resolves to origin/
+		resolved, isRemote := ResolveBaseBranch("remote-only-feature")
+		if resolved != "origin/remote-only-feature" {
+			t.Errorf("expected 'origin/remote-only-feature', got %q", resolved)
+		}
+		if !isRemote {
+			t.Error("expected isRemote to be true for remote-only branch")
+		}
+	})
+}
+
+func TestCreateWorktreeWithRemoteBaseBranch(t *testing.T) {
+	t.Run("creates worktree from remote-only base branch", func(t *testing.T) {
+		// Save and restore working directory first
+		originalDir, err := os.Getwd()
+		if err != nil {
+			t.Fatalf("failed to get current dir: %v", err)
+		}
+		defer os.Chdir(originalDir)
+
+		// Create a temporary "remote" repository (bare)
+		tempDir, err := os.MkdirTemp("", "test-worktree-remote")
+		if err != nil {
+			t.Fatalf("failed to create temp dir: %v", err)
+		}
+		defer os.RemoveAll(tempDir)
+
+		remoteDir := filepath.Join(tempDir, "remote.git")
+		localDir := filepath.Join(tempDir, "test-repo")
+
+		// Create bare repo (simulates remote)
+		if err := os.MkdirAll(remoteDir, 0755); err != nil {
+			t.Fatalf("failed to create remote dir: %v", err)
+		}
+		if err := os.Chdir(remoteDir); err != nil {
+			t.Fatalf("failed to change to remote dir: %v", err)
+		}
+		if err := RunCommand("git init --bare"); err != nil {
+			t.Fatalf("failed to init bare repo: %v", err)
+		}
+
+		// Clone the remote
+		if err := os.Chdir(tempDir); err != nil {
+			t.Fatalf("failed to change to temp dir: %v", err)
+		}
+		if err := RunCommand("git clone " + remoteDir + " test-repo"); err != nil {
+			t.Fatalf("failed to clone: %v", err)
+		}
+
+		// Setup local repo
+		if err := os.Chdir(localDir); err != nil {
+			t.Fatalf("failed to change to local dir: %v", err)
+		}
+		if err := RunCommand("git config user.email 'test@example.com' && git config user.name 'Test User'"); err != nil {
+			t.Fatalf("failed to configure git: %v", err)
+		}
+
+		// Create initial commit on main and push
+		if err := os.WriteFile("README.md", []byte("test"), 0644); err != nil {
+			t.Fatalf("failed to create file: %v", err)
+		}
+		if err := RunCommand("git add . && git commit -m 'initial commit'"); err != nil {
+			t.Fatalf("failed to create commit: %v", err)
+		}
+		if err := RunCommand("git push -u origin HEAD"); err != nil {
+			t.Fatalf("failed to push: %v", err)
+		}
+
+		// Create a feature branch, push it, then delete locally
+		if err := RunCommand("git checkout -b feature-base"); err != nil {
+			t.Fatalf("failed to create feature branch: %v", err)
+		}
+		if err := os.WriteFile("feature.txt", []byte("feature"), 0644); err != nil {
+			t.Fatalf("failed to create file: %v", err)
+		}
+		if err := RunCommand("git add . && git commit -m 'feature commit'"); err != nil {
+			t.Fatalf("failed to create commit: %v", err)
+		}
+		if err := RunCommand("git push -u origin feature-base"); err != nil {
+			t.Fatalf("failed to push feature branch: %v", err)
+		}
+
+		// Switch back to main and delete local feature branch
+		if err := RunCommand("git checkout main"); err != nil {
+			t.Fatalf("failed to checkout main: %v", err)
+		}
+		if err := RunCommand("git branch -D feature-base"); err != nil {
+			t.Fatalf("failed to delete local branch: %v", err)
+		}
+
+		// Fetch to ensure we have remote refs
+		if err := RunCommand("git fetch origin"); err != nil {
+			t.Fatalf("failed to fetch: %v", err)
+		}
+
+		// Create worktree using remote-only branch as base
+		worktreePath, err := CreateWorktree("789", "feature-base")
+		if err != nil {
+			t.Fatalf("CreateWorktree failed: %v", err)
+		}
+
+		// Verify worktree was created
+		if _, err := os.Stat(worktreePath); os.IsNotExist(err) {
+			t.Fatalf("worktree was not created at %s", worktreePath)
+		}
+
+		// Verify the branch was created with correct base
+		// Check that feature.txt exists (from feature-base branch)
+		featurePath := filepath.Join(worktreePath, "feature.txt")
+		if _, err := os.Stat(featurePath); os.IsNotExist(err) {
+			t.Error("feature.txt not found - worktree was not based on feature-base branch")
+		}
+
+		// Cleanup
+		exec.Command("git", "worktree", "remove", worktreePath).Run()
+	})
+}
