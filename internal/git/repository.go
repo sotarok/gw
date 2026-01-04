@@ -7,7 +7,11 @@ import (
 	"strings"
 )
 
+const gitDir = ".git"
+
 // GetRepositoryName returns the name of the current git repository
+// Note: In a worktree, this returns the worktree directory name, not the original repository name.
+// Use GetOriginalRepositoryName() if you need the original repository name.
 func GetRepositoryName() (string, error) {
 	cmd := exec.Command("git", "rev-parse", "--show-toplevel")
 	output, err := cmd.Output()
@@ -17,6 +21,29 @@ func GetRepositoryName() (string, error) {
 
 	repoPath := strings.TrimSpace(string(output))
 	return filepath.Base(repoPath), nil
+}
+
+// GetOriginalRepositoryName returns the name of the original git repository.
+// In a worktree, this returns the name of the main repository, not the worktree directory.
+// This is useful for creating new worktrees with consistent naming.
+func GetOriginalRepositoryName() (string, error) {
+	// Get the git common directory (points to original .git in worktrees)
+	cmd := exec.Command("git", "rev-parse", "--git-common-dir")
+	output, err := cmd.Output()
+	if err != nil {
+		return "", fmt.Errorf("not in a git repository: %w", err)
+	}
+
+	gitCommonDir := strings.TrimSpace(string(output))
+
+	// If it's ".git", we're in the main repository - use show-toplevel
+	if gitCommonDir == gitDir {
+		return GetRepositoryName()
+	}
+
+	// In a worktree, gitCommonDir is an absolute path like /path/to/original-repo/.git
+	// We need to get the parent directory's base name
+	return filepath.Base(filepath.Dir(gitCommonDir)), nil
 }
 
 // IsGitRepository checks if the current directory is inside a git repository

@@ -8,6 +8,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Fixed
+- Fix `gw start` creating incorrectly named worktree directories when run from within a worktree
+  - Previously running `gw start 456` from within `gw-123` worktree would create `gw-123-456`
+  - Now always creates `{original-repo}-{issue}` regardless of current directory (e.g., `gw-456`)
+  - Uses `git rev-parse --git-common-dir` to resolve the original repository name
 - Fix `gw start` failing when base branch exists only on remote (not locally)
   - Now automatically resolves `origin/<branch>` when the specified base branch doesn't exist locally but exists on remote
   - Allows using fetched remote branches without needing to create local tracking branches first

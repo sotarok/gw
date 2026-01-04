@@ -66,7 +66,7 @@ func CreateWorktree(issueNumberOrBranch, baseBranch string) (string, error) {
 		return "", fmt.Errorf("not in a git repository")
 	}
 
-	repoName, err := GetRepositoryName()
+	repoName, err := GetOriginalRepositoryName()
 	if err != nil {
 		return "", err
 	}
@@ -112,7 +112,7 @@ func RemoveWorktree(issueNumberOrBranch string) error {
 		return fmt.Errorf("not in a git repository")
 	}
 
-	repoName, err := GetRepositoryName()
+	repoName, err := GetOriginalRepositoryName()
 	if err != nil {
 		return err
 	}
@@ -208,7 +208,7 @@ func ListWorktrees() ([]WorktreeInfo, error) {
 
 // GetWorktreeForIssue finds a worktree for a specific issue number or branch name
 func GetWorktreeForIssue(issueNumberOrBranch string) (*WorktreeInfo, error) {
-	repoName, err := GetRepositoryName()
+	repoName, err := GetOriginalRepositoryName()
 	if err != nil {
 		return nil, err
 	}
