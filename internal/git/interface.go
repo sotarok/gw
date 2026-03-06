@@ -6,6 +6,7 @@ type Interface interface {
 	IsGitRepository() bool
 	GetRepositoryName() (string, error)
 	GetCurrentBranch() (string, error)
+	FetchAll() error
 
 	// Worktree operations
 	CreateWorktree(issueNumber, baseBranch string) (string, error)
@@ -56,6 +57,10 @@ func (c *DefaultClient) GetRepositoryName() (string, error) {
 
 func (c *DefaultClient) GetCurrentBranch() (string, error) {
 	return GetCurrentBranch()
+}
+
+func (c *DefaultClient) FetchAll() error {
+	return FetchAll()
 }
 
 // Worktree operations

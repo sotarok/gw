@@ -5,8 +5,9 @@ import (
 )
 
 var (
-	forceClean  bool
-	dryRunClean bool
+	forceClean   bool
+	dryRunClean  bool
+	cleanNoFetch bool
 )
 
 var cleanCmd = &cobra.Command{
@@ -28,10 +29,11 @@ func init() {
 	rootCmd.AddCommand(cleanCmd)
 	cleanCmd.Flags().BoolVarP(&forceClean, "force", "f", false, "Force removal without confirmation prompt")
 	cleanCmd.Flags().BoolVar(&dryRunClean, "dry-run", false, "Show what would be removed without actually removing")
+	cleanCmd.Flags().BoolVar(&cleanNoFetch, "no-fetch", false, "Skip git fetch before running the command")
 }
 
 func runClean(cmd *cobra.Command, args []string) error {
 	deps := DefaultDependencies()
-	cleanCmd := NewCleanCommand(deps, forceClean, dryRunClean)
+	cleanCmd := NewCleanCommand(deps, forceClean, dryRunClean, cleanNoFetch)
 	return cleanCmd.Execute()
 }

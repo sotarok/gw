@@ -20,36 +20,42 @@ type WorktreeStatus struct {
 
 // CleanCommand handles the clean command logic
 type CleanCommand struct {
-	deps   *Dependencies
-	force  bool
-	dryRun bool
-	config *config.Config
+	deps    *Dependencies
+	force   bool
+	dryRun  bool
+	noFetch bool
+	config  *config.Config
 }
 
 // NewCleanCommand creates a new clean command handler
-func NewCleanCommand(deps *Dependencies, force, dryRun bool) *CleanCommand {
+func NewCleanCommand(deps *Dependencies, force, dryRun, noFetch bool) *CleanCommand {
 	// Load config
 	cfg, _ := config.Load(config.GetConfigPath())
 	return &CleanCommand{
-		deps:   deps,
-		force:  force,
-		dryRun: dryRun,
-		config: cfg,
+		deps:    deps,
+		force:   force,
+		dryRun:  dryRun,
+		noFetch: noFetch,
+		config:  cfg,
 	}
 }
 
 // NewCleanCommandWithConfig creates a new clean command handler with explicit config
-func NewCleanCommandWithConfig(deps *Dependencies, force, dryRun bool, cfg *config.Config) *CleanCommand {
+func NewCleanCommandWithConfig(deps *Dependencies, force, dryRun, noFetch bool, cfg *config.Config) *CleanCommand {
 	return &CleanCommand{
-		deps:   deps,
-		force:  force,
-		dryRun: dryRun,
-		config: cfg,
+		deps:    deps,
+		force:   force,
+		dryRun:  dryRun,
+		noFetch: noFetch,
+		config:  cfg,
 	}
 }
 
 // Execute runs the clean command
 func (c *CleanCommand) Execute() error {
+	// Fetch from remotes if configured
+	fetchIfConfigured(c.deps, c.config, c.noFetch)
+
 	// Get all worktrees
 	worktrees, err := c.deps.Git.ListWorktrees()
 	if err != nil {

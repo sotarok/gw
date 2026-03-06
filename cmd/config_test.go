@@ -38,9 +38,9 @@ func TestConfigCommand(t *testing.T) {
 		assert.Equal(t, loadedCfg, model.config)
 		assert.Equal(t, configPath, model.configPath)
 
-		// Verify the list has the correct items (now 4 with copy_envs)
+		// Verify the list has the correct items (now 5 with fetch_before_command)
 		items := model.list.Items()
-		assert.Len(t, items, 4)
+		assert.Len(t, items, 5)
 
 		// Check auto_cd item
 		item0 := items[0].(configItem)
@@ -129,7 +129,7 @@ func TestConfigIntegration(t *testing.T) {
 		}
 
 		items := cfg.GetConfigItems()
-		assert.Len(t, items, 4) // Now 4 items with copy_envs
+		assert.Len(t, items, 5) // Now 5 items with fetch_before_command
 
 		// Check auto_cd
 		assert.Equal(t, "auto_cd", items[0].Key)

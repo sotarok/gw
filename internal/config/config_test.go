@@ -28,6 +28,11 @@ func TestNewConfig(t *testing.T) {
 	if config.CopyEnvs != nil {
 		t.Errorf("Expected CopyEnvs to be nil by default, got %v", config.CopyEnvs)
 	}
+
+	// Default value should be true for fetch-before-command
+	if !config.FetchBeforeCommand {
+		t.Error("Expected FetchBeforeCommand to be true by default")
+	}
 }
 
 func TestLoadConfig_FileNotExists(t *testing.T) {
@@ -263,6 +268,7 @@ func TestSaveConfig_DirectoryCreation(t *testing.T) {
 		"auto_cd = true\n" +
 		"update_iterm2_tab = false\n" +
 		"auto_remove_branch = false\n" +
+		"fetch_before_command = false\n" +
 		"# copy_envs = false  # Uncomment to set default behavior\n"
 	if string(content) != expectedContent {
 		t.Errorf("Expected content:\n%s\nGot:\n%s", expectedContent, string(content))
@@ -279,9 +285,9 @@ func TestGetConfigItems(t *testing.T) {
 
 	items := config.GetConfigItems()
 
-	// Should return 4 items (added copy_envs)
-	if len(items) != 4 {
-		t.Fatalf("Expected 4 config items, got %d", len(items))
+	// Should return 5 items (added fetch_before_command)
+	if len(items) != 5 {
+		t.Fatalf("Expected 5 config items, got %d", len(items))
 	}
 
 	// Check auto_cd item
@@ -524,6 +530,15 @@ func TestSetConfigItem(t *testing.T) {
 		t.Error("Expected CopyEnvs to be non-nil after setting")
 	} else if *config.CopyEnvs != true {
 		t.Errorf("Expected CopyEnvs to be true after setting, got %v", *config.CopyEnvs)
+	}
+
+	// Test setting fetch_before_command
+	err = config.SetConfigItem("fetch_before_command", false)
+	if err != nil {
+		t.Errorf("Failed to set fetch_before_command: %v", err)
+	}
+	if config.FetchBeforeCommand != false {
+		t.Errorf("Expected FetchBeforeCommand to be false after setting, got %v", config.FetchBeforeCommand)
 	}
 
 	// Test setting unknown key

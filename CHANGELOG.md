@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- New `fetch_before_command` configuration option (default: `true`)
+  - Automatically runs `git fetch --all --prune` before `start`, `end`, `checkout`, and `clean` commands
+  - Ensures remote branch information is up-to-date for accurate branch existence checks and merge status detection
+  - `--no-fetch` flag available on all four commands to temporarily skip fetching
+  - Fetch failures are treated as warnings and do not block command execution
+  - Configurable via `gw config` or `gw init`
+
 ## [0.6.2] - 2025-01-04
 
 ### Fixed

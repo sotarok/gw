@@ -9,6 +9,7 @@ import (
 	"github.com/sotarok/gw/internal/config"
 	"github.com/sotarok/gw/internal/detect"
 	"github.com/sotarok/gw/internal/git"
+	"github.com/sotarok/gw/internal/spinner"
 	"github.com/sotarok/gw/internal/ui"
 )
 
@@ -51,6 +52,20 @@ func DefaultDependencies() *Dependencies {
 		Detect: detect.NewDefaultDetector(),
 		Stdout: os.Stdout,
 		Stderr: os.Stderr,
+	}
+}
+
+// fetchIfConfigured runs git fetch --all --prune if configured and not skipped
+func fetchIfConfigured(deps *Dependencies, cfg *config.Config, noFetch bool) {
+	if noFetch || cfg == nil || !cfg.FetchBeforeCommand {
+		return
+	}
+	sp := spinner.New("Fetching from remotes...", deps.Stdout)
+	sp.Start()
+	err := deps.Git.FetchAll()
+	sp.Stop()
+	if err != nil {
+		fmt.Fprintf(deps.Stderr, "%s Could not fetch from remotes: %v\n", coloredWarning(), err)
 	}
 }
 

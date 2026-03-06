@@ -16,25 +16,28 @@ import (
 type CheckoutCommand struct {
 	deps     *Dependencies
 	copyEnvs bool
+	noFetch  bool
 	config   *config.Config
 }
 
 // NewCheckoutCommand creates a new checkout command handler
-func NewCheckoutCommand(deps *Dependencies, copyEnvs bool) *CheckoutCommand {
+func NewCheckoutCommand(deps *Dependencies, copyEnvs, noFetch bool) *CheckoutCommand {
 	// Load config
 	cfg, _ := config.Load(config.GetConfigPath())
 	return &CheckoutCommand{
 		deps:     deps,
 		copyEnvs: copyEnvs,
+		noFetch:  noFetch,
 		config:   cfg,
 	}
 }
 
 // NewCheckoutCommandWithConfig creates a new checkout command handler with explicit config
-func NewCheckoutCommandWithConfig(deps *Dependencies, copyEnvs bool, cfg *config.Config) *CheckoutCommand {
+func NewCheckoutCommandWithConfig(deps *Dependencies, copyEnvs, noFetch bool, cfg *config.Config) *CheckoutCommand {
 	return &CheckoutCommand{
 		deps:     deps,
 		copyEnvs: copyEnvs,
+		noFetch:  noFetch,
 		config:   cfg,
 	}
 }
@@ -49,6 +52,9 @@ func (c *CheckoutCommand) Execute(branch string) error {
 		}
 		branch = selectedBranch
 	}
+
+	// Fetch from remotes if configured
+	fetchIfConfigured(c.deps, c.config, c.noFetch)
 
 	// Get repository name
 	repoName, err := c.deps.Git.GetRepositoryName()

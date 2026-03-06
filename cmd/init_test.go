@@ -22,8 +22,9 @@ func TestInitCommand_Execute(t *testing.T) {
 		checkConfig   func(t *testing.T, cfg *config.Config)
 	}{
 		{
-			name:      "user selects all true",
-			userInput: "y\ny\ny\ny\ny\n", // Enable auto-cd, enable iterm2, enable auto-remove, enable copy-envs, enable shell integration
+			name: "user selects all true",
+			// Enable all options + shell integration
+			userInput: "y\ny\ny\ny\ny\ny\n",
 			checkConfig: func(t *testing.T, cfg *config.Config) {
 				if !cfg.AutoCD {
 					t.Error("Expected AutoCD to be true")
@@ -41,7 +42,7 @@ func TestInitCommand_Execute(t *testing.T) {
 		},
 		{
 			name:      "user selects all false",
-			userInput: "n\nn\nn\nn\n", // Disable all (auto-cd, iterm2, auto-remove, copy-envs)
+			userInput: "n\nn\nn\nn\nn\n", // Disable all (auto-cd, iterm2, auto-remove, copy-envs, fetch-before-command)
 			checkConfig: func(t *testing.T, cfg *config.Config) {
 				if cfg.AutoCD {
 					t.Error("Expected AutoCD to be false")
@@ -59,7 +60,7 @@ func TestInitCommand_Execute(t *testing.T) {
 		},
 		{
 			name:      "user uses defaults (press enter)",
-			userInput: "\n\n\n\ny\n", // Use defaults (true, false, false, false), enable shell integration
+			userInput: "\n\n\n\n\ny\n", // Use defaults (true, false, false, false, true), enable shell integration
 			checkConfig: func(t *testing.T, cfg *config.Config) {
 				if !cfg.AutoCD {
 					t.Error("Expected AutoCD to be true (default)")
@@ -75,7 +76,7 @@ func TestInitCommand_Execute(t *testing.T) {
 		},
 		{
 			name:      "mixed selections",
-			userInput: "n\ny\ny\nn\n", // Disable auto-cd, enable iterm2, enable auto-remove, disable copy-envs
+			userInput: "n\ny\ny\nn\nn\n", // Disable auto-cd, enable iterm2, enable auto-remove, disable copy-envs, disable fetch-before-command
 			checkConfig: func(t *testing.T, cfg *config.Config) {
 				if cfg.AutoCD {
 					t.Error("Expected AutoCD to be false")
@@ -426,8 +427,9 @@ func TestInitCommand_ShellIntegration(t *testing.T) {
 		checkOutput    func(t *testing.T, output string)
 	}{
 		{
-			name:           "user enables auto-cd and shell integration added automatically",
-			userInput:      "y\nn\nn\nn\ny\n", // Enable auto-cd, disable iterm2, disable auto-remove, disable copy-envs, enable shell integration
+			name: "user enables auto-cd and shell integration added automatically",
+			// auto-cd=y, iterm2=n, auto-remove=n, copy-envs=n, fetch=default, shell-int=y
+			userInput:      "y\nn\nn\nn\n\ny\n",
 			shellPath:      "/bin/bash",
 			expectRcUpdate: true, // Now writes to rc file
 			checkOutput: func(t *testing.T, output string) {
@@ -440,8 +442,9 @@ func TestInitCommand_ShellIntegration(t *testing.T) {
 			},
 		},
 		{
-			name:           "user enables auto-cd but declines shell integration instructions",
-			userInput:      "y\nn\nn\nn\nn\n", // Enable auto-cd, disable iterm2, disable auto-remove, disable copy-envs, decline shell integration
+			name: "user enables auto-cd but declines shell integration instructions",
+			// auto-cd=y, iterm2=n, auto-remove=n, copy-envs=n, fetch=default, shell-int=n
+			userInput:      "y\nn\nn\nn\n\nn\n",
 			shellPath:      "/bin/bash",
 			expectRcUpdate: false,
 			checkOutput: func(t *testing.T, output string) {
@@ -454,8 +457,9 @@ func TestInitCommand_ShellIntegration(t *testing.T) {
 			},
 		},
 		{
-			name:           "user disables auto-cd, no shell integration prompt",
-			userInput:      "n\nn\nn\nn\n", // Disable auto-cd, disable iterm2, disable auto-remove, disable copy-envs
+			name: "user disables auto-cd, no shell integration prompt",
+			// Disable all options
+			userInput:      "n\nn\nn\nn\nn\n",
 			shellPath:      "/bin/bash",
 			expectRcUpdate: false,
 			checkOutput: func(t *testing.T, output string) {
@@ -465,8 +469,9 @@ func TestInitCommand_ShellIntegration(t *testing.T) {
 			},
 		},
 		{
-			name:           "shell integration already exists - shows update instructions",
-			userInput:      "y\nn\nn\nn\ny\n", // Enable auto-cd, disable iterm2, disable auto-remove, disable copy-envs, enable shell integration
+			name: "shell integration already exists - shows update instructions",
+			// auto-cd=y, iterm2=n, auto-remove=n, copy-envs=n, fetch=default, shell-int=y
+			userInput:      "y\nn\nn\nn\n\ny\n",
 			shellPath:      "/bin/bash",
 			expectRcUpdate: false, // Should not update because it already exists
 			existingRc:     true,

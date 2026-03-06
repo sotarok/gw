@@ -28,6 +28,7 @@ type mockGit struct {
 	copyEnvError        error
 
 	// Override functions for custom behavior
+	FetchAllFn              func() error
 	BranchExistsFn          func(string) (bool, error)
 	ListAllBranchesFn       func() ([]string, error)
 	GetCurrentBranchFn      func() (string, error)
@@ -46,6 +47,13 @@ func (m *mockGit) IsGitRepository() bool {
 
 func (m *mockGit) GetRepositoryName() (string, error) {
 	return "test-repo", nil
+}
+
+func (m *mockGit) FetchAll() error {
+	if m.FetchAllFn != nil {
+		return m.FetchAllFn()
+	}
+	return nil
 }
 
 func (m *mockGit) GetCurrentBranch() (string, error) {
@@ -301,7 +309,7 @@ func TestEndCommand_PerformSafetyChecks(t *testing.T) {
 				Stderr: stderr,
 			}
 
-			cmd := NewEndCommand(deps, false)
+			cmd := NewEndCommand(deps, false, true)
 			warnings := cmd.performSafetyChecks()
 
 			// Check warnings count
@@ -611,7 +619,7 @@ func TestStartCommand_Execute(t *testing.T) {
 				AutoCD:          false,
 				UpdateITerm2Tab: tt.updateITerm2Tab,
 			}
-			cmd := NewStartCommandWithConfig(deps, tt.copyEnvs, cfg)
+			cmd := NewStartCommandWithConfig(deps, tt.copyEnvs, true, cfg)
 			err = cmd.Execute(tt.issueNumber, tt.baseBranch)
 
 			// Check error
@@ -777,7 +785,7 @@ func TestCheckoutCommand_Execute(t *testing.T) {
 				Stderr: stderr,
 			}
 
-			cmd := NewCheckoutCommand(deps, tt.copyEnvs)
+			cmd := NewCheckoutCommandWithConfig(deps, tt.copyEnvs, true, &config.Config{})
 			err = cmd.Execute(tt.branch)
 
 			// Check error
@@ -994,7 +1002,7 @@ func TestEndCommand_Execute(t *testing.T) {
 				Stderr: stderr,
 			}
 
-			cmd := NewEndCommand(deps, tt.force)
+			cmd := NewEndCommand(deps, tt.force, true)
 			err = cmd.Execute(tt.issueNumber)
 
 			// Check error
@@ -1202,7 +1210,7 @@ func TestEndCommand_BranchDeletion(t *testing.T) {
 				AutoRemoveBranch: tt.autoRemoveBranch,
 			}
 
-			cmd := NewEndCommandWithConfig(deps, tt.force, cfg)
+			cmd := NewEndCommandWithConfig(deps, tt.force, true, cfg)
 			err = cmd.Execute(tt.issueNumber)
 
 			// Check error
@@ -1383,7 +1391,7 @@ func TestCleanCommand_Execute_NoWorktrees(t *testing.T) {
 		Stderr: stderr,
 	}
 
-	cmd := NewCleanCommandWithConfig(deps, false, false, &config.Config{})
+	cmd := NewCleanCommandWithConfig(deps, false, false, true, &config.Config{})
 	err := cmd.Execute()
 
 	if err != nil {
@@ -1442,7 +1450,7 @@ func TestCleanCommand_Execute_AllRemovable(t *testing.T) {
 		Stderr: stderr,
 	}
 
-	cmd := NewCleanCommandWithConfig(deps, false, false, &config.Config{})
+	cmd := NewCleanCommandWithConfig(deps, false, false, true, &config.Config{})
 
 	// Save and restore current directory
 	originalDir, _ := os.Getwd()
@@ -1527,7 +1535,7 @@ func TestCleanCommand_Execute_MixedRemovability(t *testing.T) {
 		Stderr: stderr,
 	}
 
-	cmd := NewCleanCommandWithConfig(deps, false, false, &config.Config{})
+	cmd := NewCleanCommandWithConfig(deps, false, false, true, &config.Config{})
 
 	originalDir, _ := os.Getwd()
 	defer os.Chdir(originalDir)
@@ -1605,7 +1613,7 @@ func TestCleanCommand_Execute_DryRun(t *testing.T) {
 		Stderr: stderr,
 	}
 
-	cmd := NewCleanCommandWithConfig(deps, false, true, &config.Config{})
+	cmd := NewCleanCommandWithConfig(deps, false, true, true, &config.Config{})
 
 	originalDir, _ := os.Getwd()
 	defer os.Chdir(originalDir)
@@ -1669,7 +1677,7 @@ func TestCleanCommand_Execute_UserDeclines(t *testing.T) {
 		Stderr: stderr,
 	}
 
-	cmd := NewCleanCommandWithConfig(deps, false, false, &config.Config{})
+	cmd := NewCleanCommandWithConfig(deps, false, false, true, &config.Config{})
 
 	originalDir, _ := os.Getwd()
 	defer os.Chdir(originalDir)
@@ -1733,7 +1741,7 @@ func TestCleanCommand_Execute_Force(t *testing.T) {
 		Stderr: stderr,
 	}
 
-	cmd := NewCleanCommandWithConfig(deps, true, false, &config.Config{}) // force = true
+	cmd := NewCleanCommandWithConfig(deps, true, false, true, &config.Config{}) // force = true
 
 	originalDir, _ := os.Getwd()
 	defer os.Chdir(originalDir)
@@ -1806,7 +1814,7 @@ func TestCleanCommand_Execute_WithBranchDeletion(t *testing.T) {
 		AutoRemoveBranch: true,
 	}
 
-	cmd := NewCleanCommandWithConfig(deps, false, false, cfg)
+	cmd := NewCleanCommandWithConfig(deps, false, false, true, cfg)
 
 	originalDir, _ := os.Getwd()
 	defer os.Chdir(originalDir)
@@ -1877,7 +1885,7 @@ func TestCleanCommand_Execute_RemovalError(t *testing.T) {
 		Stderr: stderr,
 	}
 
-	cmd := NewCleanCommandWithConfig(deps, false, false, &config.Config{})
+	cmd := NewCleanCommandWithConfig(deps, false, false, true, &config.Config{})
 
 	originalDir, _ := os.Getwd()
 	defer os.Chdir(originalDir)
@@ -1933,7 +1941,7 @@ func TestCleanCommand_Execute_BrokenWorktree(t *testing.T) {
 		Stderr: stderr,
 	}
 
-	cmd := NewCleanCommandWithConfig(deps, false, false, &config.Config{})
+	cmd := NewCleanCommandWithConfig(deps, false, false, true, &config.Config{})
 
 	originalDir, _ := os.Getwd()
 	defer os.Chdir(originalDir)

@@ -6,6 +6,7 @@ import (
 
 var (
 	checkoutCopyEnvs bool
+	checkoutNoFetch  bool
 )
 
 var checkoutCmd = &cobra.Command{
@@ -19,6 +20,7 @@ If no branch is specified, an interactive selector will be shown.`,
 
 func init() {
 	checkoutCmd.Flags().BoolVar(&checkoutCopyEnvs, "copy-envs", false, "Copy untracked .env files to the new worktree")
+	checkoutCmd.Flags().BoolVar(&checkoutNoFetch, "no-fetch", false, "Skip git fetch before running the command")
 	rootCmd.AddCommand(checkoutCmd)
 }
 
@@ -30,6 +32,6 @@ func runCheckout(cmd *cobra.Command, args []string) error {
 
 	// Use the new command structure
 	deps := DefaultDependencies()
-	checkoutCmd := NewCheckoutCommand(deps, checkoutCopyEnvs)
+	checkoutCmd := NewCheckoutCommand(deps, checkoutCopyEnvs, checkoutNoFetch)
 	return checkoutCmd.Execute(branch)
 }

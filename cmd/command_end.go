@@ -12,28 +12,31 @@ import (
 
 // EndCommand handles the end command logic
 type EndCommand struct {
-	deps   *Dependencies
-	force  bool
-	config *config.Config
+	deps    *Dependencies
+	force   bool
+	noFetch bool
+	config  *config.Config
 }
 
 // NewEndCommand creates a new end command handler
-func NewEndCommand(deps *Dependencies, force bool) *EndCommand {
+func NewEndCommand(deps *Dependencies, force, noFetch bool) *EndCommand {
 	// Load config
 	cfg, _ := config.Load(config.GetConfigPath())
 	return &EndCommand{
-		deps:   deps,
-		force:  force,
-		config: cfg,
+		deps:    deps,
+		force:   force,
+		noFetch: noFetch,
+		config:  cfg,
 	}
 }
 
 // NewEndCommandWithConfig creates a new end command handler with explicit config
-func NewEndCommandWithConfig(deps *Dependencies, force bool, cfg *config.Config) *EndCommand {
+func NewEndCommandWithConfig(deps *Dependencies, force, noFetch bool, cfg *config.Config) *EndCommand {
 	return &EndCommand{
-		deps:   deps,
-		force:  force,
-		config: cfg,
+		deps:    deps,
+		force:   force,
+		noFetch: noFetch,
+		config:  cfg,
 	}
 }
 
@@ -74,6 +77,9 @@ func (c *EndCommand) Execute(issueNumber string) error {
 	if issueNumber == "" {
 		return fmt.Errorf("could not determine issue number")
 	}
+
+	// Fetch from remotes if configured
+	fetchIfConfigured(c.deps, c.config, c.noFetch)
 
 	// Change to the worktree directory to check status
 	originalDir, err := os.Getwd()

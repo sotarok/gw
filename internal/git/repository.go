@@ -53,6 +53,16 @@ func IsGitRepository() bool {
 	return err == nil
 }
 
+// FetchAll fetches from all remotes and prunes deleted remote-tracking branches
+func FetchAll() error {
+	cmd := exec.Command("git", "fetch", "--all", "--prune")
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		return fmt.Errorf("failed to fetch from remotes: %s", strings.TrimSpace(string(output)))
+	}
+	return nil
+}
+
 // GetCurrentBranch returns the name of the current branch
 func GetCurrentBranch() (string, error) {
 	cmd := exec.Command("git", "rev-parse", "--abbrev-ref", "HEAD")

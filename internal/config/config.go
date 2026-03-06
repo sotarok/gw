@@ -12,10 +12,11 @@ const (
 	trueValue = "true"
 
 	// Config keys
-	autoCDKey           = "auto_cd"
-	updateITerm2TabKey  = "update_iterm2_tab"
-	autoRemoveBranchKey = "auto_remove_branch"
-	copyEnvsKey         = "copy_envs"
+	autoCDKey             = "auto_cd"
+	updateITerm2TabKey    = "update_iterm2_tab"
+	autoRemoveBranchKey   = "auto_remove_branch"
+	copyEnvsKey           = "copy_envs"
+	fetchBeforeCommandKey = "fetch_before_command"
 )
 
 // Item represents a single configuration item with metadata
@@ -28,19 +29,21 @@ type Item struct {
 
 // Config represents the gw configuration
 type Config struct {
-	AutoCD           bool  `toml:"auto_cd"`
-	UpdateITerm2Tab  bool  `toml:"update_iterm2_tab"`
-	AutoRemoveBranch bool  `toml:"auto_remove_branch"`
-	CopyEnvs         *bool `toml:"copy_envs"` // Pointer to distinguish between unset and false
+	AutoCD             bool  `toml:"auto_cd"`
+	UpdateITerm2Tab    bool  `toml:"update_iterm2_tab"`
+	AutoRemoveBranch   bool  `toml:"auto_remove_branch"`
+	CopyEnvs           *bool `toml:"copy_envs"` // Pointer to distinguish between unset and false
+	FetchBeforeCommand bool  `toml:"fetch_before_command"`
 }
 
 // New creates a new Config with default values
 func New() *Config {
 	return &Config{
-		AutoCD:           true,  // Default to true for backward compatibility
-		UpdateITerm2Tab:  false, // Default to false to avoid unexpected behavior
-		AutoRemoveBranch: false, // Default to false to avoid unexpected behavior
-		CopyEnvs:         nil,   // nil means not configured, will prompt user
+		AutoCD:             true,  // Default to true for backward compatibility
+		UpdateITerm2Tab:    false, // Default to false to avoid unexpected behavior
+		AutoRemoveBranch:   false, // Default to false to avoid unexpected behavior
+		CopyEnvs:           nil,   // nil means not configured, will prompt user
+		FetchBeforeCommand: true,  // Default to true to ensure remote info is up-to-date
 	}
 }
 
@@ -87,6 +90,8 @@ func Load(path string) (*Config, error) {
 		case copyEnvsKey:
 			boolValue := value == trueValue
 			config.CopyEnvs = &boolValue
+		case fetchBeforeCommandKey:
+			config.FetchBeforeCommand = value == trueValue
 		}
 	}
 
@@ -116,7 +121,8 @@ func (c *Config) Save(path string) error {
 auto_cd = %v
 update_iterm2_tab = %v
 auto_remove_branch = %v
-%s`, c.AutoCD, c.UpdateITerm2Tab, c.AutoRemoveBranch, copyEnvsStr)
+fetch_before_command = %v
+%s`, c.AutoCD, c.UpdateITerm2Tab, c.AutoRemoveBranch, c.FetchBeforeCommand, copyEnvsStr)
 
 	if err := os.WriteFile(path, []byte(content), 0600); err != nil {
 		return fmt.Errorf("failed to write config file: %w", err)
@@ -167,6 +173,12 @@ func (c *Config) GetConfigItems() []Item {
 			Description: "Automatically copy .env files to new worktrees (prompt if not set)",
 			Default:     false,
 		},
+		{
+			Key:         fetchBeforeCommandKey,
+			Value:       c.FetchBeforeCommand,
+			Description: "Run git fetch --all --prune before commands to sync remote branch info",
+			Default:     true,
+		},
 	}
 }
 
@@ -181,6 +193,8 @@ func (c *Config) SetConfigItem(key string, value bool) error {
 		c.AutoRemoveBranch = value
 	case copyEnvsKey:
 		c.CopyEnvs = &value
+	case fetchBeforeCommandKey:
+		c.FetchBeforeCommand = value
 	default:
 		return fmt.Errorf("unknown configuration key: %s", key)
 	}

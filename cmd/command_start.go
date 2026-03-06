@@ -13,25 +13,28 @@ import (
 type StartCommand struct {
 	deps     *Dependencies
 	copyEnvs bool
+	noFetch  bool
 	config   *config.Config
 }
 
 // NewStartCommand creates a new start command handler
-func NewStartCommand(deps *Dependencies, copyEnvs bool) *StartCommand {
+func NewStartCommand(deps *Dependencies, copyEnvs, noFetch bool) *StartCommand {
 	// Load config
 	cfg, _ := config.Load(config.GetConfigPath())
 	return &StartCommand{
 		deps:     deps,
 		copyEnvs: copyEnvs,
+		noFetch:  noFetch,
 		config:   cfg,
 	}
 }
 
 // NewStartCommandWithConfig creates a new start command handler with explicit config
-func NewStartCommandWithConfig(deps *Dependencies, copyEnvs bool, cfg *config.Config) *StartCommand {
+func NewStartCommandWithConfig(deps *Dependencies, copyEnvs, noFetch bool, cfg *config.Config) *StartCommand {
 	return &StartCommand{
 		deps:     deps,
 		copyEnvs: copyEnvs,
+		noFetch:  noFetch,
 		config:   cfg,
 	}
 }
@@ -42,6 +45,9 @@ func (c *StartCommand) Execute(issueNumber, baseBranch string) error {
 	if !c.deps.Git.IsGitRepository() {
 		return fmt.Errorf("not in a git repository")
 	}
+
+	// Fetch from remotes if configured
+	fetchIfConfigured(c.deps, c.config, c.noFetch)
 
 	// Check if worktree already exists
 	if wt, _ := c.deps.Git.GetWorktreeForIssue(issueNumber); wt != nil {
