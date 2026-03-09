@@ -66,6 +66,8 @@ const (
 	shellBash = "bash"
 	shellZsh  = "zsh"
 	shellFish = "fish"
+
+	showScriptCommand = "gw shell-integration --show-script"
 )
 
 // Execute runs the init command
@@ -296,9 +298,9 @@ func (c *InitCommand) detectRCPath(shell string) string {
 func (c *InitCommand) getEvalCommand(shell string) string {
 	switch shell {
 	case shellFish:
-		return "gw shell-integration --show-script"
+		return showScriptCommand
 	default:
-		return fmt.Sprintf("eval \"$(gw shell-integration --show-script --shell=%s)\"", shell)
+		return fmt.Sprintf("eval \"$(%s --shell=%s)\"", showScriptCommand, shell)
 	}
 }
 
@@ -320,22 +322,22 @@ func (c *InitCommand) showManualInstructions(shell string) error {
 	switch shell {
 	case shellZsh:
 		fmt.Fprintln(c.stdout, "  # Add to ~/.zshrc")
-		fmt.Fprintf(c.stdout, "  eval \"$(gw shell-integration --show-script --shell=%s)\"\n", shellZsh)
+		fmt.Fprintf(c.stdout, "  eval \"$(%s --shell=%s)\"\n", showScriptCommand, shellZsh)
 	case shellBash:
 		fmt.Fprintln(c.stdout, "  # Add to ~/.bashrc")
-		fmt.Fprintf(c.stdout, "  eval \"$(gw shell-integration --show-script --shell=%s)\"\n", shellBash)
+		fmt.Fprintf(c.stdout, "  eval \"$(%s --shell=%s)\"\n", showScriptCommand, shellBash)
 	case shellFish:
 		fmt.Fprintln(c.stdout, "  # Add to ~/.config/fish/config.fish")
-		fmt.Fprintf(c.stdout, "  gw shell-integration --show-script --shell=%s | source\n", shellFish)
+		fmt.Fprintf(c.stdout, "  %s --shell=%s | source\n", showScriptCommand, shellFish)
 	default:
 		fmt.Fprintln(c.stdout, "  # For bash (add to ~/.bashrc)")
-		fmt.Fprintf(c.stdout, "  eval \"$(gw shell-integration --show-script --shell=%s)\"\n", shellBash)
+		fmt.Fprintf(c.stdout, "  eval \"$(%s --shell=%s)\"\n", showScriptCommand, shellBash)
 		fmt.Fprintln(c.stdout)
 		fmt.Fprintln(c.stdout, "  # For zsh (add to ~/.zshrc)")
-		fmt.Fprintf(c.stdout, "  eval \"$(gw shell-integration --show-script --shell=%s)\"\n", shellZsh)
+		fmt.Fprintf(c.stdout, "  eval \"$(%s --shell=%s)\"\n", showScriptCommand, shellZsh)
 		fmt.Fprintln(c.stdout)
 		fmt.Fprintln(c.stdout, "  # For fish (add to ~/.config/fish/config.fish)")
-		fmt.Fprintf(c.stdout, "  gw shell-integration --show-script --shell=%s | source\n", shellFish)
+		fmt.Fprintf(c.stdout, "  %s --shell=%s | source\n", showScriptCommand, shellFish)
 	}
 
 	fmt.Fprintln(c.stdout)
@@ -381,9 +383,9 @@ func (c *InitCommand) addShellIntegration(rcPath, shell string) error {
 	// Add shell integration comment and command
 	shellIntegration := "\n# gw shell integration\n"
 	if shell == shellFish {
-		shellIntegration += fmt.Sprintf("gw shell-integration --show-script --shell=%s | source\n", shell)
+		shellIntegration += fmt.Sprintf("%s --shell=%s | source\n", showScriptCommand, shell)
 	} else {
-		shellIntegration += fmt.Sprintf("eval \"$(gw shell-integration --show-script --shell=%s)\"\n", shell)
+		shellIntegration += fmt.Sprintf("eval \"$(%s --shell=%s)\"\n", showScriptCommand, shell)
 	}
 
 	if _, err := file.WriteString(shellIntegration); err != nil {

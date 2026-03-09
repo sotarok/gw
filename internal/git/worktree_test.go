@@ -867,3 +867,557 @@ func TestCreateWorktreeWithRemoteBaseBranch(t *testing.T) {
 		exec.Command("git", "worktree", "remove", worktreePath).Run()
 	})
 }
+
+func TestResolveBaseBranch_BothLocalAndRemoteExist(t *testing.T) {
+	// When both local and remote branch exist, local should be preferred
+	originalDir, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("failed to get current dir: %v", err)
+	}
+	defer os.Chdir(originalDir)
+
+	tempDir, err := os.MkdirTemp("", "test-resolve-both")
+	if err != nil {
+		t.Fatalf("failed to create temp dir: %v", err)
+	}
+	defer os.RemoveAll(tempDir)
+
+	remoteDir := filepath.Join(tempDir, "remote.git")
+	localDir := filepath.Join(tempDir, "local")
+
+	// Create bare repo
+	if err := os.MkdirAll(remoteDir, 0755); err != nil {
+		t.Fatalf("failed to create remote dir: %v", err)
+	}
+	if err := os.Chdir(remoteDir); err != nil {
+		t.Fatalf("failed to change to remote dir: %v", err)
+	}
+	if err := RunCommand("git init --bare"); err != nil {
+		t.Fatalf("failed to init bare repo: %v", err)
+	}
+	if err := RunCommand("git symbolic-ref HEAD refs/heads/main"); err != nil {
+		t.Fatalf("failed to set HEAD: %v", err)
+	}
+
+	// Clone
+	if err := os.Chdir(tempDir); err != nil {
+		t.Fatalf("failed to change to temp dir: %v", err)
+	}
+	if err := RunCommand("git clone " + remoteDir + " local"); err != nil {
+		t.Fatalf("failed to clone: %v", err)
+	}
+
+	if err := os.Chdir(localDir); err != nil {
+		t.Fatalf("failed to change to local dir: %v", err)
+	}
+	if err := RunCommand("git config user.email 'test@example.com' && git config user.name 'Test User'"); err != nil {
+		t.Fatalf("failed to configure git: %v", err)
+	}
+
+	// Create initial commit and push
+	if err := os.WriteFile("README.md", []byte("test"), 0644); err != nil {
+		t.Fatalf("failed to create file: %v", err)
+	}
+	if err := RunCommand("git checkout -b main"); err != nil {
+		t.Fatalf("failed to create main branch: %v", err)
+	}
+	if err := RunCommand("git add . && git commit -m 'initial commit'"); err != nil {
+		t.Fatalf("failed to create commit: %v", err)
+	}
+	if err := RunCommand("git push -u origin main"); err != nil {
+		t.Fatalf("failed to push: %v", err)
+	}
+
+	// Create feature branch locally and push it
+	if err := RunCommand("git checkout -b shared-feature"); err != nil {
+		t.Fatalf("failed to create branch: %v", err)
+	}
+	if err := os.WriteFile("feature.txt", []byte("feature"), 0644); err != nil {
+		t.Fatalf("failed to create file: %v", err)
+	}
+	if err := RunCommand("git add . && git commit -m 'feature commit'"); err != nil {
+		t.Fatalf("failed to commit: %v", err)
+	}
+	if err := RunCommand("git push -u origin shared-feature"); err != nil {
+		t.Fatalf("failed to push: %v", err)
+	}
+
+	// Both local and remote exist now; should prefer local
+	resolved, isRemote := ResolveBaseBranch("shared-feature")
+	if resolved != "shared-feature" {
+		t.Errorf("expected 'shared-feature', got %q", resolved)
+	}
+	if isRemote {
+		t.Error("expected isRemote to be false when local branch exists")
+	}
+}
+
+func TestResolveBaseBranch_NeitherExists(t *testing.T) {
+	originalDir, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("failed to get current dir: %v", err)
+	}
+	defer os.Chdir(originalDir)
+
+	tempDir, err := os.MkdirTemp("", "test-resolve-neither")
+	if err != nil {
+		t.Fatalf("failed to create temp dir: %v", err)
+	}
+	defer os.RemoveAll(tempDir)
+
+	if err := os.Chdir(tempDir); err != nil {
+		t.Fatalf("failed to change dir: %v", err)
+	}
+	if err := RunCommand("git init -b main"); err != nil {
+		t.Fatalf("failed to init git repo: %v", err)
+	}
+	if err := RunCommand("git config user.email 'test@example.com' && git config user.name 'Test User'"); err != nil {
+		t.Fatalf("failed to configure git: %v", err)
+	}
+	if err := os.WriteFile("README.md", []byte("test"), 0644); err != nil {
+		t.Fatalf("failed to create file: %v", err)
+	}
+	if err := RunCommand("git add . && git commit -m 'initial commit'"); err != nil {
+		t.Fatalf("failed to create commit: %v", err)
+	}
+
+	// Branch that doesn't exist anywhere
+	resolved, isRemote := ResolveBaseBranch("nonexistent-branch-xyz")
+	if resolved != "nonexistent-branch-xyz" {
+		t.Errorf("expected 'nonexistent-branch-xyz', got %q", resolved)
+	}
+	if isRemote {
+		t.Error("expected isRemote to be false for non-existent branch")
+	}
+}
+
+func TestResolveBaseBranch_ExplicitOriginPrefix(t *testing.T) {
+	originalDir, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("failed to get current dir: %v", err)
+	}
+	defer os.Chdir(originalDir)
+
+	tempDir, err := os.MkdirTemp("", "test-resolve-origin-prefix")
+	if err != nil {
+		t.Fatalf("failed to create temp dir: %v", err)
+	}
+	defer os.RemoveAll(tempDir)
+
+	remoteDir := filepath.Join(tempDir, "remote.git")
+	localDir := filepath.Join(tempDir, "local")
+
+	// Create bare repo
+	if err := os.MkdirAll(remoteDir, 0755); err != nil {
+		t.Fatalf("failed to create remote dir: %v", err)
+	}
+	if err := os.Chdir(remoteDir); err != nil {
+		t.Fatalf("failed to change to remote dir: %v", err)
+	}
+	if err := RunCommand("git init --bare"); err != nil {
+		t.Fatalf("failed to init bare repo: %v", err)
+	}
+	if err := RunCommand("git symbolic-ref HEAD refs/heads/main"); err != nil {
+		t.Fatalf("failed to set HEAD: %v", err)
+	}
+
+	// Clone
+	if err := os.Chdir(tempDir); err != nil {
+		t.Fatalf("failed to change to temp dir: %v", err)
+	}
+	if err := RunCommand("git clone " + remoteDir + " local"); err != nil {
+		t.Fatalf("failed to clone: %v", err)
+	}
+
+	if err := os.Chdir(localDir); err != nil {
+		t.Fatalf("failed to change to local dir: %v", err)
+	}
+	if err := RunCommand("git config user.email 'test@example.com' && git config user.name 'Test User'"); err != nil {
+		t.Fatalf("failed to configure git: %v", err)
+	}
+	if err := os.WriteFile("README.md", []byte("test"), 0644); err != nil {
+		t.Fatalf("failed to create file: %v", err)
+	}
+	if err := RunCommand("git checkout -b main"); err != nil {
+		t.Fatalf("failed to create main branch: %v", err)
+	}
+	if err := RunCommand("git add . && git commit -m 'initial commit'"); err != nil {
+		t.Fatalf("failed to create commit: %v", err)
+	}
+	if err := RunCommand("git push -u origin main"); err != nil {
+		t.Fatalf("failed to push: %v", err)
+	}
+	if err := RunCommand("git fetch origin"); err != nil {
+		t.Fatalf("failed to fetch: %v", err)
+	}
+
+	// Test with explicit origin/ prefix that exists
+	resolved, isRemote := ResolveBaseBranch("origin/main")
+	if resolved != "origin/main" {
+		t.Errorf("expected 'origin/main', got %q", resolved)
+	}
+	if !isRemote {
+		t.Error("expected isRemote to be true for origin/main")
+	}
+
+	// Test with explicit origin/ prefix that doesn't exist
+	resolved, isRemote = ResolveBaseBranch("origin/nonexistent")
+	if resolved != "origin/nonexistent" {
+		t.Errorf("expected 'origin/nonexistent', got %q", resolved)
+	}
+	if isRemote {
+		t.Error("expected isRemote to be false for non-existent origin/ branch")
+	}
+}
+
+func TestCreateWorktree_NotInGitRepository(t *testing.T) {
+	originalDir, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("failed to get current dir: %v", err)
+	}
+	defer os.Chdir(originalDir)
+
+	tempDir, err := os.MkdirTemp("", "test-create-non-git")
+	if err != nil {
+		t.Fatalf("failed to create temp dir: %v", err)
+	}
+	defer os.RemoveAll(tempDir)
+
+	if err := os.Chdir(tempDir); err != nil {
+		t.Fatalf("failed to change dir: %v", err)
+	}
+
+	_, err = CreateWorktree("123", "main")
+	if err == nil {
+		t.Error("expected error when not in git repository")
+	}
+	if !strings.Contains(err.Error(), "not in a git repository") {
+		t.Errorf("expected 'not in a git repository' error, got: %v", err)
+	}
+}
+
+func TestListWorktrees_MultipleWorktrees(t *testing.T) {
+	originalDir, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("failed to get current dir: %v", err)
+	}
+	defer os.Chdir(originalDir)
+
+	tempDir, err := os.MkdirTemp("", "test-list-multiple")
+	if err != nil {
+		t.Fatalf("failed to create temp dir: %v", err)
+	}
+	defer os.RemoveAll(tempDir)
+
+	repoDir := filepath.Join(tempDir, "repo")
+	if err := os.MkdirAll(repoDir, 0755); err != nil {
+		t.Fatalf("failed to create repo dir: %v", err)
+	}
+
+	if err := os.Chdir(repoDir); err != nil {
+		t.Fatalf("failed to change dir: %v", err)
+	}
+	if err := RunCommand("git init -b main"); err != nil {
+		t.Fatalf("failed to init git repo: %v", err)
+	}
+	if err := RunCommand("git config user.email 'test@example.com' && git config user.name 'Test User'"); err != nil {
+		t.Fatalf("failed to configure git: %v", err)
+	}
+	if err := os.WriteFile("README.md", []byte("test"), 0644); err != nil {
+		t.Fatalf("failed to create file: %v", err)
+	}
+	if err := RunCommand("git add . && git commit -m 'initial commit'"); err != nil {
+		t.Fatalf("failed to create commit: %v", err)
+	}
+
+	// Create two additional worktrees
+	wt1Path := filepath.Join(tempDir, "wt1")
+	wt2Path := filepath.Join(tempDir, "wt2")
+
+	cmd := exec.Command("git", "worktree", "add", wt1Path, "-b", "feature/one")
+	if err := cmd.Run(); err != nil {
+		t.Fatalf("failed to create worktree 1: %v", err)
+	}
+	defer exec.Command("git", "worktree", "remove", wt1Path).Run()
+
+	cmd = exec.Command("git", "worktree", "add", wt2Path, "-b", "feature/two")
+	if err := cmd.Run(); err != nil {
+		t.Fatalf("failed to create worktree 2: %v", err)
+	}
+	defer exec.Command("git", "worktree", "remove", wt2Path).Run()
+
+	worktrees, err := ListWorktrees()
+	if err != nil {
+		t.Fatalf("failed to list worktrees: %v", err)
+	}
+
+	if len(worktrees) != 3 {
+		t.Errorf("expected 3 worktrees, got %d", len(worktrees))
+	}
+
+	// Verify branches
+	branches := make(map[string]bool)
+	for _, wt := range worktrees {
+		branches[wt.Branch] = true
+	}
+	if !branches["main"] {
+		t.Error("expected main branch in worktrees")
+	}
+	if !branches["feature/one"] {
+		t.Error("expected feature/one branch in worktrees")
+	}
+	if !branches["feature/two"] {
+		t.Error("expected feature/two branch in worktrees")
+	}
+}
+
+func TestListWorktrees_DetachedHead(t *testing.T) {
+	originalDir, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("failed to get current dir: %v", err)
+	}
+	defer os.Chdir(originalDir)
+
+	tempDir, err := os.MkdirTemp("", "test-list-detached")
+	if err != nil {
+		t.Fatalf("failed to create temp dir: %v", err)
+	}
+	defer os.RemoveAll(tempDir)
+
+	repoDir := filepath.Join(tempDir, "repo")
+	if err := os.MkdirAll(repoDir, 0755); err != nil {
+		t.Fatalf("failed to create repo dir: %v", err)
+	}
+
+	if err := os.Chdir(repoDir); err != nil {
+		t.Fatalf("failed to change dir: %v", err)
+	}
+	if err := RunCommand("git init -b main"); err != nil {
+		t.Fatalf("failed to init git repo: %v", err)
+	}
+	if err := RunCommand("git config user.email 'test@example.com' && git config user.name 'Test User'"); err != nil {
+		t.Fatalf("failed to configure git: %v", err)
+	}
+	if err := os.WriteFile("README.md", []byte("test"), 0644); err != nil {
+		t.Fatalf("failed to create file: %v", err)
+	}
+	if err := RunCommand("git add . && git commit -m 'initial commit'"); err != nil {
+		t.Fatalf("failed to create commit: %v", err)
+	}
+
+	// Create a detached worktree
+	wtPath := filepath.Join(tempDir, "detached-wt")
+	cmd := exec.Command("git", "worktree", "add", "--detach", wtPath)
+	if err := cmd.Run(); err != nil {
+		t.Fatalf("failed to create detached worktree: %v", err)
+	}
+	defer exec.Command("git", "worktree", "remove", wtPath).Run()
+
+	worktrees, err := ListWorktrees()
+	if err != nil {
+		t.Fatalf("failed to list worktrees: %v", err)
+	}
+
+	if len(worktrees) != 2 {
+		t.Fatalf("expected 2 worktrees, got %d", len(worktrees))
+	}
+
+	// Find the detached worktree
+	var detachedFound bool
+	for _, wt := range worktrees {
+		if wt.IsDetached {
+			detachedFound = true
+			if wt.Branch != "" {
+				t.Errorf("expected empty branch for detached worktree, got %q", wt.Branch)
+			}
+			if wt.Commit == "" {
+				t.Error("expected commit hash for detached worktree")
+			}
+		}
+	}
+	if !detachedFound {
+		t.Error("expected to find a detached worktree")
+	}
+}
+
+func TestRemoveWorktreeByPath_NotInGitRepository(t *testing.T) {
+	originalDir, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("failed to get current dir: %v", err)
+	}
+	defer os.Chdir(originalDir)
+
+	tempDir, err := os.MkdirTemp("", "test-remove-path-non-git")
+	if err != nil {
+		t.Fatalf("failed to create temp dir: %v", err)
+	}
+	defer os.RemoveAll(tempDir)
+
+	if err := os.Chdir(tempDir); err != nil {
+		t.Fatalf("failed to change dir: %v", err)
+	}
+
+	err = RemoveWorktreeByPath("/nonexistent/path")
+	if err == nil {
+		t.Error("expected error when not in git repository")
+	}
+	if !strings.Contains(err.Error(), "not in a git repository") {
+		t.Errorf("expected 'not in a git repository' error, got: %v", err)
+	}
+}
+
+func TestRemoveWorktreeByPath_NonExistentPath(t *testing.T) {
+	originalDir, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("failed to get current dir: %v", err)
+	}
+	defer os.Chdir(originalDir)
+
+	tempDir, err := os.MkdirTemp("", "test-remove-nonexistent")
+	if err != nil {
+		t.Fatalf("failed to create temp dir: %v", err)
+	}
+	defer os.RemoveAll(tempDir)
+
+	if err := os.Chdir(tempDir); err != nil {
+		t.Fatalf("failed to change dir: %v", err)
+	}
+	if err := RunCommand("git init -b main"); err != nil {
+		t.Fatalf("failed to init git repo: %v", err)
+	}
+	if err := RunCommand("git config user.email 'test@example.com' && git config user.name 'Test User'"); err != nil {
+		t.Fatalf("failed to configure git: %v", err)
+	}
+	if err := os.WriteFile("README.md", []byte("test"), 0644); err != nil {
+		t.Fatalf("failed to create file: %v", err)
+	}
+	if err := RunCommand("git add . && git commit -m 'initial commit'"); err != nil {
+		t.Fatalf("failed to create commit: %v", err)
+	}
+
+	err = RemoveWorktreeByPath("/nonexistent/path/to/worktree")
+	if err == nil {
+		t.Error("expected error for non-existent worktree path")
+	}
+	if !strings.Contains(err.Error(), "failed to remove worktree") {
+		t.Errorf("expected 'failed to remove worktree' error, got: %v", err)
+	}
+}
+
+func TestCreateWorktreeFromBranch_RemoteBranch(t *testing.T) {
+	originalDir, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("failed to get current dir: %v", err)
+	}
+	defer os.Chdir(originalDir)
+
+	tempDir, err := os.MkdirTemp("", "test-create-from-remote")
+	if err != nil {
+		t.Fatalf("failed to create temp dir: %v", err)
+	}
+	defer os.RemoveAll(tempDir)
+
+	remoteDir := filepath.Join(tempDir, "remote.git")
+	localDir := filepath.Join(tempDir, "local")
+
+	// Create bare repo
+	if err := os.MkdirAll(remoteDir, 0755); err != nil {
+		t.Fatalf("failed to create remote dir: %v", err)
+	}
+	if err := os.Chdir(remoteDir); err != nil {
+		t.Fatalf("failed to change to remote dir: %v", err)
+	}
+	if err := RunCommand("git init --bare"); err != nil {
+		t.Fatalf("failed to init bare repo: %v", err)
+	}
+	if err := RunCommand("git symbolic-ref HEAD refs/heads/main"); err != nil {
+		t.Fatalf("failed to set HEAD: %v", err)
+	}
+
+	// Clone
+	if err := os.Chdir(tempDir); err != nil {
+		t.Fatalf("failed to change to temp dir: %v", err)
+	}
+	if err := RunCommand("git clone " + remoteDir + " local"); err != nil {
+		t.Fatalf("failed to clone: %v", err)
+	}
+
+	if err := os.Chdir(localDir); err != nil {
+		t.Fatalf("failed to change to local dir: %v", err)
+	}
+	if err := RunCommand("git config user.email 'test@example.com' && git config user.name 'Test User'"); err != nil {
+		t.Fatalf("failed to configure git: %v", err)
+	}
+
+	// Create initial commit and push
+	if err := os.WriteFile("README.md", []byte("test"), 0644); err != nil {
+		t.Fatalf("failed to create file: %v", err)
+	}
+	if err := RunCommand("git checkout -b main"); err != nil {
+		t.Fatalf("failed to create main branch: %v", err)
+	}
+	if err := RunCommand("git add . && git commit -m 'initial commit'"); err != nil {
+		t.Fatalf("failed to create commit: %v", err)
+	}
+	if err := RunCommand("git push -u origin main"); err != nil {
+		t.Fatalf("failed to push: %v", err)
+	}
+
+	// Create remote branch
+	if err := RunCommand("git checkout -b remote-feature"); err != nil {
+		t.Fatalf("failed to create branch: %v", err)
+	}
+	if err := os.WriteFile("remote-feature.txt", []byte("remote"), 0644); err != nil {
+		t.Fatalf("failed to create file: %v", err)
+	}
+	if err := RunCommand("git add . && git commit -m 'remote feature commit'"); err != nil {
+		t.Fatalf("failed to commit: %v", err)
+	}
+	if err := RunCommand("git push -u origin remote-feature"); err != nil {
+		t.Fatalf("failed to push: %v", err)
+	}
+	if err := RunCommand("git checkout main"); err != nil {
+		t.Fatalf("failed to checkout main: %v", err)
+	}
+	if err := RunCommand("git branch -D remote-feature"); err != nil {
+		t.Fatalf("failed to delete local branch: %v", err)
+	}
+	if err := RunCommand("git fetch origin"); err != nil {
+		t.Fatalf("failed to fetch: %v", err)
+	}
+
+	// Create worktree from remote branch (origin/ prefix)
+	wtPath := filepath.Join(tempDir, "wt-remote")
+	err = CreateWorktreeFromBranch(wtPath, "origin/remote-feature", "local-tracking-branch")
+	if err != nil {
+		t.Fatalf("failed to create worktree from remote branch: %v", err)
+	}
+	defer exec.Command("git", "worktree", "remove", wtPath).Run()
+
+	// Verify worktree exists
+	if _, err := os.Stat(wtPath); os.IsNotExist(err) {
+		t.Error("worktree directory was not created")
+	}
+
+	// Verify the remote file exists
+	featurePath := filepath.Join(wtPath, "remote-feature.txt")
+	if _, err := os.Stat(featurePath); os.IsNotExist(err) {
+		t.Error("remote-feature.txt not found - worktree was not based on remote branch")
+	}
+}
+
+func TestRunCommand(t *testing.T) {
+	t.Run("succeeds with valid command", func(t *testing.T) {
+		err := RunCommand("echo hello")
+		if err != nil {
+			t.Errorf("expected no error, got: %v", err)
+		}
+	})
+
+	t.Run("fails with invalid command", func(t *testing.T) {
+		err := RunCommand("false")
+		if err == nil {
+			t.Error("expected error for failing command")
+		}
+	})
+}

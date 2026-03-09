@@ -2,9 +2,13 @@ package cmd
 
 import (
 	"bytes"
+	"fmt"
 	"os"
+	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/sotarok/gw/internal/git"
 )
 
 func TestRunShellIntegration(t *testing.T) {
@@ -226,5 +230,291 @@ func TestShellIntegrationCommand_Execute(t *testing.T) {
 				tt.checkOutput(t, stdout.String())
 			}
 		})
+	}
+}
+
+func TestFindWorktreePath_DirectoryExists(t *testing.T) {
+	tempDir := t.TempDir()
+	repoDir := filepath.Join(tempDir, "test-repo")
+	worktreeDir := filepath.Join(tempDir, "test-repo-123")
+	os.MkdirAll(repoDir, 0755)
+	os.MkdirAll(worktreeDir, 0755)
+
+	originalDir, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("failed to get current dir: %v", err)
+	}
+	defer os.Chdir(originalDir)
+
+	if err := os.Chdir(repoDir); err != nil {
+		t.Fatalf("failed to change dir: %v", err)
+	}
+
+	mock := &mockGit{
+		isGitRepo: true,
+	}
+
+	path, err := findWorktreePath(mock, "123")
+	if err != nil {
+		t.Fatalf("expected no error, got: %v", err)
+	}
+
+	// Resolve symlinks for macOS /var -> /private/var
+	resolvedPath, _ := filepath.EvalSymlinks(path)
+	resolvedExpected, _ := filepath.EvalSymlinks(worktreeDir)
+	if resolvedPath != resolvedExpected {
+		t.Errorf("expected %q, got %q", resolvedExpected, resolvedPath)
+	}
+}
+
+func TestFindWorktreePath_MatchesByBranch(t *testing.T) {
+	tempDir := t.TempDir()
+	repoDir := filepath.Join(tempDir, "test-repo")
+	os.MkdirAll(repoDir, 0755)
+
+	originalDir, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("failed to get current dir: %v", err)
+	}
+	defer os.Chdir(originalDir)
+
+	if err := os.Chdir(repoDir); err != nil {
+		t.Fatalf("failed to change dir: %v", err)
+	}
+
+	mock := &mockGit{
+		isGitRepo: true,
+		ListWorktreesFn: func() ([]git.WorktreeInfo, error) {
+			return []git.WorktreeInfo{
+				{Path: "/some/path/main", Branch: "main"},
+				{Path: "/some/path/feature", Branch: "feature/login"},
+			}, nil
+		},
+	}
+
+	path, err := findWorktreePath(mock, "feature/login")
+	if err != nil {
+		t.Fatalf("expected no error, got: %v", err)
+	}
+	if path != "/some/path/feature" {
+		t.Errorf("expected /some/path/feature, got %q", path)
+	}
+}
+
+func TestFindWorktreePath_MatchesByIssuePrefix(t *testing.T) {
+	tempDir := t.TempDir()
+	repoDir := filepath.Join(tempDir, "test-repo")
+	os.MkdirAll(repoDir, 0755)
+
+	originalDir, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("failed to get current dir: %v", err)
+	}
+	defer os.Chdir(originalDir)
+
+	if err := os.Chdir(repoDir); err != nil {
+		t.Fatalf("failed to change dir: %v", err)
+	}
+
+	mock := &mockGit{
+		isGitRepo: true,
+		ListWorktreesFn: func() ([]git.WorktreeInfo, error) {
+			return []git.WorktreeInfo{
+				{Path: "/some/path/main", Branch: "main"},
+				{Path: "/some/path/issue-456", Branch: "456/impl"},
+			}, nil
+		},
+	}
+
+	path, err := findWorktreePath(mock, "456")
+	if err != nil {
+		t.Fatalf("expected no error, got: %v", err)
+	}
+	if path != "/some/path/issue-456" {
+		t.Errorf("expected /some/path/issue-456, got %q", path)
+	}
+}
+
+func TestFindWorktreePath_SanitizedBranchDir(t *testing.T) {
+	tempDir := t.TempDir()
+	repoDir := filepath.Join(tempDir, "test-repo")
+	worktreeDir := filepath.Join(tempDir, "test-repo-feature-login")
+	os.MkdirAll(repoDir, 0755)
+	os.MkdirAll(worktreeDir, 0755)
+
+	originalDir, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("failed to get current dir: %v", err)
+	}
+	defer os.Chdir(originalDir)
+
+	if err := os.Chdir(repoDir); err != nil {
+		t.Fatalf("failed to change dir: %v", err)
+	}
+
+	mock := &mockGit{
+		isGitRepo: true,
+		ListWorktreesFn: func() ([]git.WorktreeInfo, error) {
+			return []git.WorktreeInfo{}, nil
+		},
+		SanitizeBranchNameForDirFn: func(branch string) string {
+			return strings.ReplaceAll(branch, "/", "-")
+		},
+	}
+
+	path, err := findWorktreePath(mock, "feature/login")
+	if err != nil {
+		t.Fatalf("expected no error, got: %v", err)
+	}
+
+	// Resolve symlinks for macOS /var -> /private/var
+	resolvedPath, _ := filepath.EvalSymlinks(path)
+	resolvedExpected, _ := filepath.EvalSymlinks(worktreeDir)
+	if resolvedPath != resolvedExpected {
+		t.Errorf("expected %q, got %q", resolvedExpected, resolvedPath)
+	}
+}
+
+func TestFindWorktreePath_NotFound(t *testing.T) {
+	tempDir := t.TempDir()
+	repoDir := filepath.Join(tempDir, "test-repo")
+	os.MkdirAll(repoDir, 0755)
+
+	originalDir, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("failed to get current dir: %v", err)
+	}
+	defer os.Chdir(originalDir)
+
+	if err := os.Chdir(repoDir); err != nil {
+		t.Fatalf("failed to change dir: %v", err)
+	}
+
+	mock := &mockGit{
+		isGitRepo: true,
+		ListWorktreesFn: func() ([]git.WorktreeInfo, error) {
+			return []git.WorktreeInfo{}, nil
+		},
+	}
+
+	_, err = findWorktreePath(mock, "nonexistent")
+	if err == nil {
+		t.Error("expected error for non-existent worktree")
+	}
+	if !strings.Contains(err.Error(), "worktree not found for") {
+		t.Errorf("expected 'worktree not found for' error, got: %v", err)
+	}
+}
+
+func TestFindWorktreePath_GetRepoNameError(t *testing.T) {
+	customMock := &mockGitWithRepoError{}
+
+	_, err := findWorktreePath(customMock, "123")
+	if err == nil {
+		t.Error("expected error when GetRepositoryName fails")
+	}
+}
+
+// mockGitWithRepoError is a mock that returns an error from GetRepositoryName
+type mockGitWithRepoError struct {
+	mockGit
+}
+
+func (m *mockGitWithRepoError) GetRepositoryName() (string, error) {
+	return "", fmt.Errorf("mock repo name error")
+}
+
+func TestFindWorktreePath_ListWorktreesError(t *testing.T) {
+	tempDir := t.TempDir()
+	repoDir := filepath.Join(tempDir, "test-repo")
+	os.MkdirAll(repoDir, 0755)
+
+	originalDir, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("failed to get current dir: %v", err)
+	}
+	defer os.Chdir(originalDir)
+
+	if err := os.Chdir(repoDir); err != nil {
+		t.Fatalf("failed to change dir: %v", err)
+	}
+
+	mock := &mockGit{
+		isGitRepo: true,
+		ListWorktreesFn: func() ([]git.WorktreeInfo, error) {
+			return nil, fmt.Errorf("list worktrees error")
+		},
+	}
+
+	_, err = findWorktreePath(mock, "999")
+	if err == nil {
+		t.Error("expected error when worktree not found")
+	}
+	if !strings.Contains(err.Error(), "worktree not found for") {
+		t.Errorf("expected 'worktree not found for' error, got: %v", err)
+	}
+}
+
+func TestShellIntegrationCommand_GetBashZshScript(t *testing.T) {
+	cmd := &ShellIntegrationCommand{}
+
+	t.Run("bash script has bash shebang", func(t *testing.T) {
+		script := cmd.getBashZshScript("bash")
+		if !strings.HasPrefix(script, "#!/bin/bash") {
+			t.Error("expected bash shebang at start")
+		}
+		if !strings.Contains(script, "--shell=bash") {
+			t.Error("expected --shell=bash in script")
+		}
+	})
+
+	t.Run("zsh script has zsh shebang", func(t *testing.T) {
+		script := cmd.getBashZshScript("zsh")
+		if !strings.HasPrefix(script, "#!/bin/zsh") {
+			t.Error("expected zsh shebang at start")
+		}
+		if !strings.Contains(script, "--shell=zsh") {
+			t.Error("expected --shell=zsh in script")
+		}
+	})
+}
+
+func TestShellIntegrationCommand_GetFishScript(t *testing.T) {
+	cmd := &ShellIntegrationCommand{}
+
+	script := cmd.getFishScript()
+	if !strings.Contains(script, "#!/usr/bin/env fish") {
+		t.Error("expected fish shebang")
+	}
+	if !strings.Contains(script, "function gw") {
+		t.Error("expected fish function definition")
+	}
+	if !strings.Contains(script, "command gw $argv") {
+		t.Error("expected 'command gw $argv' in fish script")
+	}
+}
+
+func TestNewShellIntegrationCommand(t *testing.T) {
+	stdout := &bytes.Buffer{}
+	stderr := &bytes.Buffer{}
+
+	cmd := NewShellIntegrationCommand(stdout, stderr)
+	if cmd == nil {
+		t.Fatal("expected non-nil command")
+	}
+	if cmd.stdout != stdout {
+		t.Error("stdout not set correctly")
+	}
+	if cmd.stderr != stderr {
+		t.Error("stderr not set correctly")
+	}
+	if cmd.showScript {
+		t.Error("showScript should default to false")
+	}
+	if cmd.shell != "" {
+		t.Error("shell should default to empty string")
+	}
+	if cmd.printPath != "" {
+		t.Error("printPath should default to empty string")
 	}
 }

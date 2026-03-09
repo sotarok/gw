@@ -17,6 +17,7 @@ import (
 // Mock implementations
 
 const testBranch123 = "123/impl"
+const testBranchFeature = "feature/test"
 
 type mockGit struct {
 	isGitRepo           bool
@@ -28,17 +29,20 @@ type mockGit struct {
 	copyEnvError        error
 
 	// Override functions for custom behavior
-	FetchAllFn              func() error
-	BranchExistsFn          func(string) (bool, error)
-	ListAllBranchesFn       func() ([]string, error)
-	GetCurrentBranchFn      func() (string, error)
-	GetWorktreeForIssueFn   func(string) (*git.WorktreeInfo, error)
-	HasUncommittedChangesFn func() (bool, error)
-	HasUnpushedCommitsFn    func() (bool, error)
-	IsMergedToOriginFn      func(string) (bool, error)
-	DeleteBranchFn          func(string) error
-	ListWorktreesFn         func() ([]git.WorktreeInfo, error)
-	RemoveWorktreeByPathFn  func(string) error
+	FetchAllFn                 func() error
+	BranchExistsFn             func(string) (bool, error)
+	ListAllBranchesFn          func() ([]string, error)
+	GetCurrentBranchFn         func() (string, error)
+	GetWorktreeForIssueFn      func(string) (*git.WorktreeInfo, error)
+	HasUncommittedChangesFn    func() (bool, error)
+	HasUnpushedCommitsFn       func() (bool, error)
+	IsMergedToOriginFn         func(string) (bool, error)
+	DeleteBranchFn             func(string) error
+	ListWorktreesFn            func() ([]git.WorktreeInfo, error)
+	RemoveWorktreeByPathFn     func(string) error
+	GetRepositoryNameFn        func() (string, error)
+	CreateWorktreeFromBranchFn func(string, string, string) error
+	SanitizeBranchNameForDirFn func(string) string
 }
 
 func (m *mockGit) IsGitRepository() bool {
@@ -46,6 +50,9 @@ func (m *mockGit) IsGitRepository() bool {
 }
 
 func (m *mockGit) GetRepositoryName() (string, error) {
+	if m.GetRepositoryNameFn != nil {
+		return m.GetRepositoryNameFn()
+	}
 	return "test-repo", nil
 }
 
@@ -71,6 +78,9 @@ func (m *mockGit) CreateWorktree(issueNumber, baseBranch string) (string, error)
 }
 
 func (m *mockGit) CreateWorktreeFromBranch(worktreePath, sourceBranch, targetBranch string) error {
+	if m.CreateWorktreeFromBranchFn != nil {
+		return m.CreateWorktreeFromBranchFn(worktreePath, sourceBranch, targetBranch)
+	}
 	// Create the worktree directory for the test
 	absolutePath, _ := filepath.Abs(worktreePath)
 	os.MkdirAll(absolutePath, 0755)
@@ -161,6 +171,9 @@ func (m *mockGit) RunCommand(command string) error {
 }
 
 func (m *mockGit) SanitizeBranchNameForDirectory(branch string) string {
+	if m.SanitizeBranchNameForDirFn != nil {
+		return m.SanitizeBranchNameForDirFn(branch)
+	}
 	// Simple sanitization for testing
 	return strings.ReplaceAll(branch, "/", "_")
 }
@@ -664,7 +677,7 @@ func TestCheckoutCommand_Execute(t *testing.T) {
 		},
 		{
 			name:   "successful checkout without env files",
-			branch: "feature/test",
+			branch: testBranchFeature,
 			mockSetup: func() (*mockGit, *mockUI, *mockDetect, func()) {
 				tempDir, _ := os.MkdirTemp("", "gw-worktree-*")
 				mockGitInstance := &mockGit{
@@ -688,7 +701,7 @@ func TestCheckoutCommand_Execute(t *testing.T) {
 		},
 		{
 			name:     "successful checkout with env files - copyEnvs flag",
-			branch:   "feature/test",
+			branch:   testBranchFeature,
 			copyEnvs: true,
 			mockSetup: func() (*mockGit, *mockUI, *mockDetect, func()) {
 				tempDir, _ := os.MkdirTemp("", "gw-worktree-*")
@@ -731,16 +744,16 @@ func TestCheckoutCommand_Execute(t *testing.T) {
 					return true, nil
 				}
 				mockGitInstance.ListAllBranchesFn = func() ([]string, error) {
-					return []string{"main", "feature/test", "bugfix/123"}, nil
+					return []string{defaultBaseBranch, testBranchFeature, "bugfix/123"}, nil
 				}
 				mockGitInstance.GetCurrentBranchFn = func() (string, error) {
-					return "main", nil
+					return defaultBaseBranch, nil
 				}
 				ui := &mockUI{
 					ShowSelectorFn: func(title string, items []ui.SelectorItem) (*ui.SelectorItem, error) {
-						// Simulate selecting "feature/test"
+						// Simulate selecting testBranchFeature
 						for i := range items {
-							if items[i].ID == "feature/test" {
+							if items[i].ID == testBranchFeature {
 								return &items[i], nil
 							}
 						}
@@ -750,7 +763,7 @@ func TestCheckoutCommand_Execute(t *testing.T) {
 				return mockGitInstance, ui, &mockDetect{}, func() { os.RemoveAll(tempDir) }
 			},
 			checkOutput: func(t *testing.T, stdout, stderr string) {
-				if !contains(stdout, "Creating worktree for branch 'feature/test'") {
+				if !contains(stdout, "Creating worktree for branch '"+testBranchFeature+"'") {
 					t.Error("Expected creation message for selected branch")
 				}
 			},
@@ -802,6 +815,901 @@ func TestCheckoutCommand_Execute(t *testing.T) {
 				tt.checkOutput(t, stdout.String(), stderr.String())
 			}
 		})
+	}
+}
+
+func TestCheckoutCommand_Execute_GetRepositoryNameError(t *testing.T) {
+	originalDir, _ := os.Getwd()
+	defer os.Chdir(originalDir)
+
+	tempDir, err := os.MkdirTemp("", "gw-test-*")
+	if err != nil {
+		t.Fatalf("Failed to create temp dir: %v", err)
+	}
+	defer os.RemoveAll(tempDir)
+	os.Chdir(tempDir)
+
+	mockGitInstance := &mockGit{
+		isGitRepo: true,
+	}
+	mockGitInstance.BranchExistsFn = func(branch string) (bool, error) {
+		return true, nil
+	}
+	mockGitInstance.GetRepositoryNameFn = func() (string, error) {
+		return "", fmt.Errorf("not a git repository")
+	}
+
+	stdout := &bytes.Buffer{}
+	stderr := &bytes.Buffer{}
+	deps := &Dependencies{
+		Git:    mockGitInstance,
+		UI:     &mockUI{},
+		Detect: &mockDetect{},
+		Stdout: stdout,
+		Stderr: stderr,
+	}
+
+	cmd := NewCheckoutCommandWithConfig(deps, false, true, &config.Config{})
+	err = cmd.Execute(testBranchFeature)
+
+	if err == nil {
+		t.Fatal("Expected error, got nil")
+	}
+	if !strings.Contains(err.Error(), "failed to get repository name") {
+		t.Errorf("Expected 'failed to get repository name' error, got: %v", err)
+	}
+}
+
+func TestCheckoutCommand_Execute_BranchExistsError(t *testing.T) {
+	originalDir, _ := os.Getwd()
+	defer os.Chdir(originalDir)
+
+	tempDir, err := os.MkdirTemp("", "gw-test-*")
+	if err != nil {
+		t.Fatalf("Failed to create temp dir: %v", err)
+	}
+	defer os.RemoveAll(tempDir)
+	os.Chdir(tempDir)
+
+	mockGitInstance := &mockGit{
+		isGitRepo: true,
+	}
+	mockGitInstance.BranchExistsFn = func(branch string) (bool, error) {
+		return false, fmt.Errorf("git command failed")
+	}
+
+	stdout := &bytes.Buffer{}
+	stderr := &bytes.Buffer{}
+	deps := &Dependencies{
+		Git:    mockGitInstance,
+		UI:     &mockUI{},
+		Detect: &mockDetect{},
+		Stdout: stdout,
+		Stderr: stderr,
+	}
+
+	cmd := NewCheckoutCommandWithConfig(deps, false, true, &config.Config{})
+	err = cmd.Execute(testBranchFeature)
+
+	if err == nil {
+		t.Fatal("Expected error, got nil")
+	}
+	if !strings.Contains(err.Error(), "failed to check branch existence") {
+		t.Errorf("Expected 'failed to check branch existence' error, got: %v", err)
+	}
+}
+
+func TestCheckoutCommand_Execute_CreateWorktreeFromBranchError(t *testing.T) {
+	originalDir, _ := os.Getwd()
+	defer os.Chdir(originalDir)
+
+	tempDir, err := os.MkdirTemp("", "gw-test-*")
+	if err != nil {
+		t.Fatalf("Failed to create temp dir: %v", err)
+	}
+	defer os.RemoveAll(tempDir)
+	os.Chdir(tempDir)
+
+	mockGitInstance := &mockGit{
+		isGitRepo: true,
+	}
+	mockGitInstance.BranchExistsFn = func(branch string) (bool, error) {
+		return true, nil
+	}
+	mockGitInstance.CreateWorktreeFromBranchFn = func(worktreePath, sourceBranch, targetBranch string) error {
+		return fmt.Errorf("worktree already exists")
+	}
+
+	stdout := &bytes.Buffer{}
+	stderr := &bytes.Buffer{}
+	deps := &Dependencies{
+		Git:    mockGitInstance,
+		UI:     &mockUI{},
+		Detect: &mockDetect{},
+		Stdout: stdout,
+		Stderr: stderr,
+	}
+
+	cmd := NewCheckoutCommandWithConfig(deps, false, true, &config.Config{})
+	err = cmd.Execute(testBranchFeature)
+
+	if err == nil {
+		t.Fatal("Expected error, got nil")
+	}
+	if !strings.Contains(err.Error(), "failed to create worktree") {
+		t.Errorf("Expected 'failed to create worktree' error, got: %v", err)
+	}
+}
+
+func TestCheckoutCommand_Execute_OriginPrefixStripped(t *testing.T) {
+	originalDir, _ := os.Getwd()
+	defer os.Chdir(originalDir)
+
+	tempDir, err := os.MkdirTemp("", "gw-test-*")
+	if err != nil {
+		t.Fatalf("Failed to create temp dir: %v", err)
+	}
+	defer os.RemoveAll(tempDir)
+	os.Chdir(tempDir)
+
+	var capturedTargetBranch string
+	mockGitInstance := &mockGit{
+		isGitRepo: true,
+		envFiles:  []git.EnvFile{},
+	}
+	mockGitInstance.BranchExistsFn = func(branch string) (bool, error) {
+		return true, nil
+	}
+	mockGitInstance.CreateWorktreeFromBranchFn = func(worktreePath, sourceBranch, targetBranch string) error {
+		capturedTargetBranch = targetBranch
+		absolutePath, _ := filepath.Abs(worktreePath)
+		os.MkdirAll(absolutePath, 0755)
+		return nil
+	}
+
+	stdout := &bytes.Buffer{}
+	stderr := &bytes.Buffer{}
+	deps := &Dependencies{
+		Git:    mockGitInstance,
+		UI:     &mockUI{},
+		Detect: &mockDetect{},
+		Stdout: stdout,
+		Stderr: stderr,
+	}
+
+	cmd := NewCheckoutCommandWithConfig(deps, false, true, &config.Config{})
+	err = cmd.Execute("origin/feature/test")
+
+	if err != nil {
+		t.Fatalf("Unexpected error: %v", err)
+	}
+
+	if capturedTargetBranch != testBranchFeature {
+		t.Errorf("Expected target branch 'feature/test', got %q", capturedTargetBranch)
+	}
+}
+
+func TestCheckoutCommand_Execute_SetupFailureWarnsButDoesNotFail(t *testing.T) {
+	originalDir, _ := os.Getwd()
+	defer os.Chdir(originalDir)
+
+	tempDir, err := os.MkdirTemp("", "gw-test-*")
+	if err != nil {
+		t.Fatalf("Failed to create temp dir: %v", err)
+	}
+	defer os.RemoveAll(tempDir)
+	os.Chdir(tempDir)
+
+	mockGitInstance := &mockGit{
+		isGitRepo: true,
+		envFiles:  []git.EnvFile{},
+	}
+	mockGitInstance.BranchExistsFn = func(branch string) (bool, error) {
+		return true, nil
+	}
+
+	stdout := &bytes.Buffer{}
+	stderr := &bytes.Buffer{}
+	deps := &Dependencies{
+		Git:    mockGitInstance,
+		UI:     &mockUI{},
+		Detect: &mockDetect{setupError: fmt.Errorf("yarn install failed")},
+		Stdout: stdout,
+		Stderr: stderr,
+	}
+
+	cmd := NewCheckoutCommandWithConfig(deps, false, true, &config.Config{})
+	err = cmd.Execute(testBranchFeature)
+
+	if err != nil {
+		t.Fatalf("Expected no error (setup failure should not fail), got: %v", err)
+	}
+
+	if !contains(stderr.String(), "Setup failed: yarn install failed") {
+		t.Error("Expected setup warning in stderr")
+	}
+	if !contains(stdout.String(), "Worktree ready at:") {
+		t.Error("Expected success message despite setup failure")
+	}
+}
+
+func TestCheckoutCommand_Execute_FetchBeforeCommand(t *testing.T) {
+	originalDir, _ := os.Getwd()
+	defer os.Chdir(originalDir)
+
+	tempDir, err := os.MkdirTemp("", "gw-test-*")
+	if err != nil {
+		t.Fatalf("Failed to create temp dir: %v", err)
+	}
+	defer os.RemoveAll(tempDir)
+	os.Chdir(tempDir)
+
+	fetchCalled := false
+	mockGitInstance := &mockGit{
+		isGitRepo: true,
+		envFiles:  []git.EnvFile{},
+	}
+	mockGitInstance.BranchExistsFn = func(branch string) (bool, error) {
+		return true, nil
+	}
+	mockGitInstance.FetchAllFn = func() error {
+		fetchCalled = true
+		return nil
+	}
+
+	stdout := &bytes.Buffer{}
+	stderr := &bytes.Buffer{}
+	deps := &Dependencies{
+		Git:    mockGitInstance,
+		UI:     &mockUI{},
+		Detect: &mockDetect{},
+		Stdout: stdout,
+		Stderr: stderr,
+	}
+
+	// noFetch=false with FetchBeforeCommand=true should call fetch
+	cmd := NewCheckoutCommandWithConfig(deps, false, false, &config.Config{FetchBeforeCommand: true})
+	err = cmd.Execute(testBranchFeature)
+
+	if err != nil {
+		t.Fatalf("Unexpected error: %v", err)
+	}
+	if !fetchCalled {
+		t.Error("Expected FetchAll to be called when FetchBeforeCommand is true")
+	}
+}
+
+func TestCheckoutCommand_Execute_FetchErrorWarnsButDoesNotFail(t *testing.T) {
+	originalDir, _ := os.Getwd()
+	defer os.Chdir(originalDir)
+
+	tempDir, err := os.MkdirTemp("", "gw-test-*")
+	if err != nil {
+		t.Fatalf("Failed to create temp dir: %v", err)
+	}
+	defer os.RemoveAll(tempDir)
+	os.Chdir(tempDir)
+
+	mockGitInstance := &mockGit{
+		isGitRepo: true,
+		envFiles:  []git.EnvFile{},
+	}
+	mockGitInstance.BranchExistsFn = func(branch string) (bool, error) {
+		return true, nil
+	}
+	mockGitInstance.FetchAllFn = func() error {
+		return fmt.Errorf("network error")
+	}
+
+	stdout := &bytes.Buffer{}
+	stderr := &bytes.Buffer{}
+	deps := &Dependencies{
+		Git:    mockGitInstance,
+		UI:     &mockUI{},
+		Detect: &mockDetect{},
+		Stdout: stdout,
+		Stderr: stderr,
+	}
+
+	cmd := NewCheckoutCommandWithConfig(deps, false, false, &config.Config{FetchBeforeCommand: true})
+	err = cmd.Execute(testBranchFeature)
+
+	if err != nil {
+		t.Fatalf("Expected no error (fetch failure should warn), got: %v", err)
+	}
+	if !contains(stderr.String(), "Could not fetch from remotes") {
+		t.Error("Expected fetch warning in stderr")
+	}
+}
+
+func TestCheckoutCommand_SelectBranch_ListAllBranchesError(t *testing.T) {
+	mockGitInstance := &mockGit{
+		isGitRepo: true,
+	}
+	mockGitInstance.ListAllBranchesFn = func() ([]string, error) {
+		return nil, fmt.Errorf("git branch failed")
+	}
+
+	stdout := &bytes.Buffer{}
+	stderr := &bytes.Buffer{}
+	deps := &Dependencies{
+		Git:    mockGitInstance,
+		UI:     &mockUI{},
+		Detect: &mockDetect{},
+		Stdout: stdout,
+		Stderr: stderr,
+	}
+
+	cmd := NewCheckoutCommandWithConfig(deps, false, true, &config.Config{})
+	err := cmd.Execute("") // empty branch triggers selectBranch
+
+	if err == nil {
+		t.Fatal("Expected error, got nil")
+	}
+	if !strings.Contains(err.Error(), "failed to list branches") {
+		t.Errorf("Expected 'failed to list branches' error, got: %v", err)
+	}
+}
+
+func TestCheckoutCommand_SelectBranch_NoBranches(t *testing.T) {
+	mockGitInstance := &mockGit{
+		isGitRepo: true,
+	}
+	mockGitInstance.ListAllBranchesFn = func() ([]string, error) {
+		return []string{}, nil
+	}
+
+	stdout := &bytes.Buffer{}
+	stderr := &bytes.Buffer{}
+	deps := &Dependencies{
+		Git:    mockGitInstance,
+		UI:     &mockUI{},
+		Detect: &mockDetect{},
+		Stdout: stdout,
+		Stderr: stderr,
+	}
+
+	cmd := NewCheckoutCommandWithConfig(deps, false, true, &config.Config{})
+	err := cmd.Execute("")
+
+	if err == nil {
+		t.Fatal("Expected error, got nil")
+	}
+	if !strings.Contains(err.Error(), "no branches found") {
+		t.Errorf("Expected 'no branches found' error, got: %v", err)
+	}
+}
+
+func TestCheckoutCommand_SelectBranch_GetCurrentBranchError(t *testing.T) {
+	mockGitInstance := &mockGit{
+		isGitRepo: true,
+	}
+	mockGitInstance.ListAllBranchesFn = func() ([]string, error) {
+		return []string{defaultBaseBranch, testBranchFeature}, nil
+	}
+	mockGitInstance.GetCurrentBranchFn = func() (string, error) {
+		return "", fmt.Errorf("detached HEAD")
+	}
+
+	stdout := &bytes.Buffer{}
+	stderr := &bytes.Buffer{}
+	deps := &Dependencies{
+		Git:    mockGitInstance,
+		UI:     &mockUI{},
+		Detect: &mockDetect{},
+		Stdout: stdout,
+		Stderr: stderr,
+	}
+
+	cmd := NewCheckoutCommandWithConfig(deps, false, true, &config.Config{})
+	err := cmd.Execute("")
+
+	if err == nil {
+		t.Fatal("Expected error, got nil")
+	}
+	if !strings.Contains(err.Error(), "failed to get current branch") {
+		t.Errorf("Expected 'failed to get current branch' error, got: %v", err)
+	}
+}
+
+func TestCheckoutCommand_SelectBranch_AllBranchesFiltered(t *testing.T) {
+	mockGitInstance := &mockGit{
+		isGitRepo: true,
+	}
+	// Only main/master branches + current branch, all get filtered
+	mockGitInstance.ListAllBranchesFn = func() ([]string, error) {
+		return []string{defaultBaseBranch, "master", "origin/main", "origin/master"}, nil
+	}
+	mockGitInstance.GetCurrentBranchFn = func() (string, error) {
+		return defaultBaseBranch, nil
+	}
+
+	stdout := &bytes.Buffer{}
+	stderr := &bytes.Buffer{}
+	deps := &Dependencies{
+		Git:    mockGitInstance,
+		UI:     &mockUI{},
+		Detect: &mockDetect{},
+		Stdout: stdout,
+		Stderr: stderr,
+	}
+
+	cmd := NewCheckoutCommandWithConfig(deps, false, true, &config.Config{})
+	err := cmd.Execute("")
+
+	if err == nil {
+		t.Fatal("Expected error, got nil")
+	}
+	if !strings.Contains(err.Error(), "no branches available for checkout") {
+		t.Errorf("Expected 'no branches available for checkout' error, got: %v", err)
+	}
+}
+
+func TestCheckoutCommand_SelectBranch_ShowSelectorError(t *testing.T) {
+	mockGitInstance := &mockGit{
+		isGitRepo: true,
+	}
+	mockGitInstance.ListAllBranchesFn = func() ([]string, error) {
+		return []string{defaultBaseBranch, testBranchFeature}, nil
+	}
+	mockGitInstance.GetCurrentBranchFn = func() (string, error) {
+		return defaultBaseBranch, nil
+	}
+
+	mockUIInstance := &mockUI{
+		ShowSelectorFn: func(title string, items []ui.SelectorItem) (*ui.SelectorItem, error) {
+			return nil, fmt.Errorf("user canceled")
+		},
+	}
+
+	stdout := &bytes.Buffer{}
+	stderr := &bytes.Buffer{}
+	deps := &Dependencies{
+		Git:    mockGitInstance,
+		UI:     mockUIInstance,
+		Detect: &mockDetect{},
+		Stdout: stdout,
+		Stderr: stderr,
+	}
+
+	cmd := NewCheckoutCommandWithConfig(deps, false, true, &config.Config{})
+	err := cmd.Execute("")
+
+	if err == nil {
+		t.Fatal("Expected error, got nil")
+	}
+	if !strings.Contains(err.Error(), "user canceled") {
+		t.Errorf("Expected 'user canceled' error, got: %v", err)
+	}
+}
+
+func TestCheckoutCommand_SelectBranch_FiltersCorrectly(t *testing.T) {
+	mockGitInstance := &mockGit{
+		isGitRepo: true,
+		envFiles:  []git.EnvFile{},
+	}
+	mockGitInstance.ListAllBranchesFn = func() ([]string, error) {
+		return []string{defaultBaseBranch, "master", "origin/main", "origin/master", "feature/a", "bugfix/b", "origin/feature/c"}, nil
+	}
+	mockGitInstance.GetCurrentBranchFn = func() (string, error) {
+		return "feature/a", nil // current branch should also be filtered
+	}
+	mockGitInstance.BranchExistsFn = func(branch string) (bool, error) {
+		return true, nil
+	}
+
+	var selectorItems []ui.SelectorItem
+	mockUIInstance := &mockUI{
+		ShowSelectorFn: func(title string, items []ui.SelectorItem) (*ui.SelectorItem, error) {
+			selectorItems = items
+			return &items[0], nil
+		},
+	}
+
+	stdout := &bytes.Buffer{}
+	stderr := &bytes.Buffer{}
+	deps := &Dependencies{
+		Git:    mockGitInstance,
+		UI:     mockUIInstance,
+		Detect: &mockDetect{},
+		Stdout: stdout,
+		Stderr: stderr,
+	}
+
+	cmd := NewCheckoutCommandWithConfig(deps, false, true, &config.Config{})
+	_ = cmd.Execute("")
+
+	// Should only have "bugfix/b" and "origin/feature/c" (feature/a is current, main/master/origin/main/origin/master are filtered)
+	expectedBranches := map[string]bool{"bugfix/b": true, "origin/feature/c": true}
+	if len(selectorItems) != len(expectedBranches) {
+		t.Errorf("Expected %d filtered branches, got %d: %v", len(expectedBranches), len(selectorItems), selectorItems)
+	}
+	for _, item := range selectorItems {
+		if !expectedBranches[item.ID] {
+			t.Errorf("Unexpected branch in selector: %s", item.ID)
+		}
+	}
+}
+
+func TestCheckoutCommand_Execute_EnvFilesWithUserConfirm(t *testing.T) {
+	originalDir, _ := os.Getwd()
+	defer os.Chdir(originalDir)
+
+	tempDir, err := os.MkdirTemp("", "gw-test-*")
+	if err != nil {
+		t.Fatalf("Failed to create temp dir: %v", err)
+	}
+	defer os.RemoveAll(tempDir)
+	os.Chdir(tempDir)
+
+	// Create a real env file
+	envFile := ".env.checkout-test"
+	os.WriteFile(envFile, []byte("KEY=value"), 0600)
+	defer os.Remove(envFile)
+
+	mockGitInstance := &mockGit{
+		isGitRepo: true,
+		envFiles: []git.EnvFile{
+			{Path: envFile, AbsolutePath: filepath.Join(tempDir, envFile)},
+		},
+	}
+	mockGitInstance.BranchExistsFn = func(branch string) (bool, error) {
+		return true, nil
+	}
+
+	mockUIInstance := &mockUI{confirmResult: true}
+
+	stdout := &bytes.Buffer{}
+	stderr := &bytes.Buffer{}
+	deps := &Dependencies{
+		Git:    mockGitInstance,
+		UI:     mockUIInstance,
+		Detect: &mockDetect{},
+		Stdout: stdout,
+		Stderr: stderr,
+	}
+
+	// copyEnvs=false and CopyEnvs=nil should prompt user
+	cmd := NewCheckoutCommandWithConfig(deps, false, true, &config.Config{})
+	err = cmd.Execute(testBranchFeature)
+
+	if err != nil {
+		t.Fatalf("Unexpected error: %v", err)
+	}
+	if !mockUIInstance.confirmCalled {
+		t.Error("Expected user to be prompted for env file copy")
+	}
+	if !contains(stdout.String(), "Found 1 untracked environment file(s):") {
+		t.Error("Expected env files message in stdout")
+	}
+}
+
+func TestStartCommand_Execute_FetchBeforeCommand(t *testing.T) {
+	originalDir, _ := os.Getwd()
+	defer os.Chdir(originalDir)
+
+	tempDir, err := os.MkdirTemp("", "gw-test-*")
+	if err != nil {
+		t.Fatalf("Failed to create temp dir: %v", err)
+	}
+	defer os.RemoveAll(tempDir)
+	os.Chdir(tempDir)
+
+	fetchCalled := false
+	worktreeDir, _ := os.MkdirTemp("", "gw-worktree-*")
+	defer os.RemoveAll(worktreeDir)
+
+	mockGitInstance := &mockGit{
+		isGitRepo:    true,
+		worktreePath: worktreeDir,
+	}
+	mockGitInstance.FetchAllFn = func() error {
+		fetchCalled = true
+		return nil
+	}
+
+	stdout := &bytes.Buffer{}
+	stderr := &bytes.Buffer{}
+	deps := &Dependencies{
+		Git:    mockGitInstance,
+		UI:     &mockUI{},
+		Detect: &mockDetect{},
+		Stdout: stdout,
+		Stderr: stderr,
+	}
+
+	// noFetch=false with FetchBeforeCommand=true should call fetch
+	cmd := NewStartCommandWithConfig(deps, false, false, &config.Config{FetchBeforeCommand: true})
+	err = cmd.Execute("123", "main")
+
+	if err != nil {
+		t.Fatalf("Unexpected error: %v", err)
+	}
+	if !fetchCalled {
+		t.Error("Expected FetchAll to be called when FetchBeforeCommand is true")
+	}
+}
+
+func TestStartCommand_Execute_FetchErrorWarnsButDoesNotFail(t *testing.T) {
+	originalDir, _ := os.Getwd()
+	defer os.Chdir(originalDir)
+
+	tempDir, err := os.MkdirTemp("", "gw-test-*")
+	if err != nil {
+		t.Fatalf("Failed to create temp dir: %v", err)
+	}
+	defer os.RemoveAll(tempDir)
+	os.Chdir(tempDir)
+
+	worktreeDir, _ := os.MkdirTemp("", "gw-worktree-*")
+	defer os.RemoveAll(worktreeDir)
+
+	mockGitInstance := &mockGit{
+		isGitRepo:    true,
+		worktreePath: worktreeDir,
+	}
+	mockGitInstance.FetchAllFn = func() error {
+		return fmt.Errorf("network error")
+	}
+
+	stdout := &bytes.Buffer{}
+	stderr := &bytes.Buffer{}
+	deps := &Dependencies{
+		Git:    mockGitInstance,
+		UI:     &mockUI{},
+		Detect: &mockDetect{},
+		Stdout: stdout,
+		Stderr: stderr,
+	}
+
+	cmd := NewStartCommandWithConfig(deps, false, false, &config.Config{FetchBeforeCommand: true})
+	err = cmd.Execute("123", "main")
+
+	if err != nil {
+		t.Fatalf("Expected no error (fetch failure should warn), got: %v", err)
+	}
+	if !contains(stderr.String(), "Could not fetch from remotes") {
+		t.Error("Expected fetch warning in stderr")
+	}
+	if !contains(stdout.String(), "Worktree ready at:") {
+		t.Error("Expected success message despite fetch failure")
+	}
+}
+
+func TestStartCommand_Execute_NoFetchSkipsFetch(t *testing.T) {
+	originalDir, _ := os.Getwd()
+	defer os.Chdir(originalDir)
+
+	tempDir, err := os.MkdirTemp("", "gw-test-*")
+	if err != nil {
+		t.Fatalf("Failed to create temp dir: %v", err)
+	}
+	defer os.RemoveAll(tempDir)
+	os.Chdir(tempDir)
+
+	fetchCalled := false
+	worktreeDir, _ := os.MkdirTemp("", "gw-worktree-*")
+	defer os.RemoveAll(worktreeDir)
+
+	mockGitInstance := &mockGit{
+		isGitRepo:    true,
+		worktreePath: worktreeDir,
+	}
+	mockGitInstance.FetchAllFn = func() error {
+		fetchCalled = true
+		return nil
+	}
+
+	stdout := &bytes.Buffer{}
+	stderr := &bytes.Buffer{}
+	deps := &Dependencies{
+		Git:    mockGitInstance,
+		UI:     &mockUI{},
+		Detect: &mockDetect{},
+		Stdout: stdout,
+		Stderr: stderr,
+	}
+
+	// noFetch=true should skip fetch even with FetchBeforeCommand=true
+	cmd := NewStartCommandWithConfig(deps, false, true, &config.Config{FetchBeforeCommand: true})
+	err = cmd.Execute("123", "main")
+
+	if err != nil {
+		t.Fatalf("Unexpected error: %v", err)
+	}
+	if fetchCalled {
+		t.Error("Expected FetchAll NOT to be called when noFetch is true")
+	}
+}
+
+func TestStartCommand_Execute_AutoCDEnabled(t *testing.T) {
+	originalDir, _ := os.Getwd()
+	defer os.Chdir(originalDir)
+
+	tempDir, err := os.MkdirTemp("", "gw-test-*")
+	if err != nil {
+		t.Fatalf("Failed to create temp dir: %v", err)
+	}
+	defer os.RemoveAll(tempDir)
+	os.Chdir(tempDir)
+
+	worktreeDir, _ := os.MkdirTemp("", "gw-worktree-*")
+	defer os.RemoveAll(worktreeDir)
+
+	mockGitInstance := &mockGit{
+		isGitRepo:    true,
+		worktreePath: worktreeDir,
+	}
+
+	stdout := &bytes.Buffer{}
+	stderr := &bytes.Buffer{}
+	deps := &Dependencies{
+		Git:    mockGitInstance,
+		UI:     &mockUI{},
+		Detect: &mockDetect{},
+		Stdout: stdout,
+		Stderr: stderr,
+	}
+
+	cmd := NewStartCommandWithConfig(deps, false, true, &config.Config{AutoCD: true})
+	err = cmd.Execute("123", "main")
+
+	if err != nil {
+		t.Fatalf("Unexpected error: %v", err)
+	}
+	if !contains(stdout.String(), "Shell integration will change to this directory") {
+		t.Error("Expected shell integration message when AutoCD is enabled")
+	}
+}
+
+func TestStartCommand_Execute_ITerm2Tab(t *testing.T) {
+	originalDir, _ := os.Getwd()
+	defer os.Chdir(originalDir)
+
+	tempDir, err := os.MkdirTemp("", "gw-test-*")
+	if err != nil {
+		t.Fatalf("Failed to create temp dir: %v", err)
+	}
+	defer os.RemoveAll(tempDir)
+	os.Chdir(tempDir)
+
+	worktreeDir, _ := os.MkdirTemp("", "gw-worktree-*")
+	defer os.RemoveAll(worktreeDir)
+
+	mockGitInstance := &mockGit{
+		isGitRepo:    true,
+		worktreePath: worktreeDir,
+	}
+
+	stdout := &bytes.Buffer{}
+	stderr := &bytes.Buffer{}
+	deps := &Dependencies{
+		Git:    mockGitInstance,
+		UI:     &mockUI{},
+		Detect: &mockDetect{},
+		Stdout: stdout,
+		Stderr: stderr,
+	}
+
+	cmd := NewStartCommandWithConfig(deps, false, true, &config.Config{UpdateITerm2Tab: true})
+	err = cmd.Execute("456", "main")
+
+	if err != nil {
+		t.Fatalf("Unexpected error: %v", err)
+	}
+	// Verify command completes successfully with iTerm2 tab update enabled
+	if !contains(stdout.String(), "Worktree ready at:") {
+		t.Error("Expected success message")
+	}
+}
+
+func TestStartCommand_Execute_EnvFilesUserDeclines(t *testing.T) {
+	originalDir, _ := os.Getwd()
+	defer os.Chdir(originalDir)
+
+	tempDir, err := os.MkdirTemp("", "gw-test-*")
+	if err != nil {
+		t.Fatalf("Failed to create temp dir: %v", err)
+	}
+	defer os.RemoveAll(tempDir)
+	os.Chdir(tempDir)
+
+	// Create a real env file
+	envFile := ".env.decline-test"
+	os.WriteFile(envFile, []byte("KEY=value"), 0600)
+	defer os.Remove(envFile)
+
+	worktreeDir, _ := os.MkdirTemp("", "gw-worktree-*")
+	defer os.RemoveAll(worktreeDir)
+
+	mockGitInstance := &mockGit{
+		isGitRepo:    true,
+		worktreePath: worktreeDir,
+		envFiles: []git.EnvFile{
+			{Path: envFile, AbsolutePath: filepath.Join(tempDir, envFile)},
+		},
+	}
+
+	mockUIInstance := &mockUI{confirmResult: false}
+
+	stdout := &bytes.Buffer{}
+	stderr := &bytes.Buffer{}
+	deps := &Dependencies{
+		Git:    mockGitInstance,
+		UI:     mockUIInstance,
+		Detect: &mockDetect{},
+		Stdout: stdout,
+		Stderr: stderr,
+	}
+
+	cmd := NewStartCommandWithConfig(deps, false, true, &config.Config{})
+	err = cmd.Execute("123", "main")
+
+	if err != nil {
+		t.Fatalf("Unexpected error: %v", err)
+	}
+	if !mockUIInstance.confirmCalled {
+		t.Error("Expected user to be prompted")
+	}
+	// Files should NOT be copied
+	if contains(stdout.String(), "Environment files copied successfully") {
+		t.Error("Files should not have been copied when user declines")
+	}
+}
+
+func TestStartCommand_Execute_ConfigCopyEnvsTrue(t *testing.T) {
+	originalDir, _ := os.Getwd()
+	defer os.Chdir(originalDir)
+
+	tempDir, err := os.MkdirTemp("", "gw-test-*")
+	if err != nil {
+		t.Fatalf("Failed to create temp dir: %v", err)
+	}
+	defer os.RemoveAll(tempDir)
+	os.Chdir(tempDir)
+
+	envFile := ".env.configtest"
+	os.WriteFile(envFile, []byte("KEY=value"), 0600)
+	defer os.Remove(envFile)
+
+	worktreeDir, _ := os.MkdirTemp("", "gw-worktree-*")
+	defer os.RemoveAll(worktreeDir)
+
+	mockGitInstance := &mockGit{
+		isGitRepo:    true,
+		worktreePath: worktreeDir,
+		envFiles: []git.EnvFile{
+			{Path: envFile, AbsolutePath: filepath.Join(tempDir, envFile)},
+		},
+	}
+
+	mockUIInstance := &mockUI{}
+
+	stdout := &bytes.Buffer{}
+	stderr := &bytes.Buffer{}
+	deps := &Dependencies{
+		Git:    mockGitInstance,
+		UI:     mockUIInstance,
+		Detect: &mockDetect{},
+		Stdout: stdout,
+		Stderr: stderr,
+	}
+
+	// copyEnvs flag=false but config.CopyEnvs=true should copy without prompting
+	cmd := NewStartCommandWithConfig(deps, false, true, &config.Config{CopyEnvs: boolPtr(true)})
+	err = cmd.Execute("123", "main")
+
+	if err != nil {
+		t.Fatalf("Unexpected error: %v", err)
+	}
+	if mockUIInstance.confirmCalled {
+		t.Error("Should not prompt user when config.CopyEnvs is true")
+	}
+	if !contains(stdout.String(), "Copying environment files:") {
+		t.Error("Expected auto-copy message")
+	}
+	if !contains(stdout.String(), "Environment files copied successfully") {
+		t.Error("Expected copy success message")
 	}
 }
 
@@ -1963,5 +2871,582 @@ func TestCleanCommand_Execute_BrokenWorktree(t *testing.T) {
 
 	if !contains(output, "No worktrees to remove") {
 		t.Errorf("Expected 'No worktrees to remove' message, got: %s", output)
+	}
+}
+
+// Additional EndCommand tests for uncovered paths
+
+func TestEndCommand_Execute_InteractiveSelectError(t *testing.T) {
+	originalDir, _ := os.Getwd()
+	defer os.Chdir(originalDir)
+
+	stdout := &bytes.Buffer{}
+	stderr := &bytes.Buffer{}
+
+	ui := &mockUI{}
+	ui.SelectWorktreeFn = func() (*git.WorktreeInfo, error) {
+		return nil, fmt.Errorf("user canceled selection")
+	}
+
+	deps := &Dependencies{
+		Git:    &mockGit{},
+		UI:     ui,
+		Stdout: stdout,
+		Stderr: stderr,
+	}
+
+	cmd := NewEndCommand(deps, false, true)
+	err := cmd.Execute("") // empty issue = interactive mode
+
+	if err == nil || !strings.Contains(err.Error(), "user canceled selection") {
+		t.Errorf("Expected selection error, got: %v", err)
+	}
+}
+
+func TestEndCommand_Execute_EmptyIssueFromBranch(t *testing.T) {
+	originalDir, _ := os.Getwd()
+	defer os.Chdir(originalDir)
+
+	tempDir := t.TempDir()
+	if err := os.Chdir(tempDir); err != nil {
+		t.Fatalf("Failed to chdir: %v", err)
+	}
+
+	stdout := &bytes.Buffer{}
+	stderr := &bytes.Buffer{}
+
+	ui := &mockUI{}
+	ui.SelectWorktreeFn = func() (*git.WorktreeInfo, error) {
+		return &git.WorktreeInfo{
+			Path:   tempDir,
+			Branch: "", // empty branch leads to empty issue number
+		}, nil
+	}
+
+	deps := &Dependencies{
+		Git:    &mockGit{},
+		UI:     ui,
+		Stdout: stdout,
+		Stderr: stderr,
+	}
+
+	cmd := NewEndCommand(deps, false, true)
+	err := cmd.Execute("")
+
+	if err == nil || !strings.Contains(err.Error(), "could not determine issue number") {
+		t.Errorf("Expected 'could not determine issue number' error, got: %v", err)
+	}
+}
+
+func TestEndCommand_Execute_ConfirmPromptError(t *testing.T) {
+	originalDir, _ := os.Getwd()
+	defer os.Chdir(originalDir)
+
+	tempDir := t.TempDir()
+	if err := os.Chdir(tempDir); err != nil {
+		t.Fatalf("Failed to chdir: %v", err)
+	}
+
+	stdout := &bytes.Buffer{}
+	stderr := &bytes.Buffer{}
+
+	mg := &mockGit{}
+	mg.GetWorktreeForIssueFn = func(issueNumber string) (*git.WorktreeInfo, error) {
+		return &git.WorktreeInfo{Path: tempDir, Branch: "123/impl"}, nil
+	}
+	mg.HasUncommittedChangesFn = func() (bool, error) { return true, nil }
+
+	ui := &mockUI{
+		confirmError: fmt.Errorf("prompt failed"),
+	}
+
+	deps := &Dependencies{
+		Git:    mg,
+		UI:     ui,
+		Stdout: stdout,
+		Stderr: stderr,
+	}
+
+	cmd := NewEndCommand(deps, false, true)
+	err := cmd.Execute("123")
+
+	if err == nil || !strings.Contains(err.Error(), "failed to read response") {
+		t.Errorf("Expected 'failed to read response' error, got: %v", err)
+	}
+}
+
+func TestEndCommand_Execute_RemoveWorktreeByPathError(t *testing.T) {
+	originalDir, _ := os.Getwd()
+	defer os.Chdir(originalDir)
+
+	tempDir := t.TempDir()
+	if err := os.Chdir(tempDir); err != nil {
+		t.Fatalf("Failed to chdir: %v", err)
+	}
+
+	stdout := &bytes.Buffer{}
+	stderr := &bytes.Buffer{}
+
+	mg := &mockGit{}
+	ui := &mockUI{}
+	ui.SelectWorktreeFn = func() (*git.WorktreeInfo, error) {
+		return &git.WorktreeInfo{
+			Path:   tempDir,
+			Branch: "123/impl",
+		}, nil
+	}
+
+	mg.RemoveWorktreeByPathFn = func(path string) error {
+		return fmt.Errorf("removal failed: directory busy")
+	}
+
+	deps := &Dependencies{
+		Git:    mg,
+		UI:     ui,
+		Stdout: stdout,
+		Stderr: stderr,
+	}
+
+	cmd := NewEndCommand(deps, true, true) // force to skip safety checks
+	err := cmd.Execute("")                 // interactive mode
+
+	if err == nil || !strings.Contains(err.Error(), "removal failed") {
+		t.Errorf("Expected removal error, got: %v", err)
+	}
+}
+
+func TestEndCommand_PerformSafetyChecks_MergeStatusError(t *testing.T) {
+	stderr := &bytes.Buffer{}
+	mg := &mockGit{
+		HasUncommittedChangesFn: func() (bool, error) { return false, nil },
+		HasUnpushedCommitsFn:    func() (bool, error) { return false, nil },
+		IsMergedToOriginFn: func(targetBranch string) (bool, error) {
+			return false, fmt.Errorf("could not check merge status")
+		},
+	}
+
+	deps := &Dependencies{
+		Git:    mg,
+		Stderr: stderr,
+	}
+
+	cmd := NewEndCommand(deps, false, true)
+	warnings := cmd.performSafetyChecks()
+
+	if len(warnings) != 0 {
+		t.Errorf("Expected 0 warnings on error, got %d: %v", len(warnings), warnings)
+	}
+	if !strings.Contains(stderr.String(), "Could not check merge status") {
+		t.Error("Expected merge status error in stderr")
+	}
+}
+
+// Additional CleanCommand tests for uncovered paths
+
+func TestCleanCommand_Execute_ListWorktreesError(t *testing.T) {
+	stdout := &bytes.Buffer{}
+	stderr := &bytes.Buffer{}
+
+	mg := &mockGit{
+		ListWorktreesFn: func() ([]git.WorktreeInfo, error) {
+			return nil, fmt.Errorf("git command failed")
+		},
+	}
+
+	deps := &Dependencies{
+		Git:    mg,
+		UI:     &mockUI{},
+		Stdout: stdout,
+		Stderr: stderr,
+	}
+
+	cmd := NewCleanCommandWithConfig(deps, false, false, true, &config.Config{})
+	err := cmd.Execute()
+
+	if err == nil || !strings.Contains(err.Error(), "failed to list worktrees") {
+		t.Errorf("Expected 'failed to list worktrees' error, got: %v", err)
+	}
+}
+
+func TestCleanCommand_Execute_ConfirmPromptError(t *testing.T) {
+	originalDir, _ := os.Getwd()
+	defer os.Chdir(originalDir)
+
+	tmpDir := t.TempDir()
+	wt1 := filepath.Join(tmpDir, "wt1")
+	os.MkdirAll(wt1, 0755)
+
+	stdout := &bytes.Buffer{}
+	stderr := &bytes.Buffer{}
+
+	mg := &mockGit{
+		ListWorktreesFn: func() ([]git.WorktreeInfo, error) {
+			return []git.WorktreeInfo{
+				{Path: "/repo", Branch: "main"},
+				{Path: wt1, Branch: testBranch123},
+			}, nil
+		},
+		HasUncommittedChangesFn: func() (bool, error) { return false, nil },
+		HasUnpushedCommitsFn:    func() (bool, error) { return false, nil },
+		IsMergedToOriginFn:      func(branch string) (bool, error) { return true, nil },
+	}
+
+	ui := &mockUI{
+		confirmError: fmt.Errorf("prompt error"),
+	}
+
+	deps := &Dependencies{
+		Git:    mg,
+		UI:     ui,
+		Stdout: stdout,
+		Stderr: stderr,
+	}
+
+	cmd := NewCleanCommandWithConfig(deps, false, false, true, &config.Config{})
+	err := cmd.Execute()
+
+	if err == nil || !strings.Contains(err.Error(), "failed to read response") {
+		t.Errorf("Expected 'failed to read response' error, got: %v", err)
+	}
+}
+
+func TestCleanCommand_CheckWorktree_ChdirError(t *testing.T) {
+	originalDir, _ := os.Getwd()
+	defer os.Chdir(originalDir)
+
+	deps := &Dependencies{
+		Git:    &mockGit{},
+		UI:     &mockUI{},
+		Stdout: &bytes.Buffer{},
+		Stderr: &bytes.Buffer{},
+	}
+
+	cmd := NewCleanCommandWithConfig(deps, false, false, true, &config.Config{})
+
+	info := &git.WorktreeInfo{
+		Path:   "/nonexistent/path/that/does/not/exist",
+		Branch: "test/impl",
+	}
+
+	status := cmd.checkWorktree(info, originalDir)
+
+	if status.CanRemove {
+		t.Error("Expected CanRemove to be false for inaccessible directory")
+	}
+	if len(status.Warnings) == 0 || !strings.Contains(status.Warnings[0], "Could not access directory") {
+		t.Errorf("Expected 'Could not access directory' warning, got: %v", status.Warnings)
+	}
+}
+
+func TestCleanCommand_CheckWorktree_UnpushedCommitsError(t *testing.T) {
+	originalDir, _ := os.Getwd()
+	defer os.Chdir(originalDir)
+
+	tmpDir := t.TempDir()
+	wt1 := filepath.Join(tmpDir, "wt1")
+	os.MkdirAll(wt1, 0755)
+
+	mg := &mockGit{
+		HasUncommittedChangesFn: func() (bool, error) { return false, nil },
+		HasUnpushedCommitsFn: func() (bool, error) {
+			return false, fmt.Errorf("no upstream branch configured")
+		},
+		IsMergedToOriginFn: func(branch string) (bool, error) { return true, nil },
+	}
+
+	deps := &Dependencies{
+		Git:    mg,
+		UI:     &mockUI{},
+		Stdout: &bytes.Buffer{},
+		Stderr: &bytes.Buffer{},
+	}
+
+	cmd := NewCleanCommandWithConfig(deps, false, false, true, &config.Config{})
+
+	info := &git.WorktreeInfo{Path: wt1, Branch: "test/impl"}
+	status := cmd.checkWorktree(info, originalDir)
+
+	if status.CanRemove {
+		t.Error("Expected CanRemove to be false when unpushed check errors")
+	}
+	found := false
+	for _, w := range status.Warnings {
+		if strings.Contains(w, "Could not check unpushed commits") {
+			found = true
+		}
+	}
+	if !found {
+		t.Errorf("Expected 'Could not check unpushed commits' warning, got: %v", status.Warnings)
+	}
+}
+
+func TestCleanCommand_CheckWorktree_MergeStatusError(t *testing.T) {
+	originalDir, _ := os.Getwd()
+	defer os.Chdir(originalDir)
+
+	tmpDir := t.TempDir()
+	wt1 := filepath.Join(tmpDir, "wt1")
+	os.MkdirAll(wt1, 0755)
+
+	mg := &mockGit{
+		HasUncommittedChangesFn: func() (bool, error) { return false, nil },
+		HasUnpushedCommitsFn:    func() (bool, error) { return false, nil },
+		IsMergedToOriginFn: func(branch string) (bool, error) {
+			return false, fmt.Errorf("merge check failed")
+		},
+	}
+
+	deps := &Dependencies{
+		Git:    mg,
+		UI:     &mockUI{},
+		Stdout: &bytes.Buffer{},
+		Stderr: &bytes.Buffer{},
+	}
+
+	cmd := NewCleanCommandWithConfig(deps, false, false, true, &config.Config{})
+
+	info := &git.WorktreeInfo{Path: wt1, Branch: "test/impl"}
+	status := cmd.checkWorktree(info, originalDir)
+
+	if status.CanRemove {
+		t.Error("Expected CanRemove to be false when merge check errors")
+	}
+	found := false
+	for _, w := range status.Warnings {
+		if strings.Contains(w, "Could not check merge status") {
+			found = true
+		}
+	}
+	if !found {
+		t.Errorf("Expected 'Could not check merge status' warning, got: %v", status.Warnings)
+	}
+}
+
+func TestCleanCommand_CheckWorktree_UncommittedChangesNon128Error(t *testing.T) {
+	originalDir, _ := os.Getwd()
+	defer os.Chdir(originalDir)
+
+	tmpDir := t.TempDir()
+	wt1 := filepath.Join(tmpDir, "wt1")
+	os.MkdirAll(wt1, 0755)
+
+	mg := &mockGit{
+		HasUncommittedChangesFn: func() (bool, error) {
+			return false, fmt.Errorf("some other git error")
+		},
+		HasUnpushedCommitsFn: func() (bool, error) { return false, nil },
+		IsMergedToOriginFn:   func(branch string) (bool, error) { return true, nil },
+	}
+
+	deps := &Dependencies{
+		Git:    mg,
+		UI:     &mockUI{},
+		Stdout: &bytes.Buffer{},
+		Stderr: &bytes.Buffer{},
+	}
+
+	cmd := NewCleanCommandWithConfig(deps, false, false, true, &config.Config{})
+
+	info := &git.WorktreeInfo{Path: wt1, Branch: "test/impl"}
+	status := cmd.checkWorktree(info, originalDir)
+
+	if status.CanRemove {
+		t.Error("Expected CanRemove to be false when uncommitted check errors")
+	}
+	found := false
+	for _, w := range status.Warnings {
+		if strings.Contains(w, "Could not check uncommitted changes") {
+			found = true
+		}
+	}
+	if !found {
+		t.Errorf("Expected 'Could not check uncommitted changes' warning, got: %v", status.Warnings)
+	}
+}
+
+func TestCleanCommand_CheckWorktree_UnpushedCommitsTrue(t *testing.T) {
+	originalDir, _ := os.Getwd()
+	defer os.Chdir(originalDir)
+
+	tmpDir := t.TempDir()
+	wt1 := filepath.Join(tmpDir, "wt1")
+	os.MkdirAll(wt1, 0755)
+
+	mg := &mockGit{
+		HasUncommittedChangesFn: func() (bool, error) { return false, nil },
+		HasUnpushedCommitsFn:    func() (bool, error) { return true, nil },
+		IsMergedToOriginFn:      func(branch string) (bool, error) { return true, nil },
+	}
+
+	deps := &Dependencies{
+		Git:    mg,
+		UI:     &mockUI{},
+		Stdout: &bytes.Buffer{},
+		Stderr: &bytes.Buffer{},
+	}
+
+	cmd := NewCleanCommandWithConfig(deps, false, false, true, &config.Config{})
+
+	info := &git.WorktreeInfo{Path: wt1, Branch: "test/impl"}
+	status := cmd.checkWorktree(info, originalDir)
+
+	if status.CanRemove {
+		t.Error("Expected CanRemove to be false when there are unpushed commits")
+	}
+	found := false
+	for _, w := range status.Warnings {
+		if w == "unpushed commits" {
+			found = true
+		}
+	}
+	if !found {
+		t.Errorf("Expected 'unpushed commits' warning, got: %v", status.Warnings)
+	}
+}
+
+func TestCleanCommand_CheckWorktree_NotMerged(t *testing.T) {
+	originalDir, _ := os.Getwd()
+	defer os.Chdir(originalDir)
+
+	tmpDir := t.TempDir()
+	wt1 := filepath.Join(tmpDir, "wt1")
+	os.MkdirAll(wt1, 0755)
+
+	mg := &mockGit{
+		HasUncommittedChangesFn: func() (bool, error) { return false, nil },
+		HasUnpushedCommitsFn:    func() (bool, error) { return false, nil },
+		IsMergedToOriginFn:      func(branch string) (bool, error) { return false, nil },
+	}
+
+	deps := &Dependencies{
+		Git:    mg,
+		UI:     &mockUI{},
+		Stdout: &bytes.Buffer{},
+		Stderr: &bytes.Buffer{},
+	}
+
+	cmd := NewCleanCommandWithConfig(deps, false, false, true, &config.Config{})
+
+	info := &git.WorktreeInfo{Path: wt1, Branch: "test/impl"}
+	status := cmd.checkWorktree(info, originalDir)
+
+	if status.CanRemove {
+		t.Error("Expected CanRemove to be false when not merged")
+	}
+	found := false
+	for _, w := range status.Warnings {
+		if w == "not merged" {
+			found = true
+		}
+	}
+	if !found {
+		t.Errorf("Expected 'not merged' warning, got: %v", status.Warnings)
+	}
+}
+
+func TestCleanCommand_RemoveWorktrees_BranchDeletionError(t *testing.T) {
+	originalDir, _ := os.Getwd()
+	defer os.Chdir(originalDir)
+
+	tmpDir := t.TempDir()
+	wt1 := filepath.Join(tmpDir, "wt1")
+	os.MkdirAll(wt1, 0755)
+
+	stdout := &bytes.Buffer{}
+	stderr := &bytes.Buffer{}
+
+	mg := &mockGit{
+		ListWorktreesFn: func() ([]git.WorktreeInfo, error) {
+			return []git.WorktreeInfo{
+				{Path: "/repo", Branch: "main"},
+				{Path: wt1, Branch: testBranch123},
+			}, nil
+		},
+		HasUncommittedChangesFn: func() (bool, error) { return false, nil },
+		HasUnpushedCommitsFn:    func() (bool, error) { return false, nil },
+		IsMergedToOriginFn:      func(branch string) (bool, error) { return true, nil },
+		RemoveWorktreeByPathFn:  func(path string) error { return nil },
+		DeleteBranchFn: func(branch string) error {
+			return fmt.Errorf("branch deletion failed")
+		},
+	}
+
+	ui := &mockUI{confirmResult: true}
+
+	deps := &Dependencies{
+		Git:    mg,
+		UI:     ui,
+		Stdout: stdout,
+		Stderr: stderr,
+	}
+
+	cfg := &config.Config{AutoRemoveBranch: true}
+	cmd := NewCleanCommandWithConfig(deps, false, false, true, cfg)
+	err := cmd.Execute()
+
+	if err != nil {
+		t.Errorf("Expected no error (branch deletion failure should not fail command), got: %v", err)
+	}
+
+	stderrOutput := stderr.String()
+	if !strings.Contains(stderrOutput, "Failed to delete branch") {
+		t.Errorf("Expected branch deletion warning in stderr, got: %s", stderrOutput)
+	}
+}
+
+func TestCleanCommand_Execute_SkipsMasterAndEmptyBranch(t *testing.T) {
+	stdout := &bytes.Buffer{}
+	stderr := &bytes.Buffer{}
+
+	mg := &mockGit{
+		ListWorktreesFn: func() ([]git.WorktreeInfo, error) {
+			return []git.WorktreeInfo{
+				{Path: "/repo", Branch: "main"},
+				{Path: "/repo2", Branch: "master"},
+				{Path: "/repo3", Branch: ""},
+			}, nil
+		},
+	}
+
+	deps := &Dependencies{
+		Git:    mg,
+		UI:     &mockUI{},
+		Stdout: stdout,
+		Stderr: stderr,
+	}
+
+	cmd := NewCleanCommandWithConfig(deps, false, false, true, &config.Config{})
+	err := cmd.Execute()
+
+	if err != nil {
+		t.Errorf("Expected no error, got: %v", err)
+	}
+
+	output := stdout.String()
+	if !strings.Contains(output, "No worktrees to remove") {
+		t.Errorf("Expected 'No worktrees to remove' (all filtered), got: %s", output)
+	}
+}
+
+func TestNewCleanCommand(t *testing.T) {
+	deps := &Dependencies{
+		Git:    &mockGit{},
+		UI:     &mockUI{},
+		Stdout: &bytes.Buffer{},
+		Stderr: &bytes.Buffer{},
+	}
+
+	cmd := NewCleanCommand(deps, true, false, true)
+	if cmd == nil {
+		t.Fatal("Expected non-nil command")
+	}
+	if !cmd.force {
+		t.Error("Expected force to be true")
+	}
+	if cmd.dryRun {
+		t.Error("Expected dryRun to be false")
+	}
+	if !cmd.noFetch {
+		t.Error("Expected noFetch to be true")
 	}
 }

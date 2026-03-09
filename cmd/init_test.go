@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"bufio"
 	"bytes"
 	"os"
 	"path/filepath"
@@ -533,6 +534,402 @@ eval "$(gw shell-integration --show-script --shell=bash)"
 				} else if !strings.Contains(string(content), "gw shell-integration --show-script") {
 					t.Errorf("Expected shell integration command in rc file")
 				}
+			}
+		})
+	}
+}
+
+// Additional init tests for uncovered paths
+
+func TestInitCommand_ExistingConfig_UserDeclinesOverwrite(t *testing.T) {
+	tempDir := t.TempDir()
+	configPath := filepath.Join(tempDir, ".gwrc")
+
+	// Create existing config
+	existingConfig := &config.Config{AutoCD: true}
+	if err := existingConfig.Save(configPath); err != nil {
+		t.Fatalf("Failed to create existing config: %v", err)
+	}
+
+	// User declines overwrite
+	stdin := strings.NewReader("n\n")
+	stdout := &bytes.Buffer{}
+	stderr := &bytes.Buffer{}
+
+	rcPath := filepath.Join(tempDir, ".bashrc")
+	cmd := NewInitCommandWithShell(stdin, stdout, stderr, configPath, rcPath)
+	err := cmd.Execute()
+	if err != nil {
+		t.Fatalf("Unexpected error: %v", err)
+	}
+
+	output := stdout.String()
+	if !strings.Contains(output, "Configuration initialization canceled") {
+		t.Error("Expected cancel message")
+	}
+}
+
+func TestInitCommand_PromptForConfigItem_InvalidInput(t *testing.T) {
+	tempDir := t.TempDir()
+	configPath := filepath.Join(tempDir, ".gwrc")
+
+	// Provide invalid input for first config item, then defaults for the rest
+	stdin := strings.NewReader("invalid\nn\nn\nn\nn\n")
+	stdout := &bytes.Buffer{}
+	stderr := &bytes.Buffer{}
+
+	rcPath := filepath.Join(tempDir, ".bashrc")
+	cmd := NewInitCommandWithShell(stdin, stdout, stderr, configPath, rcPath)
+	err := cmd.Execute()
+	if err != nil {
+		t.Fatalf("Unexpected error: %v", err)
+	}
+
+	output := stdout.String()
+	if !strings.Contains(output, "Invalid input, using default") {
+		t.Error("Expected 'Invalid input' message for invalid response")
+	}
+}
+
+func TestInitCommand_GetEvalCommand_Fish(t *testing.T) {
+	cmd := &InitCommand{}
+	result := cmd.getEvalCommand("fish")
+	expected := "gw shell-integration --show-script"
+	if !strings.Contains(result, expected) {
+		t.Errorf("Expected fish eval command to contain %q, got %q", expected, result)
+	}
+	// Fish command should NOT contain 'eval "$(...)"'
+	if strings.Contains(result, "eval") {
+		t.Errorf("Fish eval command should not contain 'eval', got %q", result)
+	}
+}
+
+func TestInitCommand_GetEvalCommand_Bash(t *testing.T) {
+	cmd := &InitCommand{}
+	result := cmd.getEvalCommand("bash")
+	if !strings.Contains(result, "eval") {
+		t.Errorf("Expected bash eval command to contain 'eval', got %q", result)
+	}
+	if !strings.Contains(result, "--shell=bash") {
+		t.Errorf("Expected bash eval command to contain '--shell=bash', got %q", result)
+	}
+}
+
+func TestInitCommand_AddShellIntegration_FishShell(t *testing.T) {
+	tempDir := t.TempDir()
+	rcPath := filepath.Join(tempDir, "config.fish")
+
+	cmd := &InitCommand{}
+	err := cmd.addShellIntegration(rcPath, "fish")
+	if err != nil {
+		t.Fatalf("Unexpected error: %v", err)
+	}
+
+	content, err := os.ReadFile(rcPath)
+	if err != nil {
+		t.Fatalf("Failed to read rc file: %v", err)
+	}
+
+	contentStr := string(content)
+	if !strings.Contains(contentStr, "| source") {
+		t.Errorf("Expected fish-style 'source' piping, got: %s", contentStr)
+	}
+	if strings.Contains(contentStr, "eval") {
+		t.Errorf("Fish integration should not use eval, got: %s", contentStr)
+	}
+}
+
+func TestInitCommand_AddShellIntegration_FileWithoutTrailingNewline(t *testing.T) {
+	tempDir := t.TempDir()
+	rcPath := filepath.Join(tempDir, ".bashrc")
+
+	// Create file WITHOUT trailing newline
+	if err := os.WriteFile(rcPath, []byte("existing content"), 0644); err != nil {
+		t.Fatalf("Failed to write rc file: %v", err)
+	}
+
+	cmd := &InitCommand{}
+	err := cmd.addShellIntegration(rcPath, "bash")
+	if err != nil {
+		t.Fatalf("Unexpected error: %v", err)
+	}
+
+	content, err := os.ReadFile(rcPath)
+	if err != nil {
+		t.Fatalf("Failed to read rc file: %v", err)
+	}
+
+	contentStr := string(content)
+	if !strings.Contains(contentStr, "gw shell-integration") {
+		t.Error("Expected shell integration to be added")
+	}
+}
+
+func TestInitCommand_AddShellIntegration_OpenFileError(t *testing.T) {
+	// Use a path within a non-existent directory
+	rcPath := "/nonexistent/deep/path/.bashrc"
+
+	cmd := &InitCommand{}
+	err := cmd.addShellIntegration(rcPath, "bash")
+
+	if err == nil || !strings.Contains(err.Error(), "failed to open") {
+		t.Errorf("Expected 'failed to open' error, got: %v", err)
+	}
+}
+
+func TestInitCommand_OfferShellIntegration_RcPathEmpty(t *testing.T) {
+	tempDir := t.TempDir()
+
+	// Set an unknown shell to get empty rcPath
+	oldShell := os.Getenv("SHELL")
+	os.Setenv("SHELL", "/bin/unknownshell")
+	defer os.Setenv("SHELL", oldShell)
+
+	oldHome := os.Getenv("HOME")
+	os.Setenv("HOME", tempDir)
+	defer os.Setenv("HOME", oldHome)
+
+	stdout := &bytes.Buffer{}
+	stderr := &bytes.Buffer{}
+
+	reader := strings.NewReader("y\n")
+	cmd := &InitCommand{
+		stdin:  strings.NewReader(""),
+		stdout: stdout,
+		stderr: stderr,
+	}
+
+	err := cmd.offerShellIntegration(bufio.NewReader(reader))
+	if err != nil {
+		t.Fatalf("Unexpected error: %v", err)
+	}
+
+	output := stdout.String()
+	// Should show manual instructions since rcPath is empty
+	if !strings.Contains(output, "To enable shell integration, add the following line") {
+		t.Errorf("Expected manual instructions, got: %s", output)
+	}
+}
+
+func TestInitCommand_OfferShellIntegration_AddShellIntegrationError(t *testing.T) {
+	tempDir := t.TempDir()
+
+	// Set bash shell
+	oldShell := os.Getenv("SHELL")
+	os.Setenv("SHELL", "/bin/bash")
+	defer os.Setenv("SHELL", oldShell)
+
+	// Create rcPath as a directory (to cause write error)
+	rcPath := filepath.Join(tempDir, ".bashrc")
+	os.Mkdir(rcPath, 0755)
+
+	stdout := &bytes.Buffer{}
+	stderr := &bytes.Buffer{}
+
+	reader := strings.NewReader("y\n")
+	cmd := NewInitCommandWithShell(strings.NewReader(""), stdout, stderr, filepath.Join(tempDir, ".gwrc"), rcPath)
+
+	err := cmd.offerShellIntegration(bufio.NewReader(reader))
+	if err != nil {
+		t.Fatalf("Unexpected error: %v", err)
+	}
+
+	stderrOutput := stderr.String()
+	if !strings.Contains(stderrOutput, "Failed to add shell integration") {
+		t.Errorf("Expected shell integration failure warning, got stderr: %s", stderrOutput)
+	}
+
+	// Should fall back to manual instructions
+	output := stdout.String()
+	if !strings.Contains(output, "To enable shell integration") {
+		t.Errorf("Expected manual instructions after error, got: %s", output)
+	}
+}
+
+func TestInitCommand_DetectShellType_ByRCFile(t *testing.T) {
+	// Save original SHELL env
+	oldShell := os.Getenv("SHELL")
+	defer os.Setenv("SHELL", oldShell)
+
+	tests := []struct {
+		name     string
+		rcFile   string
+		expected string
+	}{
+		{
+			name:     "detects zsh from .zshrc",
+			rcFile:   ".zshrc",
+			expected: "zsh",
+		},
+		{
+			name:     "detects bash from .bashrc",
+			rcFile:   ".bashrc",
+			expected: "bash",
+		},
+		{
+			name:     "detects fish from config.fish",
+			rcFile:   ".config/fish/config.fish",
+			expected: "fish",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			tempHome := t.TempDir()
+
+			oldHome := os.Getenv("HOME")
+			os.Setenv("HOME", tempHome)
+			defer os.Setenv("HOME", oldHome)
+
+			// Set unknown shell to force rc file detection
+			os.Setenv("SHELL", "/bin/sh")
+
+			// Create the rc file
+			rcFilePath := filepath.Join(tempHome, tt.rcFile)
+			os.MkdirAll(filepath.Dir(rcFilePath), 0755)
+			os.WriteFile(rcFilePath, []byte("# shell config"), 0644)
+
+			cmd := &InitCommand{}
+			result := cmd.detectShellType()
+
+			if result != tt.expected {
+				t.Errorf("Expected %s, got %s", tt.expected, result)
+			}
+		})
+	}
+}
+
+func TestInitCommand_OfferShellIntegration_UserDeclinesSetup(t *testing.T) {
+	reader := strings.NewReader("n\n")
+	stdout := &bytes.Buffer{}
+	stderr := &bytes.Buffer{}
+
+	cmd := &InitCommand{
+		stdin:  strings.NewReader(""),
+		stdout: stdout,
+		stderr: stderr,
+	}
+
+	err := cmd.offerShellIntegration(bufio.NewReader(reader))
+	if err != nil {
+		t.Fatalf("Unexpected error: %v", err)
+	}
+
+	output := stdout.String()
+	if !strings.Contains(output, "Shell integration setup skipped") {
+		t.Error("Expected skip message")
+	}
+	if !strings.Contains(output, "You can set it up later") {
+		t.Error("Expected later instructions message")
+	}
+}
+
+func TestInitCommand_HasShellIntegration_FileDoesNotExist(t *testing.T) {
+	cmd := &InitCommand{}
+	result := cmd.hasShellIntegration("/nonexistent/path/.bashrc", "eval")
+	if result {
+		t.Error("Expected false for non-existent file")
+	}
+}
+
+func TestInitCommand_HasShellIntegration_CommandExists(t *testing.T) {
+	tempDir := t.TempDir()
+	rcPath := filepath.Join(tempDir, ".bashrc")
+	evalCommand := `eval "$(gw shell-integration --show-script --shell=bash)"`
+	os.WriteFile(rcPath, []byte("# config\n"+evalCommand+"\n"), 0644)
+
+	cmd := &InitCommand{}
+	result := cmd.hasShellIntegration(rcPath, evalCommand)
+	if !result {
+		t.Error("Expected true when eval command exists in file")
+	}
+}
+
+func TestInitCommand_Execute_ReadStringErrorOnOverwrite(t *testing.T) {
+	tempDir := t.TempDir()
+	configPath := filepath.Join(tempDir, ".gwrc")
+
+	// Create existing config
+	existingConfig := &config.Config{AutoCD: true}
+	if err := existingConfig.Save(configPath); err != nil {
+		t.Fatalf("Failed to create existing config: %v", err)
+	}
+
+	// Provide empty stdin (no newline) - causes ReadString to return EOF
+	stdin := strings.NewReader("")
+	stdout := &bytes.Buffer{}
+	stderr := &bytes.Buffer{}
+
+	rcPath := filepath.Join(tempDir, ".bashrc")
+	cmd := NewInitCommandWithShell(stdin, stdout, stderr, configPath, rcPath)
+	err := cmd.Execute()
+
+	if err == nil || !strings.Contains(err.Error(), "failed to read input") {
+		t.Errorf("Expected 'failed to read input' error, got: %v", err)
+	}
+}
+
+func TestInitCommand_Execute_ReadStringErrorOnConfigItem(t *testing.T) {
+	tempDir := t.TempDir()
+	configPath := filepath.Join(tempDir, ".gwrc")
+
+	// Provide stdin that runs out mid-way (no config file exists, so no overwrite prompt)
+	// Need to provide no input at all to trigger error on first config item prompt
+	stdin := strings.NewReader("")
+	stdout := &bytes.Buffer{}
+	stderr := &bytes.Buffer{}
+
+	rcPath := filepath.Join(tempDir, ".bashrc")
+	cmd := NewInitCommandWithShell(stdin, stdout, stderr, configPath, rcPath)
+	err := cmd.Execute()
+
+	if err == nil || !strings.Contains(err.Error(), "failed to read input") {
+		t.Errorf("Expected 'failed to read input' error, got: %v", err)
+	}
+}
+
+func TestInitCommand_Execute_SaveError(t *testing.T) {
+	tempDir := t.TempDir()
+	// Use a path where we can't write (non-existent deeply nested read-only dir)
+	configPath := filepath.Join(tempDir, "readonly", "deep", ".gwrc")
+
+	// Make the parent directory read-only
+	readOnlyDir := filepath.Join(tempDir, "readonly")
+	os.MkdirAll(readOnlyDir, 0755)
+	os.Chmod(readOnlyDir, 0444)
+	defer os.Chmod(readOnlyDir, 0755)
+
+	// Provide all inputs (5 config items)
+	stdin := strings.NewReader("n\nn\nn\nn\nn\n")
+	stdout := &bytes.Buffer{}
+	stderr := &bytes.Buffer{}
+
+	rcPath := filepath.Join(tempDir, ".bashrc")
+	cmd := NewInitCommandWithShell(stdin, stdout, stderr, configPath, rcPath)
+	err := cmd.Execute()
+
+	if err == nil || !strings.Contains(err.Error(), "failed to save configuration") {
+		t.Errorf("Expected 'failed to save configuration' error, got: %v", err)
+	}
+}
+
+func TestFormatKeyForPrompt(t *testing.T) {
+	tests := []struct {
+		key      string
+		expected string
+	}{
+		{"auto_cd", "auto-cd"},
+		{"update_iterm2_tab", "iTerm2 tab updates"},
+		{"auto_remove_branch", "auto-remove branch"},
+		{"fetch_before_command", "fetch before command"},
+		{"some_other_key", "some other key"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.key, func(t *testing.T) {
+			result := formatKeyForPrompt(tt.key)
+			if result != tt.expected {
+				t.Errorf("Expected %q, got %q", tt.expected, result)
 			}
 		})
 	}
