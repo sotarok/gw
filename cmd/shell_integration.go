@@ -130,6 +130,33 @@ func (c *ShellIntegrationCommand) getBashZshScript(shell string) string {
 # Add to your shell configuration with: eval "$(gw shell-integration --show-script --shell=%s)"
 
 gw() {
+    open_iterm2_tab() {
+        local target_dir="$1"
+        local tab_name="$2"
+        local escaped_dir
+        local escaped_tab_name
+
+        [[ -z "$target_dir" || ! -d "$target_dir" ]] && return 1
+        [[ -z "$tab_name" ]] && tab_name=$(basename "$target_dir")
+
+        escaped_dir=${target_dir//\\/\\\\}
+        escaped_dir=${escaped_dir//\"/\\\"}
+        escaped_tab_name=${tab_name//\\/\\\\}
+        escaped_tab_name=${escaped_tab_name//\"/\\\"}
+
+        osascript <<EOF
+tell application "iTerm"
+    tell current window
+        create tab with default profile
+        tell current session of current tab
+            write text "cd '$escaped_dir' && clear"
+            set name to "$escaped_tab_name"
+        end tell
+    end tell
+end tell
+EOF
+    }
+
     # Check if we should auto-cd after command
     if [[ "$1" == "start" || "$1" == "checkout" ]] && [[ -f ~/.gwrc ]]; then
         # Check if auto_cd is enabled
@@ -145,10 +172,20 @@ gw() {
                     # Get the worktree path using shell-integration command
                     local worktree_path=$(command gw shell-integration --print-path="$identifier" 2>/dev/null)
                     
-                    # If we got a path, cd to it
+                    # If we got a path, open a new iTerm2 tab on macOS when available.
                     if [[ -n "$worktree_path" && -d "$worktree_path" ]]; then
-                        cd "$worktree_path"
-                        echo "Changed directory to: $worktree_path"
+                        local worktree_name
+                        worktree_name=$(basename "$worktree_path")
+                        if [[ "$(uname -s)" == "Darwin" ]] && [[ "$TERM_PROGRAM" == "iTerm.app" ]] && [[ -n "$ITERM_SESSION_ID" ]]; then
+                            if open_iterm2_tab "$worktree_path" "$worktree_name"; then
+                                echo "Opened new iTerm2 tab at: $worktree_path"
+                            else
+                                echo "Failed to open new iTerm2 tab" >&2
+                            fi
+                        else
+                            cd "$worktree_path"
+                            echo "Changed directory to: $worktree_path"
+                        fi
                     fi
                 fi
             fi
