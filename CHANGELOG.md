@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.7.0] - 2026-04-06
+
 ### Added
 - Post-hook support for `start` and `checkout` commands (idea thanks to @pnikonowicz in #20)
   - `post_start_hook` and `post_checkout_hook` configuration options in `.gwrc`
