@@ -12,7 +12,7 @@ type Env struct {
 	WorktreePath string
 	BranchName   string
 	RepoName     string
-	Command      string // "start", "checkout", or "end"
+	Command      string // "start" or "checkout"
 }
 
 // Execute runs a hook command with the given environment variables.

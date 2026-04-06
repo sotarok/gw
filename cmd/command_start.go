@@ -3,6 +3,7 @@ package cmd
 import (
 	"fmt"
 	"os"
+	"path/filepath"
 
 	"github.com/sotarok/gw/internal/config"
 	"github.com/sotarok/gw/internal/hook"
@@ -112,11 +113,11 @@ func (c *StartCommand) Execute(issueNumber, baseBranch string) error {
 	// Execute post-start hook if configured
 	if c.config != nil && c.config.PostStartHook != "" {
 		branchName := issueNumber + "/impl"
-		repoNameForHook := repoName
+		absWorktreePath, _ := filepath.Abs(worktreePath)
 		hookEnv := hook.Env{
-			WorktreePath: worktreePath,
+			WorktreePath: absWorktreePath,
 			BranchName:   branchName,
-			RepoName:     repoNameForHook,
+			RepoName:     repoName,
 			Command:      "start",
 		}
 		if err := hook.Execute(c.config.PostStartHook, hookEnv, c.deps.Stdout, c.deps.Stderr); err != nil {
