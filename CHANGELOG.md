@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.6.4] - 2026-04-06
+
+### Added
+- Zsh completion support via shell integration
+  - `gw end` completes with worktree branch names
+  - `gw checkout` completes with remote branch names (origin)
+  - Subcommand names with descriptions are also completed
+
 ## [0.6.3] - 2026-03-06
 
 ### Added
