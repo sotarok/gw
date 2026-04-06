@@ -3450,3 +3450,196 @@ func TestNewCleanCommand(t *testing.T) {
 		t.Error("Expected noFetch to be true")
 	}
 }
+
+func TestStartCommand_Execute_PostHook(t *testing.T) {
+	originalDir, _ := os.Getwd()
+	defer os.Chdir(originalDir)
+
+	tempDir, err := os.MkdirTemp("", "gw-test-*")
+	if err != nil {
+		t.Fatalf("Failed to create temp dir: %v", err)
+	}
+	defer os.RemoveAll(tempDir)
+	os.Chdir(tempDir)
+
+	worktreeDir, _ := os.MkdirTemp("", "gw-worktree-*")
+	defer os.RemoveAll(worktreeDir)
+
+	mockGitInstance := &mockGit{
+		isGitRepo:    true,
+		worktreePath: worktreeDir,
+	}
+
+	stdout := &bytes.Buffer{}
+	stderr := &bytes.Buffer{}
+	deps := &Dependencies{
+		Git:    mockGitInstance,
+		UI:     &mockUI{},
+		Detect: &mockDetect{},
+		Stdout: stdout,
+		Stderr: stderr,
+	}
+
+	cmd := NewStartCommandWithConfig(deps, false, true, &config.Config{
+		PostStartHook: `echo "HOOK_OUTPUT:$GW_WORKTREE_PATH:$GW_COMMAND"`,
+	})
+	err = cmd.Execute("123", "main")
+
+	if err != nil {
+		t.Fatalf("Unexpected error: %v", err)
+	}
+
+	output := stdout.String()
+	if !contains(output, "HOOK_OUTPUT:"+worktreeDir+":start") {
+		t.Errorf("Expected hook output with worktree path and command, got:\n%s", output)
+	}
+}
+
+func TestStartCommand_Execute_PostHookFailure(t *testing.T) {
+	originalDir, _ := os.Getwd()
+	defer os.Chdir(originalDir)
+
+	tempDir, err := os.MkdirTemp("", "gw-test-*")
+	if err != nil {
+		t.Fatalf("Failed to create temp dir: %v", err)
+	}
+	defer os.RemoveAll(tempDir)
+	os.Chdir(tempDir)
+
+	worktreeDir, _ := os.MkdirTemp("", "gw-worktree-*")
+	defer os.RemoveAll(worktreeDir)
+
+	mockGitInstance := &mockGit{
+		isGitRepo:    true,
+		worktreePath: worktreeDir,
+	}
+
+	stdout := &bytes.Buffer{}
+	stderr := &bytes.Buffer{}
+	deps := &Dependencies{
+		Git:    mockGitInstance,
+		UI:     &mockUI{},
+		Detect: &mockDetect{},
+		Stdout: stdout,
+		Stderr: stderr,
+	}
+
+	cmd := NewStartCommandWithConfig(deps, false, true, &config.Config{
+		PostStartHook: "exit 1",
+	})
+	err = cmd.Execute("123", "main")
+
+	// Command should succeed even if hook fails
+	if err != nil {
+		t.Fatalf("Expected no error when hook fails, got: %v", err)
+	}
+	if !contains(stderr.String(), "Post-start hook failed") {
+		t.Errorf("Expected warning about hook failure in stderr, got:\n%s", stderr.String())
+	}
+	// Should still show completion message
+	if !contains(stdout.String(), "Worktree ready at:") {
+		t.Error("Expected success message even when hook fails")
+	}
+}
+
+func TestCheckoutCommand_Execute_PostHook(t *testing.T) {
+	originalDir, _ := os.Getwd()
+	defer os.Chdir(originalDir)
+
+	tempDir, err := os.MkdirTemp("", "gw-test-*")
+	if err != nil {
+		t.Fatalf("Failed to create temp dir: %v", err)
+	}
+	defer os.RemoveAll(tempDir)
+	os.Chdir(tempDir)
+
+	mockGitInstance := &mockGit{
+		isGitRepo: true,
+		envFiles:  []git.EnvFile{},
+	}
+	mockGitInstance.BranchExistsFn = func(branch string) (bool, error) {
+		return true, nil
+	}
+	mockGitInstance.CreateWorktreeFromBranchFn = func(worktreePath, sourceBranch, targetBranch string) error {
+		absolutePath, _ := filepath.Abs(worktreePath)
+		os.MkdirAll(absolutePath, 0755)
+		return nil
+	}
+
+	stdout := &bytes.Buffer{}
+	stderr := &bytes.Buffer{}
+	deps := &Dependencies{
+		Git:    mockGitInstance,
+		UI:     &mockUI{},
+		Detect: &mockDetect{},
+		Stdout: stdout,
+		Stderr: stderr,
+	}
+
+	cmd := NewCheckoutCommandWithConfig(deps, false, true, &config.Config{
+		PostCheckoutHook: `echo "HOOK_OUTPUT:$GW_WORKTREE_PATH:$GW_BRANCH_NAME:$GW_COMMAND"`,
+	})
+	err = cmd.Execute("feature/test")
+
+	if err != nil {
+		t.Fatalf("Unexpected error: %v", err)
+	}
+
+	output := stdout.String()
+	if !contains(output, "HOOK_OUTPUT:") {
+		t.Errorf("Expected hook output, got:\n%s", output)
+	}
+	if !contains(output, ":feature/test:checkout") {
+		t.Errorf("Expected branch name and command in hook output, got:\n%s", output)
+	}
+}
+
+func TestCheckoutCommand_Execute_PostHookFailure(t *testing.T) {
+	originalDir, _ := os.Getwd()
+	defer os.Chdir(originalDir)
+
+	tempDir, err := os.MkdirTemp("", "gw-test-*")
+	if err != nil {
+		t.Fatalf("Failed to create temp dir: %v", err)
+	}
+	defer os.RemoveAll(tempDir)
+	os.Chdir(tempDir)
+
+	mockGitInstance := &mockGit{
+		isGitRepo: true,
+		envFiles:  []git.EnvFile{},
+	}
+	mockGitInstance.BranchExistsFn = func(branch string) (bool, error) {
+		return true, nil
+	}
+	mockGitInstance.CreateWorktreeFromBranchFn = func(worktreePath, sourceBranch, targetBranch string) error {
+		absolutePath, _ := filepath.Abs(worktreePath)
+		os.MkdirAll(absolutePath, 0755)
+		return nil
+	}
+
+	stdout := &bytes.Buffer{}
+	stderr := &bytes.Buffer{}
+	deps := &Dependencies{
+		Git:    mockGitInstance,
+		UI:     &mockUI{},
+		Detect: &mockDetect{},
+		Stdout: stdout,
+		Stderr: stderr,
+	}
+
+	cmd := NewCheckoutCommandWithConfig(deps, false, true, &config.Config{
+		PostCheckoutHook: "exit 1",
+	})
+	err = cmd.Execute("feature/test")
+
+	if err != nil {
+		t.Fatalf("Expected no error when hook fails, got: %v", err)
+	}
+	if !contains(stderr.String(), "Post-checkout hook failed") {
+		t.Errorf("Expected warning about hook failure in stderr, got:\n%s", stderr.String())
+	}
+	if !contains(stdout.String(), "Worktree ready at:") {
+		t.Error("Expected success message even when hook fails")
+	}
+}

@@ -17,6 +17,8 @@ const (
 	autoRemoveBranchKey   = "auto_remove_branch"
 	copyEnvsKey           = "copy_envs"
 	fetchBeforeCommandKey = "fetch_before_command"
+	postStartHookKey      = "post_start_hook"
+	postCheckoutHookKey   = "post_checkout_hook"
 )
 
 // Item represents a single configuration item with metadata
@@ -29,11 +31,13 @@ type Item struct {
 
 // Config represents the gw configuration
 type Config struct {
-	AutoCD             bool  `toml:"auto_cd"`
-	UpdateITerm2Tab    bool  `toml:"update_iterm2_tab"`
-	AutoRemoveBranch   bool  `toml:"auto_remove_branch"`
-	CopyEnvs           *bool `toml:"copy_envs"` // Pointer to distinguish between unset and false
-	FetchBeforeCommand bool  `toml:"fetch_before_command"`
+	AutoCD             bool   `toml:"auto_cd"`
+	UpdateITerm2Tab    bool   `toml:"update_iterm2_tab"`
+	AutoRemoveBranch   bool   `toml:"auto_remove_branch"`
+	CopyEnvs           *bool  `toml:"copy_envs"` // Pointer to distinguish between unset and false
+	FetchBeforeCommand bool   `toml:"fetch_before_command"`
+	PostStartHook      string `toml:"post_start_hook"`
+	PostCheckoutHook   string `toml:"post_checkout_hook"`
 }
 
 // New creates a new Config with default values
@@ -92,6 +96,10 @@ func Load(path string) (*Config, error) {
 			config.CopyEnvs = &boolValue
 		case fetchBeforeCommandKey:
 			config.FetchBeforeCommand = value == trueValue
+		case postStartHookKey:
+			config.PostStartHook = value
+		case postCheckoutHookKey:
+			config.PostCheckoutHook = value
 		}
 	}
 
@@ -117,12 +125,27 @@ func (c *Config) Save(path string) error {
 		copyEnvsStr = "# copy_envs = false  # Uncomment to set default behavior\n"
 	}
 
+	var hookLines string
+	if c.PostStartHook != "" {
+		hookLines += fmt.Sprintf("post_start_hook = %s\n", c.PostStartHook)
+	} else {
+		hookLines += "# post_start_hook =\n"
+	}
+	if c.PostCheckoutHook != "" {
+		hookLines += fmt.Sprintf("post_checkout_hook = %s\n", c.PostCheckoutHook)
+	} else {
+		hookLines += "# post_checkout_hook =\n"
+	}
+
 	content := fmt.Sprintf(`# gw configuration file
 auto_cd = %v
 update_iterm2_tab = %v
 auto_remove_branch = %v
 fetch_before_command = %v
-%s`, c.AutoCD, c.UpdateITerm2Tab, c.AutoRemoveBranch, c.FetchBeforeCommand, copyEnvsStr)
+%s
+# Hook commands executed after successful worktree operations
+# Available env vars: GW_WORKTREE_PATH, GW_BRANCH_NAME, GW_REPO_NAME, GW_COMMAND
+%s`, c.AutoCD, c.UpdateITerm2Tab, c.AutoRemoveBranch, c.FetchBeforeCommand, copyEnvsStr, hookLines)
 
 	if err := os.WriteFile(path, []byte(content), 0600); err != nil {
 		return fmt.Errorf("failed to write config file: %w", err)

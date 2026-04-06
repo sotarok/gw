@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/sotarok/gw/internal/config"
+	"github.com/sotarok/gw/internal/hook"
 	"github.com/sotarok/gw/internal/iterm2"
 	"github.com/sotarok/gw/internal/spinner"
 	"github.com/sotarok/gw/internal/ui"
@@ -130,6 +131,19 @@ func (c *CheckoutCommand) Execute(branch string) error {
 	if err := c.deps.Detect.RunSetup(absolutePath); err != nil {
 		// Don't fail if setup fails, just warn
 		fmt.Fprintf(c.deps.Stderr, "%s Setup failed: %v\n", coloredWarning(), err)
+	}
+
+	// Execute post-checkout hook if configured
+	if c.config != nil && c.config.PostCheckoutHook != "" {
+		hookEnv := hook.Env{
+			WorktreePath: absolutePath,
+			BranchName:   branchName,
+			RepoName:     repoName,
+			Command:      "checkout",
+		}
+		if err := hook.Execute(c.config.PostCheckoutHook, hookEnv, c.deps.Stdout, c.deps.Stderr); err != nil {
+			fmt.Fprintf(c.deps.Stderr, "%s Post-checkout hook failed: %v\n", coloredWarning(), err)
+		}
 	}
 
 	// Show completion message
