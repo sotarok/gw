@@ -477,6 +477,29 @@ func TestShellIntegrationCommand_GetBashZshScript(t *testing.T) {
 			t.Error("expected --shell=zsh in script")
 		}
 	})
+
+	t.Run("zsh script has completion function", func(t *testing.T) {
+		script := cmd.getBashZshScript("zsh")
+		if !strings.Contains(script, "_gw()") {
+			t.Error("expected _gw completion function in zsh script")
+		}
+		if !strings.Contains(script, "compdef _gw gw") {
+			t.Error("expected compdef _gw gw in zsh script")
+		}
+		if !strings.Contains(script, "git worktree list") {
+			t.Error("expected git worktree list for end completion")
+		}
+		if !strings.Contains(script, "git branch -r") {
+			t.Error("expected git branch -r for checkout completion")
+		}
+	})
+
+	t.Run("bash script does not have zsh completion", func(t *testing.T) {
+		script := cmd.getBashZshScript("bash")
+		if strings.Contains(script, "compdef") {
+			t.Error("bash script should not contain zsh compdef")
+		}
+	})
 }
 
 func TestShellIntegrationCommand_GetFishScript(t *testing.T) {
