@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- Post-hook support for `start` and `checkout` commands (idea thanks to @pnikonowicz in #20)
+  - `post_start_hook` and `post_checkout_hook` configuration options in `.gwrc`
+  - Hook commands are executed via `sh -c` with environment variables: `GW_WORKTREE_PATH`, `GW_BRANCH_NAME`, `GW_REPO_NAME`, `GW_COMMAND`
+  - Enables integration with tmux, iTerm2, or any custom workflow
+  - Hook failures are treated as warnings and do not block command execution
+  - Example hook scripts for tmux and iTerm2 included in `examples/hooks/`
+
 ## [0.6.4] - 2026-04-06
 
 ### Added

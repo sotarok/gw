@@ -5,6 +5,7 @@ import (
 	"os"
 
 	"github.com/sotarok/gw/internal/config"
+	"github.com/sotarok/gw/internal/hook"
 	"github.com/sotarok/gw/internal/iterm2"
 	"github.com/sotarok/gw/internal/spinner"
 )
@@ -105,6 +106,21 @@ func (c *StartCommand) Execute(issueNumber, baseBranch string) error {
 		// Don't fail if setup fails, just warn
 		if c.deps.Stderr != nil {
 			fmt.Fprintf(c.deps.Stderr, "%s Setup failed: %v\n", coloredWarning(), err)
+		}
+	}
+
+	// Execute post-start hook if configured
+	if c.config != nil && c.config.PostStartHook != "" {
+		branchName := issueNumber + "/impl"
+		repoNameForHook := repoName
+		hookEnv := hook.Env{
+			WorktreePath: worktreePath,
+			BranchName:   branchName,
+			RepoName:     repoNameForHook,
+			Command:      "start",
+		}
+		if err := hook.Execute(c.config.PostStartHook, hookEnv, c.deps.Stdout, c.deps.Stderr); err != nil {
+			fmt.Fprintf(c.deps.Stderr, "%s Post-start hook failed: %v\n", coloredWarning(), err)
 		}
 	}
 

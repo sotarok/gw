@@ -175,12 +175,76 @@ The interactive config editor allows you to:
 
 - **auto_cd**: Automatically change to the new worktree directory after creation (default: true)
 - **update_iterm2_tab**: Update iTerm2 tab name when creating/switching/removing worktrees (default: false)
+- **post_start_hook**: Shell command to execute after a successful `gw start` (default: empty)
+- **post_checkout_hook**: Shell command to execute after a successful `gw checkout` (default: empty)
 
 Example `~/.gwrc`:
 ```
 # gw configuration file
 auto_cd = true
 update_iterm2_tab = false
+```
+
+#### Post Hooks
+
+You can configure shell commands to run automatically after `gw start` or `gw checkout` succeeds. Hook commands are executed via `sh -c` with the following environment variables:
+
+| Variable | Description |
+|---|---|
+| `GW_WORKTREE_PATH` | Absolute path to the created worktree |
+| `GW_BRANCH_NAME` | Branch name of the worktree |
+| `GW_REPO_NAME` | Repository name |
+| `GW_COMMAND` | The command that triggered the hook (`start` or `checkout`) |
+
+Hook failures are treated as warnings and do not block the overall command.
+
+##### Example: tmux integration
+
+Open a new tmux window for the worktree instead of changing directory in the current shell:
+
+```
+auto_cd = false
+post_start_hook = tmux new-window -c "$GW_WORKTREE_PATH" -n "$GW_BRANCH_NAME"
+post_checkout_hook = tmux new-window -c "$GW_WORKTREE_PATH" -n "$GW_BRANCH_NAME"
+```
+
+##### Example: iTerm2 new tab
+
+Open a new iTerm2 tab for the worktree on macOS. First, create a hook script:
+
+```bash
+mkdir -p ~/.gw/hooks
+cat > ~/.gw/hooks/iterm2-new-tab.sh << 'EOF'
+#!/bin/bash
+osascript <<APPLESCRIPT
+tell application "iTerm"
+    tell current window
+        create tab with default profile
+        tell current session of current tab
+            write text "cd '${GW_WORKTREE_PATH}' && clear"
+            set name to "${GW_BRANCH_NAME}"
+        end tell
+    end tell
+end tell
+APPLESCRIPT
+EOF
+chmod +x ~/.gw/hooks/iterm2-new-tab.sh
+```
+
+Then configure `.gwrc`:
+
+```
+auto_cd = false
+post_start_hook = ~/.gw/hooks/iterm2-new-tab.sh
+post_checkout_hook = ~/.gw/hooks/iterm2-new-tab.sh
+```
+
+##### Example: Custom notification
+
+Send a desktop notification after worktree creation:
+
+```
+post_start_hook = osascript -e 'display notification "Worktree ready at '"$GW_WORKTREE_PATH"'" with title "gw"'
 ```
 
 #### iTerm2 Tab Integration
@@ -225,11 +289,13 @@ Future versions will support additional configuration:
 ```
 gw/
 ├── cmd/               # Command implementations
+├── examples/hooks/    # Example hook scripts (tmux, iTerm2, etc.)
 ├── internal/
 │   ├── git/          # Git operations
 │   ├── detect/       # Package manager detection
 │   ├── ui/           # Interactive UI components
 │   ├── config/       # Configuration management
+│   ├── hook/         # Post-command hook execution
 │   └── iterm2/       # iTerm2 integration
 ├── main.go
 └── go.mod

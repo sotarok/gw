@@ -269,7 +269,12 @@ func TestSaveConfig_DirectoryCreation(t *testing.T) {
 		"update_iterm2_tab = false\n" +
 		"auto_remove_branch = false\n" +
 		"fetch_before_command = false\n" +
-		"# copy_envs = false  # Uncomment to set default behavior\n"
+		"# copy_envs = false  # Uncomment to set default behavior\n" +
+		"\n" +
+		"# Hook commands executed after successful worktree operations\n" +
+		"# Available env vars: GW_WORKTREE_PATH, GW_BRANCH_NAME, GW_REPO_NAME, GW_COMMAND\n" +
+		"# post_start_hook =\n" +
+		"# post_checkout_hook =\n"
 	if string(content) != expectedContent {
 		t.Errorf("Expected content:\n%s\nGot:\n%s", expectedContent, string(content))
 	}
@@ -541,6 +546,8 @@ func TestSetConfigItem(t *testing.T) {
 		t.Errorf("Expected FetchBeforeCommand to be false after setting, got %v", config.FetchBeforeCommand)
 	}
 
+	// Test setting post_start_hook (not supported via SetConfigItem, it's bool-only)
+
 	// Test setting unknown key
 	err = config.SetConfigItem("unknown_key", true)
 	if err == nil {
@@ -548,5 +555,107 @@ func TestSetConfigItem(t *testing.T) {
 	}
 	if err != nil && err.Error() != "unknown configuration key: unknown_key" {
 		t.Errorf("Expected specific error message for unknown key, got: %v", err)
+	}
+}
+
+func TestLoadConfig_Hooks(t *testing.T) {
+	tests := []struct {
+		name                 string
+		configContent        string
+		expectedPostStart    string
+		expectedPostCheckout string
+	}{
+		{
+			name: "hooks not set",
+			configContent: `auto_cd = true
+`,
+			expectedPostStart:    "",
+			expectedPostCheckout: "",
+		},
+		{
+			name: "post_start_hook set",
+			configContent: `auto_cd = true
+post_start_hook = tmux new-window -c "$GW_WORKTREE_PATH"
+`,
+			expectedPostStart:    `tmux new-window -c "$GW_WORKTREE_PATH"`,
+			expectedPostCheckout: "",
+		},
+		{
+			name: "both hooks set",
+			configContent: `auto_cd = false
+post_start_hook = tmux new-window -c "$GW_WORKTREE_PATH" -n "$GW_BRANCH_NAME"
+post_checkout_hook = tmux new-window -c "$GW_WORKTREE_PATH" -n "$GW_BRANCH_NAME"
+`,
+			expectedPostStart:    `tmux new-window -c "$GW_WORKTREE_PATH" -n "$GW_BRANCH_NAME"`,
+			expectedPostCheckout: `tmux new-window -c "$GW_WORKTREE_PATH" -n "$GW_BRANCH_NAME"`,
+		},
+		{
+			name: "hook with equals sign in value",
+			configContent: `post_start_hook = env GW_EXTRA=1 my-script
+`,
+			expectedPostStart: "env GW_EXTRA=1 my-script",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			tempDir := t.TempDir()
+			configPath := filepath.Join(tempDir, ".gwrc")
+
+			if err := os.WriteFile(configPath, []byte(tt.configContent), 0644); err != nil {
+				t.Fatalf("Failed to write test config: %v", err)
+			}
+
+			config, err := Load(configPath)
+			if err != nil {
+				t.Fatalf("Failed to load config: %v", err)
+			}
+
+			if config.PostStartHook != tt.expectedPostStart {
+				t.Errorf("Expected PostStartHook %q, got %q", tt.expectedPostStart, config.PostStartHook)
+			}
+			if config.PostCheckoutHook != tt.expectedPostCheckout {
+				t.Errorf("Expected PostCheckoutHook %q, got %q", tt.expectedPostCheckout, config.PostCheckoutHook)
+			}
+		})
+	}
+}
+
+func TestSaveConfig_Hooks(t *testing.T) {
+	tempDir := t.TempDir()
+	configPath := filepath.Join(tempDir, ".gwrc")
+
+	cfg := &Config{
+		AutoCD:           true,
+		PostStartHook:    `tmux new-window -c "$GW_WORKTREE_PATH"`,
+		PostCheckoutHook: `tmux new-window -c "$GW_WORKTREE_PATH"`,
+	}
+
+	err := cfg.Save(configPath)
+	if err != nil {
+		t.Fatalf("Failed to save config: %v", err)
+	}
+
+	// Reload and verify
+	loaded, err := Load(configPath)
+	if err != nil {
+		t.Fatalf("Failed to load saved config: %v", err)
+	}
+
+	if loaded.PostStartHook != cfg.PostStartHook {
+		t.Errorf("Expected PostStartHook %q, got %q", cfg.PostStartHook, loaded.PostStartHook)
+	}
+	if loaded.PostCheckoutHook != cfg.PostCheckoutHook {
+		t.Errorf("Expected PostCheckoutHook %q, got %q", cfg.PostCheckoutHook, loaded.PostCheckoutHook)
+	}
+}
+
+func TestNewConfig_HooksEmpty(t *testing.T) {
+	cfg := New()
+	if cfg.PostStartHook != "" {
+		t.Errorf("Expected PostStartHook to be empty by default, got %q", cfg.PostStartHook)
+	}
+	if cfg.PostCheckoutHook != "" {
+		t.Errorf("Expected PostCheckoutHook to be empty by default, got %q", cfg.PostCheckoutHook)
 	}
 }
