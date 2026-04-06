@@ -35,10 +35,16 @@ jobs:
         id: claude-review
         uses: anthropics/claude-code-action@v1
         with:
+          use_sticky_comment: true
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
           prompt: |
             REPO: ${{ github.repository }}
             PR NUMBER: ${{ github.event.pull_request.number }}
+
+            Use the repository's CLAUDE.md for guidance on style and conventions. Be constructive and helpful in your feedback.
+            Read the PR discussion to see what previous comments and suggestions have been made.
+            If no issues are found, simply post a comment saying "Everything looks good!" and stop here. Your work is done.
+            Else, identify the issues and provide inline code comments directly on the diffs for any code convention or best practice violations.
 
             Please review this pull request and provide feedback on:
             - Code quality and best practices
@@ -47,9 +53,17 @@ jobs:
             - Security concerns
             - Test coverage
 
-            Use the repository's CLAUDE.md for guidance on style and conventions. Be constructive and helpful in your feedback.
-
-            Use `gh pr comment` with your Bash tool to leave your review as a comment on the PR.
+            Rules and Guidelines:
+            - Use inline feedback where possible with specific line references.
+            - Summarize your overall feedback at the end of your response (it will be posted as a sticky comment automatically).
+            - Include code snippets in markdown format when discussing issues
+            - Default towards multi-line comments that show context around the issue
+            - Make sure that suggested improvements aren't already implemented in the PR by comparing old and new versions
+            - Before commenting, check the PR discussion and make sure you, or another user, haven't already made a similar comment or raised the same concern.
+            - Before commenting, check that the specific issue wasn't already addressed in a previous review iteration
+            - If you see the same issue multiple times, consolidate your feedback into a single comment that references all occurrences, rather than making separate     comments.
+            - Refer back to these rules and guidelines before you make comments.
+            - Never ask for user confirmation. Never wait for user messages.
 
           # See https://github.com/anthropics/claude-code-action/blob/main/docs/usage.md
           # or https://docs.claude.com/en/docs/claude-code/cli-reference for available options
