@@ -274,7 +274,11 @@ func TestSaveConfig_DirectoryCreation(t *testing.T) {
 		"# Hook commands executed after successful worktree operations\n" +
 		"# Available env vars: GW_WORKTREE_PATH, GW_BRANCH_NAME, GW_REPO_NAME, GW_COMMAND\n" +
 		"# post_start_hook =\n" +
-		"# post_checkout_hook =\n"
+		"# post_checkout_hook =\n" +
+		"\n" +
+		"# Hook commands executed before a worktree is removed (from end/clean)\n" +
+		"# Runs with cwd set to the worktree. Same env vars as above; GW_COMMAND is \"end\" or \"clean\"\n" +
+		"# pre_end_hook =\n"
 	if string(content) != expectedContent {
 		t.Errorf("Expected content:\n%s\nGot:\n%s", expectedContent, string(content))
 	}
@@ -564,6 +568,7 @@ func TestLoadConfig_Hooks(t *testing.T) {
 		configContent        string
 		expectedPostStart    string
 		expectedPostCheckout string
+		expectedPreEnd       string
 	}{
 		{
 			name: "hooks not set",
@@ -571,6 +576,7 @@ func TestLoadConfig_Hooks(t *testing.T) {
 `,
 			expectedPostStart:    "",
 			expectedPostCheckout: "",
+			expectedPreEnd:       "",
 		},
 		{
 			name: "post_start_hook set",
@@ -581,19 +587,27 @@ post_start_hook = tmux new-window -c "$GW_WORKTREE_PATH"
 			expectedPostCheckout: "",
 		},
 		{
-			name: "both hooks set",
+			name: "all hooks set",
 			configContent: `auto_cd = false
 post_start_hook = tmux new-window -c "$GW_WORKTREE_PATH" -n "$GW_BRANCH_NAME"
 post_checkout_hook = tmux new-window -c "$GW_WORKTREE_PATH" -n "$GW_BRANCH_NAME"
+pre_end_hook = docker compose -f "$GW_WORKTREE_PATH/docker-compose.yml" down -v
 `,
 			expectedPostStart:    `tmux new-window -c "$GW_WORKTREE_PATH" -n "$GW_BRANCH_NAME"`,
 			expectedPostCheckout: `tmux new-window -c "$GW_WORKTREE_PATH" -n "$GW_BRANCH_NAME"`,
+			expectedPreEnd:       `docker compose -f "$GW_WORKTREE_PATH/docker-compose.yml" down -v`,
 		},
 		{
 			name: "hook with equals sign in value",
 			configContent: `post_start_hook = env GW_EXTRA=1 my-script
 `,
 			expectedPostStart: "env GW_EXTRA=1 my-script",
+		},
+		{
+			name: "pre_end_hook only",
+			configContent: `pre_end_hook = docker compose down
+`,
+			expectedPreEnd: "docker compose down",
 		},
 	}
 
@@ -617,6 +631,9 @@ post_checkout_hook = tmux new-window -c "$GW_WORKTREE_PATH" -n "$GW_BRANCH_NAME"
 			if config.PostCheckoutHook != tt.expectedPostCheckout {
 				t.Errorf("Expected PostCheckoutHook %q, got %q", tt.expectedPostCheckout, config.PostCheckoutHook)
 			}
+			if config.PreEndHook != tt.expectedPreEnd {
+				t.Errorf("Expected PreEndHook %q, got %q", tt.expectedPreEnd, config.PreEndHook)
+			}
 		})
 	}
 }
@@ -629,6 +646,7 @@ func TestSaveConfig_Hooks(t *testing.T) {
 		AutoCD:           true,
 		PostStartHook:    `tmux new-window -c "$GW_WORKTREE_PATH"`,
 		PostCheckoutHook: `tmux new-window -c "$GW_WORKTREE_PATH"`,
+		PreEndHook:       `docker compose -f "$GW_WORKTREE_PATH/docker-compose.yml" down -v`,
 	}
 
 	err := cfg.Save(configPath)
@@ -648,6 +666,9 @@ func TestSaveConfig_Hooks(t *testing.T) {
 	if loaded.PostCheckoutHook != cfg.PostCheckoutHook {
 		t.Errorf("Expected PostCheckoutHook %q, got %q", cfg.PostCheckoutHook, loaded.PostCheckoutHook)
 	}
+	if loaded.PreEndHook != cfg.PreEndHook {
+		t.Errorf("Expected PreEndHook %q, got %q", cfg.PreEndHook, loaded.PreEndHook)
+	}
 }
 
 func TestNewConfig_HooksEmpty(t *testing.T) {
@@ -657,5 +678,8 @@ func TestNewConfig_HooksEmpty(t *testing.T) {
 	}
 	if cfg.PostCheckoutHook != "" {
 		t.Errorf("Expected PostCheckoutHook to be empty by default, got %q", cfg.PostCheckoutHook)
+	}
+	if cfg.PreEndHook != "" {
+		t.Errorf("Expected PreEndHook to be empty by default, got %q", cfg.PreEndHook)
 	}
 }

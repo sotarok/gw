@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- `pre_end_hook` configuration option in `.gwrc`
+  - Runs before a worktree is removed by `gw end` or `gw clean`, with the cwd set to the worktree
+  - Receives the same env vars as post-hooks (`GW_WORKTREE_PATH`, `GW_BRANCH_NAME`, `GW_REPO_NAME`, `GW_COMMAND`); `GW_COMMAND` is `end` or `clean`
+  - Runs once per removed worktree — `gw clean` invokes it for each worktree it deletes
+  - Intended for cleanup that needs worktree files (e.g. `docker compose down`) before the directory disappears
+  - Hook failures are treated as warnings and do not block removal
+
 ## [0.7.0] - 2026-04-06
 
 ### Added

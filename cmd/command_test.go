@@ -3643,3 +3643,326 @@ func TestCheckoutCommand_Execute_PostHookFailure(t *testing.T) {
 		t.Error("Expected success message even when hook fails")
 	}
 }
+
+func TestEndCommand_Execute_PreEndHook(t *testing.T) {
+	originalDir, _ := os.Getwd()
+	defer os.Chdir(originalDir)
+
+	testDir := t.TempDir()
+	if err := os.Chdir(testDir); err != nil {
+		t.Fatalf("Failed to chdir: %v", err)
+	}
+
+	worktreeDir := t.TempDir()
+
+	// removeCallIdx records the length of hookOutputs at the moment the worktree
+	// is removed, so we can assert the hook ran before removal.
+	var hookOutputs []string
+	var removeCalledAtHookCount int
+
+	mockGitInstance := &mockGit{
+		GetWorktreeForIssueFn: func(issueNumber string) (*git.WorktreeInfo, error) {
+			return &git.WorktreeInfo{Path: worktreeDir, Branch: testBranch123}, nil
+		},
+		RemoveWorktreeByPathFn: func(string) error {
+			removeCalledAtHookCount = len(hookOutputs)
+			return nil
+		},
+	}
+	// RemoveWorktree (non-interactive mode path) also needs to be intercepted
+	// so we can observe order — but the end command uses RemoveWorktree(issueNumber)
+	// in non-interactive mode, which on the mock returns nil unconditionally.
+	// We use a sentinel hook that writes to hookOutputs before removal.
+
+	stdout := &bytes.Buffer{}
+	stderr := &bytes.Buffer{}
+	deps := &Dependencies{
+		Git:    mockGitInstance,
+		UI:     &mockUI{},
+		Detect: &mockDetect{},
+		Stdout: stdout,
+		Stderr: stderr,
+	}
+
+	// Hook writes a marker so we can verify ordering and env propagation via stdout.
+	hookMarker := filepath.Join(t.TempDir(), "hook-ran")
+	// The hook records: that it ran, the working directory, and key env vars.
+	hookCmd := fmt.Sprintf(`printf "ran:%%s:%%s:%%s:%%s\n" "$PWD" "$GW_WORKTREE_PATH" "$GW_BRANCH_NAME" "$GW_COMMAND" > %q`, hookMarker)
+
+	cfg := &config.Config{PreEndHook: hookCmd}
+	cmd := NewEndCommandWithConfig(deps, true, true, cfg)
+
+	// Wrap RemoveWorktree through the mock by using interactive-mode-like path.
+	// The default mockGit.RemoveWorktree returns nil — intercept via hook output
+	// instead: read the marker file after execute and assert it exists + content is right.
+	_ = os.Setenv("GW_UNUSED", "1") // noop, just to keep imports consistent
+
+	if err := cmd.Execute("123"); err != nil {
+		t.Fatalf("Execute failed: %v", err)
+	}
+
+	content, err := os.ReadFile(hookMarker)
+	if err != nil {
+		t.Fatalf("Hook marker file not written: %v", err)
+	}
+	hookOutputs = append(hookOutputs, string(content))
+
+	// On macOS /var is a symlink to /private/var, so $PWD and filepath.Abs can
+	// differ; resolve both sides to compare the real paths.
+	resolvedWorktreeDir, err := filepath.EvalSymlinks(worktreeDir)
+	if err != nil {
+		t.Fatalf("EvalSymlinks: %v", err)
+	}
+	parts := strings.SplitN(strings.TrimSuffix(string(content), "\n"), ":", 5)
+	if len(parts) != 5 {
+		t.Fatalf("Expected 5 fields in hook output, got: %q", string(content))
+	}
+	gotPWD, _ := filepath.EvalSymlinks(parts[1])
+	gotWorktreePath, _ := filepath.EvalSymlinks(parts[2])
+	if gotPWD != resolvedWorktreeDir {
+		t.Errorf("Expected hook PWD %s, got %s", resolvedWorktreeDir, gotPWD)
+	}
+	if gotWorktreePath != resolvedWorktreeDir {
+		t.Errorf("Expected GW_WORKTREE_PATH %s, got %s", resolvedWorktreeDir, gotWorktreePath)
+	}
+	if parts[3] != testBranch123 {
+		t.Errorf("Expected GW_BRANCH_NAME %s, got %s", testBranch123, parts[3])
+	}
+	if parts[4] != "end" {
+		t.Errorf("Expected GW_COMMAND end, got %s", parts[4])
+	}
+
+	_ = removeCalledAtHookCount // not meaningful for RemoveWorktree path
+}
+
+func TestEndCommand_Execute_PreEndHookRunsBeforeRemoval(t *testing.T) {
+	originalDir, _ := os.Getwd()
+	defer os.Chdir(originalDir)
+
+	testDir := t.TempDir()
+	if err := os.Chdir(testDir); err != nil {
+		t.Fatalf("Failed to chdir: %v", err)
+	}
+
+	worktreeDir := t.TempDir()
+	sentinel := filepath.Join(t.TempDir(), "hook-ran")
+
+	var sentinelExistsAtRemove bool
+	mockGitInstance := &mockGit{
+		GetWorktreeForIssueFn: func(string) (*git.WorktreeInfo, error) {
+			return &git.WorktreeInfo{Path: worktreeDir, Branch: testBranch123}, nil
+		},
+	}
+	// Intercept via the interactive-mode path is not used here; instead we
+	// rely on RemoveWorktree (non-interactive) through the mock. The default
+	// implementation returns nil without inspecting state, so we wrap by using
+	// RemoveWorktreeByPathFn via the force flag path... but end uses
+	// RemoveWorktree for non-interactive. So we check ordering via sentinel:
+	// the hook must have run (sentinel exists) by the time we return success.
+	mockGitInstance.RemoveWorktreeByPathFn = func(string) error {
+		_, err := os.Stat(sentinel)
+		sentinelExistsAtRemove = err == nil
+		return nil
+	}
+
+	stdout := &bytes.Buffer{}
+	stderr := &bytes.Buffer{}
+	deps := &Dependencies{
+		Git:    mockGitInstance,
+		UI:     &mockUI{confirmResult: true},
+		Detect: &mockDetect{},
+		Stdout: stdout,
+		Stderr: stderr,
+	}
+
+	cfg := &config.Config{PreEndHook: fmt.Sprintf("touch %q", sentinel)}
+
+	// Use empty issue number to go through interactive path so
+	// RemoveWorktreeByPath is called.
+	uiMock := deps.UI.(*mockUI)
+	uiMock.SelectWorktreeFn = func() (*git.WorktreeInfo, error) {
+		return &git.WorktreeInfo{Path: worktreeDir, Branch: testBranch123}, nil
+	}
+
+	cmd := NewEndCommandWithConfig(deps, true, true, cfg)
+	if err := cmd.Execute(""); err != nil {
+		t.Fatalf("Execute failed: %v", err)
+	}
+
+	if !sentinelExistsAtRemove {
+		t.Error("Expected pre_end_hook to run before RemoveWorktreeByPath, but sentinel did not exist yet")
+	}
+}
+
+func TestEndCommand_Execute_PreEndHookFailure(t *testing.T) {
+	originalDir, _ := os.Getwd()
+	defer os.Chdir(originalDir)
+
+	testDir := t.TempDir()
+	if err := os.Chdir(testDir); err != nil {
+		t.Fatalf("Failed to chdir: %v", err)
+	}
+
+	worktreeDir := t.TempDir()
+
+	mockGitInstance := &mockGit{
+		GetWorktreeForIssueFn: func(string) (*git.WorktreeInfo, error) {
+			return &git.WorktreeInfo{Path: worktreeDir, Branch: testBranch123}, nil
+		},
+	}
+
+	stdout := &bytes.Buffer{}
+	stderr := &bytes.Buffer{}
+	deps := &Dependencies{
+		Git:    mockGitInstance,
+		UI:     &mockUI{},
+		Detect: &mockDetect{},
+		Stdout: stdout,
+		Stderr: stderr,
+	}
+
+	cfg := &config.Config{PreEndHook: "exit 1"}
+	cmd := NewEndCommandWithConfig(deps, true, true, cfg)
+
+	if err := cmd.Execute("123"); err != nil {
+		t.Fatalf("Expected no error even when hook fails, got: %v", err)
+	}
+
+	if !contains(stderr.String(), "Pre-end hook failed") {
+		t.Errorf("Expected warning about hook failure in stderr, got:\n%s", stderr.String())
+	}
+	if !contains(stdout.String(), "Successfully removed worktree") {
+		t.Errorf("Expected worktree to still be removed on hook failure, got:\n%s", stdout.String())
+	}
+}
+
+func TestCleanCommand_Execute_PreEndHook(t *testing.T) {
+	originalDir, _ := os.Getwd()
+	defer os.Chdir(originalDir)
+
+	tmpDir := t.TempDir()
+	wt1 := filepath.Join(tmpDir, "wt1")
+	wt2 := filepath.Join(tmpDir, "wt2")
+	if err := os.MkdirAll(wt1, 0755); err != nil {
+		t.Fatalf("mkdir: %v", err)
+	}
+	if err := os.MkdirAll(wt2, 0755); err != nil {
+		t.Fatalf("mkdir: %v", err)
+	}
+
+	markerDir := t.TempDir()
+
+	removedPaths := []string{}
+	mockGit := &mockGit{
+		ListWorktreesFn: func() ([]git.WorktreeInfo, error) {
+			return []git.WorktreeInfo{
+				{Path: "/repo", Branch: "main"},
+				{Path: wt1, Branch: testBranch123},
+				{Path: wt2, Branch: "456/impl"},
+			}, nil
+		},
+		HasUncommittedChangesFn: func() (bool, error) { return false, nil },
+		HasUnpushedCommitsFn:    func() (bool, error) { return false, nil },
+		IsMergedToOriginFn:      func(string) (bool, error) { return true, nil },
+		RemoveWorktreeByPathFn: func(path string) error {
+			removedPaths = append(removedPaths, path)
+			return nil
+		},
+	}
+
+	stdout := &bytes.Buffer{}
+	stderr := &bytes.Buffer{}
+	deps := &Dependencies{
+		Git:    mockGit,
+		UI:     &mockUI{confirmResult: true},
+		Stdout: stdout,
+		Stderr: stderr,
+	}
+
+	// Hook records cwd + branch name to a per-branch marker file so we can
+	// verify one hook invocation per removed worktree.
+	hookCmd := fmt.Sprintf(`printf "%%s:%%s\n" "$PWD" "$GW_BRANCH_NAME" > %q/"$(basename "$PWD")".out`, markerDir)
+	cfg := &config.Config{PreEndHook: hookCmd}
+
+	cmd := NewCleanCommandWithConfig(deps, false, false, true, cfg)
+	if err := cmd.Execute(); err != nil {
+		t.Fatalf("Execute failed: %v", err)
+	}
+
+	if len(removedPaths) != 2 {
+		t.Fatalf("Expected 2 worktrees removed, got %d", len(removedPaths))
+	}
+
+	for _, wt := range []struct{ path, branch string }{{wt1, testBranch123}, {wt2, "456/impl"}} {
+		markerFile := filepath.Join(markerDir, filepath.Base(wt.path)+".out")
+		data, err := os.ReadFile(markerFile)
+		if err != nil {
+			t.Errorf("Hook marker not found for %s: %v", wt.path, err)
+			continue
+		}
+		parts := strings.SplitN(strings.TrimSuffix(string(data), "\n"), ":", 2)
+		if len(parts) != 2 {
+			t.Errorf("Hook output %q malformed", string(data))
+			continue
+		}
+		resolvedExpected, _ := filepath.EvalSymlinks(wt.path)
+		resolvedGot, _ := filepath.EvalSymlinks(parts[0])
+		if resolvedGot != resolvedExpected {
+			t.Errorf("Hook for %s: expected PWD %s, got %s", wt.path, resolvedExpected, resolvedGot)
+		}
+		if parts[1] != wt.branch {
+			t.Errorf("Hook for %s: expected branch %s, got %s", wt.path, wt.branch, parts[1])
+		}
+	}
+}
+
+func TestCleanCommand_Execute_PreEndHookFailure(t *testing.T) {
+	originalDir, _ := os.Getwd()
+	defer os.Chdir(originalDir)
+
+	tmpDir := t.TempDir()
+	wt1 := filepath.Join(tmpDir, "wt1")
+	if err := os.MkdirAll(wt1, 0755); err != nil {
+		t.Fatalf("mkdir: %v", err)
+	}
+
+	removedPaths := []string{}
+	mockGit := &mockGit{
+		ListWorktreesFn: func() ([]git.WorktreeInfo, error) {
+			return []git.WorktreeInfo{
+				{Path: "/repo", Branch: "main"},
+				{Path: wt1, Branch: testBranch123},
+			}, nil
+		},
+		HasUncommittedChangesFn: func() (bool, error) { return false, nil },
+		HasUnpushedCommitsFn:    func() (bool, error) { return false, nil },
+		IsMergedToOriginFn:      func(string) (bool, error) { return true, nil },
+		RemoveWorktreeByPathFn: func(path string) error {
+			removedPaths = append(removedPaths, path)
+			return nil
+		},
+	}
+
+	stdout := &bytes.Buffer{}
+	stderr := &bytes.Buffer{}
+	deps := &Dependencies{
+		Git:    mockGit,
+		UI:     &mockUI{confirmResult: true},
+		Stdout: stdout,
+		Stderr: stderr,
+	}
+
+	cfg := &config.Config{PreEndHook: "exit 1"}
+	cmd := NewCleanCommandWithConfig(deps, false, false, true, cfg)
+
+	if err := cmd.Execute(); err != nil {
+		t.Fatalf("Unexpected error: %v", err)
+	}
+
+	if !contains(stderr.String(), "Pre-end hook failed") {
+		t.Errorf("Expected warning in stderr, got:\n%s", stderr.String())
+	}
+	if len(removedPaths) != 1 {
+		t.Errorf("Expected worktree to still be removed despite hook failure, removedPaths=%v", removedPaths)
+	}
+}

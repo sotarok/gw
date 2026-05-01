@@ -8,6 +8,7 @@ import (
 
 	"github.com/sotarok/gw/internal/config"
 	"github.com/sotarok/gw/internal/git"
+	"github.com/sotarok/gw/internal/hook"
 	"github.com/sotarok/gw/internal/spinner"
 )
 
@@ -232,12 +233,27 @@ func (c *CleanCommand) removeWorktrees(statuses []*WorktreeStatus) error {
 	successCount := 0
 	failCount := 0
 
+	originalDir, err := os.Getwd()
+	if err != nil {
+		return fmt.Errorf("failed to get current directory: %w", err)
+	}
+
+	var repoName string
+	if c.config != nil && c.config.PreEndHook != "" {
+		repoName, _ = c.deps.Git.GetRepositoryName()
+	}
+
 	for _, status := range statuses {
 		if !status.CanRemove {
 			continue
 		}
 
 		dirName := filepath.Base(status.Info.Path)
+
+		// Run pre-end hook from inside the worktree before it gets removed.
+		if c.config != nil && c.config.PreEndHook != "" {
+			c.runPreEndHook(status.Info, repoName, originalDir)
+		}
 
 		// Remove the worktree with spinner
 		sp := spinner.New(fmt.Sprintf("Removing %s...", dirName), c.deps.Stdout)
@@ -276,4 +292,25 @@ func (c *CleanCommand) removeWorktrees(statuses []*WorktreeStatus) error {
 	}
 
 	return nil
+}
+
+// runPreEndHook runs pre_end_hook with the worktree as cwd, then restores the
+// original directory regardless of hook outcome. Hook failures are warnings.
+func (c *CleanCommand) runPreEndHook(info *git.WorktreeInfo, repoName, originalDir string) {
+	if err := os.Chdir(info.Path); err != nil {
+		fmt.Fprintf(c.deps.Stderr, "%s Could not enter %s to run pre-end hook: %v\n", coloredWarning(), info.Path, err)
+		return
+	}
+	defer func() { _ = os.Chdir(originalDir) }()
+
+	absWorktreePath, _ := filepath.Abs(info.Path)
+	hookEnv := hook.Env{
+		WorktreePath: absWorktreePath,
+		BranchName:   info.Branch,
+		RepoName:     repoName,
+		Command:      "clean",
+	}
+	if err := hook.Execute(c.config.PreEndHook, hookEnv, c.deps.Stdout, c.deps.Stderr); err != nil {
+		fmt.Fprintf(c.deps.Stderr, "%s Pre-end hook failed for %s: %v\n", coloredWarning(), filepath.Base(info.Path), err)
+	}
 }

@@ -19,6 +19,7 @@ const (
 	fetchBeforeCommandKey = "fetch_before_command"
 	postStartHookKey      = "post_start_hook"
 	postCheckoutHookKey   = "post_checkout_hook"
+	preEndHookKey         = "pre_end_hook"
 )
 
 // Item represents a single configuration item with metadata
@@ -38,6 +39,7 @@ type Config struct {
 	FetchBeforeCommand bool   `toml:"fetch_before_command"`
 	PostStartHook      string `toml:"post_start_hook"`
 	PostCheckoutHook   string `toml:"post_checkout_hook"`
+	PreEndHook         string `toml:"pre_end_hook"`
 }
 
 // New creates a new Config with default values
@@ -100,6 +102,8 @@ func Load(path string) (*Config, error) {
 			config.PostStartHook = value
 		case postCheckoutHookKey:
 			config.PostCheckoutHook = value
+		case preEndHookKey:
+			config.PreEndHook = value
 		}
 	}
 
@@ -125,16 +129,23 @@ func (c *Config) Save(path string) error {
 		copyEnvsStr = "# copy_envs = false  # Uncomment to set default behavior\n"
 	}
 
-	var hookLines string
+	var postHookLines string
 	if c.PostStartHook != "" {
-		hookLines += fmt.Sprintf("post_start_hook = %s\n", c.PostStartHook)
+		postHookLines += fmt.Sprintf("post_start_hook = %s\n", c.PostStartHook)
 	} else {
-		hookLines += "# post_start_hook =\n"
+		postHookLines += "# post_start_hook =\n"
 	}
 	if c.PostCheckoutHook != "" {
-		hookLines += fmt.Sprintf("post_checkout_hook = %s\n", c.PostCheckoutHook)
+		postHookLines += fmt.Sprintf("post_checkout_hook = %s\n", c.PostCheckoutHook)
 	} else {
-		hookLines += "# post_checkout_hook =\n"
+		postHookLines += "# post_checkout_hook =\n"
+	}
+
+	var preHookLines string
+	if c.PreEndHook != "" {
+		preHookLines += fmt.Sprintf("pre_end_hook = %s\n", c.PreEndHook)
+	} else {
+		preHookLines += "# pre_end_hook =\n"
 	}
 
 	content := fmt.Sprintf(`# gw configuration file
@@ -145,7 +156,10 @@ fetch_before_command = %v
 %s
 # Hook commands executed after successful worktree operations
 # Available env vars: GW_WORKTREE_PATH, GW_BRANCH_NAME, GW_REPO_NAME, GW_COMMAND
-%s`, c.AutoCD, c.UpdateITerm2Tab, c.AutoRemoveBranch, c.FetchBeforeCommand, copyEnvsStr, hookLines)
+%s
+# Hook commands executed before a worktree is removed (from end/clean)
+# Runs with cwd set to the worktree. Same env vars as above; GW_COMMAND is "end" or "clean"
+%s`, c.AutoCD, c.UpdateITerm2Tab, c.AutoRemoveBranch, c.FetchBeforeCommand, copyEnvsStr, postHookLines, preHookLines)
 
 	if err := os.WriteFile(path, []byte(content), 0600); err != nil {
 		return fmt.Errorf("failed to write config file: %w", err)

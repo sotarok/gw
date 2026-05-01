@@ -3,9 +3,11 @@ package cmd
 import (
 	"fmt"
 	"os"
+	"path/filepath"
 	"strings"
 
 	"github.com/sotarok/gw/internal/config"
+	"github.com/sotarok/gw/internal/hook"
 	"github.com/sotarok/gw/internal/iterm2"
 	"github.com/sotarok/gw/internal/spinner"
 )
@@ -117,6 +119,22 @@ func (c *EndCommand) Execute(issueNumber string) error {
 				_ = os.Chdir(originalDir)
 				return nil
 			}
+		}
+	}
+
+	// Execute pre-end hook while still inside the worktree directory, so the
+	// hook can operate on files that are about to disappear (e.g. docker compose).
+	if c.config != nil && c.config.PreEndHook != "" {
+		absWorktreePath, _ := filepath.Abs(worktreePath)
+		repoName, _ := c.deps.Git.GetRepositoryName()
+		hookEnv := hook.Env{
+			WorktreePath: absWorktreePath,
+			BranchName:   branchName,
+			RepoName:     repoName,
+			Command:      "end",
+		}
+		if err := hook.Execute(c.config.PreEndHook, hookEnv, c.deps.Stdout, c.deps.Stderr); err != nil {
+			fmt.Fprintf(c.deps.Stderr, "%s Pre-end hook failed: %v\n", coloredWarning(), err)
 		}
 	}
 

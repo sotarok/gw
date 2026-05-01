@@ -177,6 +177,7 @@ The interactive config editor allows you to:
 - **update_iterm2_tab**: Update iTerm2 tab name when creating/switching/removing worktrees (default: false)
 - **post_start_hook**: Shell command to execute after a successful `gw start` (default: empty)
 - **post_checkout_hook**: Shell command to execute after a successful `gw checkout` (default: empty)
+- **pre_end_hook**: Shell command to execute before a worktree is removed by `gw end` or `gw clean`, with cwd set to the worktree (default: empty)
 
 Example `~/.gwrc`:
 ```
@@ -185,18 +186,26 @@ auto_cd = true
 update_iterm2_tab = false
 ```
 
-#### Post Hooks
+#### Hooks
 
-You can configure shell commands to run automatically after `gw start` or `gw checkout` succeeds. Hook commands are executed via `sh -c` with the following environment variables:
+You can configure shell commands to run automatically around worktree lifecycle events. Hook commands are executed via `sh -c` with the following environment variables:
 
 | Variable | Description |
 |---|---|
-| `GW_WORKTREE_PATH` | Absolute path to the created worktree |
+| `GW_WORKTREE_PATH` | Absolute path to the worktree |
 | `GW_BRANCH_NAME` | Branch name of the worktree |
 | `GW_REPO_NAME` | Repository name |
-| `GW_COMMAND` | The command that triggered the hook (`start` or `checkout`) |
+| `GW_COMMAND` | The command that triggered the hook (`start`, `checkout`, `end`, or `clean`) |
 
 Hook failures are treated as warnings and do not block the overall command.
+
+Available hooks:
+
+| Hook | Fires |
+|---|---|
+| `post_start_hook` | After `gw start` successfully creates a worktree |
+| `post_checkout_hook` | After `gw checkout` successfully creates a worktree |
+| `pre_end_hook` | Before `gw end` removes a worktree, and before each worktree `gw clean` removes. Runs with cwd set to the worktree so it can operate on files that are about to disappear |
 
 ##### Example: tmux integration
 
@@ -245,6 +254,20 @@ Send a desktop notification after worktree creation:
 
 ```
 post_start_hook = osascript -e 'display notification "Worktree ready at '"$GW_WORKTREE_PATH"'" with title "gw"'
+```
+
+##### Example: docker compose cleanup on worktree removal
+
+If each worktree runs its own `docker compose` stack, tear it down before the worktree is deleted. `pre_end_hook` runs with the worktree as its working directory, so relative paths work naturally:
+
+```
+pre_end_hook = docker compose down -v --remove-orphans
+```
+
+Or use the bundled example script (`examples/hooks/docker-compose-down.sh`) which skips worktrees with no compose file:
+
+```
+pre_end_hook = ~/.gw/hooks/docker-compose-down.sh
 ```
 
 #### iTerm2 Tab Integration
