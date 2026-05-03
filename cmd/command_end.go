@@ -89,6 +89,13 @@ func (c *EndCommand) Execute(issueNumber string) error {
 		return fmt.Errorf("failed to get current directory: %w", err)
 	}
 
+	// Capture repo name before chdir into the worktree, since GetRepositoryName
+	// returns the worktree directory name when called from inside a worktree.
+	var hookRepoName string
+	if c.config != nil && c.config.PreEndHook != "" {
+		hookRepoName, _ = c.deps.Git.GetRepositoryName()
+	}
+
 	if err := os.Chdir(worktreePath); err != nil {
 		return fmt.Errorf("failed to change to worktree directory: %w", err)
 	}
@@ -126,11 +133,10 @@ func (c *EndCommand) Execute(issueNumber string) error {
 	// hook can operate on files that are about to disappear (e.g. docker compose).
 	if c.config != nil && c.config.PreEndHook != "" {
 		absWorktreePath, _ := filepath.Abs(worktreePath)
-		repoName, _ := c.deps.Git.GetRepositoryName()
 		hookEnv := hook.Env{
 			WorktreePath: absWorktreePath,
 			BranchName:   branchName,
-			RepoName:     repoName,
+			RepoName:     hookRepoName,
 			Command:      "end",
 		}
 		if err := hook.Execute(c.config.PreEndHook, hookEnv, c.deps.Stdout, c.deps.Stderr); err != nil {

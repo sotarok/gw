@@ -3730,12 +3730,6 @@ func TestEndCommand_Execute_PreEndHookRunsBeforeRemoval(t *testing.T) {
 			return &git.WorktreeInfo{Path: worktreeDir, Branch: testBranch123}, nil
 		},
 	}
-	// Intercept via the interactive-mode path is not used here; instead we
-	// rely on RemoveWorktree (non-interactive) through the mock. The default
-	// implementation returns nil without inspecting state, so we wrap by using
-	// RemoveWorktreeByPathFn via the force flag path... but end uses
-	// RemoveWorktree for non-interactive. So we check ordering via sentinel:
-	// the hook must have run (sentinel exists) by the time we return success.
 	mockGitInstance.RemoveWorktreeByPathFn = func(string) error {
 		_, err := os.Stat(sentinel)
 		sentinelExistsAtRemove = err == nil
@@ -3754,8 +3748,7 @@ func TestEndCommand_Execute_PreEndHookRunsBeforeRemoval(t *testing.T) {
 
 	cfg := &config.Config{PreEndHook: fmt.Sprintf("touch %q", sentinel)}
 
-	// Use empty issue number to go through interactive path so
-	// RemoveWorktreeByPath is called.
+	// Empty issue number → interactive path → RemoveWorktreeByPath (which we observe).
 	uiMock := deps.UI.(*mockUI)
 	uiMock.SelectWorktreeFn = func() (*git.WorktreeInfo, error) {
 		return &git.WorktreeInfo{Path: worktreeDir, Branch: testBranch123}, nil
@@ -3856,8 +3849,6 @@ func TestCleanCommand_Execute_PreEndHook(t *testing.T) {
 		Stderr: stderr,
 	}
 
-	// Hook records cwd + branch name to a per-branch marker file so we can
-	// verify one hook invocation per removed worktree.
 	hookCmd := fmt.Sprintf(`printf "%%s:%%s\n" "$PWD" "$GW_BRANCH_NAME" > %q/"$(basename "$PWD")".out`, markerDir)
 	cfg := &config.Config{PreEndHook: hookCmd}
 
