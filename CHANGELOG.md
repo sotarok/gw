@@ -16,7 +16,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Hook failures are treated as warnings and do not block removal
 
 ### Fixed
-- `gw start` / `gw checkout` / `gw end` invoked from a sub directory of the repo created broken worktree paths like `../..-{branch}` instead of `../{repo}-{branch}`. `git rev-parse --git-common-dir` returns a cwd-relative path (`../.git`, `../../.git`, ...) outside the repo root, so the existing repo-name extraction collapsed to `..`. Now resolved to absolute first.
+- `gw start` / `gw checkout` / `gw end` now work correctly when invoked from a sub directory of the repo (previously created broken paths like `../..-{branch}`).
 
 ## [0.7.0] - 2026-04-06
 
