@@ -34,16 +34,17 @@ func GetOriginalRepositoryName() (string, error) {
 		return "", fmt.Errorf("not in a git repository: %w", err)
 	}
 
-	gitCommonDir := strings.TrimSpace(string(output))
-
-	// If it's ".git", we're in the main repository - use show-toplevel
-	if gitCommonDir == gitDir {
-		return GetRepositoryName()
+	// The output may be cwd-relative (".git", "../.git", "../../.git", ...)
+	// when called from the main repo or its sub directories, or absolute when
+	// called from inside a worktree. Resolve to absolute before extracting the
+	// repository directory name — otherwise sub-directory invocations yield
+	// "..", "..-{branch}", etc.
+	absGitCommonDir, err := filepath.Abs(strings.TrimSpace(string(output)))
+	if err != nil {
+		return "", fmt.Errorf("failed to resolve git common dir: %w", err)
 	}
 
-	// In a worktree, gitCommonDir is an absolute path like /path/to/original-repo/.git
-	// We need to get the parent directory's base name
-	return filepath.Base(filepath.Dir(gitCommonDir)), nil
+	return filepath.Base(filepath.Dir(absGitCommonDir)), nil
 }
 
 // IsGitRepository checks if the current directory is inside a git repository

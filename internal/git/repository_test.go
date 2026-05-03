@@ -145,6 +145,48 @@ func TestGetOriginalRepositoryName(t *testing.T) {
 		}
 	})
 
+	t.Run("returns repo name when called from a sub directory", func(t *testing.T) {
+		// Regression: git rev-parse --git-common-dir returns "../../.git" from
+		// nested directories, which used to yield ".." as the repo name and
+		// produced broken worktree paths like "..-{branch}".
+		tempDir, err := os.MkdirTemp("", "test-subdir-repo")
+		if err != nil {
+			t.Fatalf("failed to create temp dir: %v", err)
+		}
+		defer os.RemoveAll(tempDir)
+
+		originalDir, err := os.Getwd()
+		if err != nil {
+			t.Fatalf("failed to get current dir: %v", err)
+		}
+		defer func() { _ = os.Chdir(originalDir) }()
+
+		mainRepoPath := tempDir + "/" + testRepoName
+		nestedSubDir := mainRepoPath + "/a/b/c"
+		if err := os.MkdirAll(nestedSubDir, 0755); err != nil {
+			t.Fatalf("failed to create nested dir: %v", err)
+		}
+
+		if err := os.Chdir(mainRepoPath); err != nil {
+			t.Fatalf("failed to change to main repo dir: %v", err)
+		}
+		if err := RunCommand("git init"); err != nil {
+			t.Fatalf("failed to init git repo: %v", err)
+		}
+
+		if err := os.Chdir(nestedSubDir); err != nil {
+			t.Fatalf("failed to change to sub dir: %v", err)
+		}
+
+		name, err := GetOriginalRepositoryName()
+		if err != nil {
+			t.Fatalf("unexpected error from sub dir: %v", err)
+		}
+		if name != testRepoName {
+			t.Errorf("expected %q from sub dir, got %q", testRepoName, name)
+		}
+	})
+
 	t.Run("returns error when not in git repository", func(t *testing.T) {
 		tempDir, err := os.MkdirTemp("", "test-non-git")
 		if err != nil {
