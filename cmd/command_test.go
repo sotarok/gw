@@ -3655,24 +3655,11 @@ func TestEndCommand_Execute_PreEndHook(t *testing.T) {
 
 	worktreeDir := t.TempDir()
 
-	// removeCallIdx records the length of hookOutputs at the moment the worktree
-	// is removed, so we can assert the hook ran before removal.
-	var hookOutputs []string
-	var removeCalledAtHookCount int
-
 	mockGitInstance := &mockGit{
-		GetWorktreeForIssueFn: func(issueNumber string) (*git.WorktreeInfo, error) {
+		GetWorktreeForIssueFn: func(string) (*git.WorktreeInfo, error) {
 			return &git.WorktreeInfo{Path: worktreeDir, Branch: testBranch123}, nil
 		},
-		RemoveWorktreeByPathFn: func(string) error {
-			removeCalledAtHookCount = len(hookOutputs)
-			return nil
-		},
 	}
-	// RemoveWorktree (non-interactive mode path) also needs to be intercepted
-	// so we can observe order — but the end command uses RemoveWorktree(issueNumber)
-	// in non-interactive mode, which on the mock returns nil unconditionally.
-	// We use a sentinel hook that writes to hookOutputs before removal.
 
 	stdout := &bytes.Buffer{}
 	stderr := &bytes.Buffer{}
@@ -3684,18 +3671,11 @@ func TestEndCommand_Execute_PreEndHook(t *testing.T) {
 		Stderr: stderr,
 	}
 
-	// Hook writes a marker so we can verify ordering and env propagation via stdout.
 	hookMarker := filepath.Join(t.TempDir(), "hook-ran")
-	// The hook records: that it ran, the working directory, and key env vars.
 	hookCmd := fmt.Sprintf(`printf "ran:%%s:%%s:%%s:%%s\n" "$PWD" "$GW_WORKTREE_PATH" "$GW_BRANCH_NAME" "$GW_COMMAND" > %q`, hookMarker)
 
 	cfg := &config.Config{PreEndHook: hookCmd}
 	cmd := NewEndCommandWithConfig(deps, true, true, cfg)
-
-	// Wrap RemoveWorktree through the mock by using interactive-mode-like path.
-	// The default mockGit.RemoveWorktree returns nil — intercept via hook output
-	// instead: read the marker file after execute and assert it exists + content is right.
-	_ = os.Setenv("GW_UNUSED", "1") // noop, just to keep imports consistent
 
 	if err := cmd.Execute("123"); err != nil {
 		t.Fatalf("Execute failed: %v", err)
@@ -3705,7 +3685,6 @@ func TestEndCommand_Execute_PreEndHook(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Hook marker file not written: %v", err)
 	}
-	hookOutputs = append(hookOutputs, string(content))
 
 	// On macOS /var is a symlink to /private/var, so $PWD and filepath.Abs can
 	// differ; resolve both sides to compare the real paths.
@@ -3731,8 +3710,6 @@ func TestEndCommand_Execute_PreEndHook(t *testing.T) {
 	if parts[4] != "end" {
 		t.Errorf("Expected GW_COMMAND end, got %s", parts[4])
 	}
-
-	_ = removeCalledAtHookCount // not meaningful for RemoveWorktree path
 }
 
 func TestEndCommand_Execute_PreEndHookRunsBeforeRemoval(t *testing.T) {
