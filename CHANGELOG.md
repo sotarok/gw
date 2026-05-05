@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.8.0] - 2026-05-05
+
 ### Added
 - `pre_end_hook` configuration option in `.gwrc`
   - Runs before a worktree is removed by `gw end` or `gw clean`, with the cwd set to the worktree
