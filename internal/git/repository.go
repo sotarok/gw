@@ -23,6 +23,18 @@ func GetRepositoryName() (string, error) {
 	return filepath.Base(repoPath), nil
 }
 
+// GetRepositoryRoot returns the absolute path of the current git repository root.
+// When invoked from a sub directory, this still returns the repository root (not cwd).
+// In a worktree, this returns the worktree's root directory, not the main repo's root.
+func GetRepositoryRoot() (string, error) {
+	cmd := exec.Command("git", "rev-parse", "--show-toplevel")
+	output, err := cmd.Output()
+	if err != nil {
+		return "", fmt.Errorf("not in a git repository: %w", err)
+	}
+	return strings.TrimSpace(string(output)), nil
+}
+
 // GetOriginalRepositoryName returns the name of the original git repository.
 // In a worktree, this returns the name of the main repository, not the worktree directory.
 // This is useful for creating new worktrees with consistent naming.

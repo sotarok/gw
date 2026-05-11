@@ -78,7 +78,15 @@ func (c *CheckoutCommand) Execute(branch string) error {
 	// Create worktree directory name
 	sanitizedBranchName := c.deps.Git.SanitizeBranchNameForDirectory(branchName)
 	worktreeName := fmt.Sprintf("%s-%s", repoName, sanitizedBranchName)
-	worktreePath := filepath.Join("..", worktreeName)
+
+	// Anchor the worktree path to the repository root so that running checkout
+	// from a sub directory still creates the worktree as a sibling of the repo
+	// (rather than a sibling of the current sub directory).
+	repoRoot, err := c.deps.Git.GetRepositoryRoot()
+	if err != nil {
+		return fmt.Errorf("failed to get repository root: %w", err)
+	}
+	worktreePath := filepath.Join(repoRoot, "..", worktreeName)
 
 	// Check if branch exists
 	exists, err := c.deps.Git.BranchExists(branch)

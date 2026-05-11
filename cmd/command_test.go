@@ -41,6 +41,7 @@ type mockGit struct {
 	ListWorktreesFn            func() ([]git.WorktreeInfo, error)
 	RemoveWorktreeByPathFn     func(string) error
 	GetRepositoryNameFn        func() (string, error)
+	GetRepositoryRootFn        func() (string, error)
 	CreateWorktreeFromBranchFn func(string, string, string) error
 	SanitizeBranchNameForDirFn func(string) string
 }
@@ -54,6 +55,16 @@ func (m *mockGit) GetRepositoryName() (string, error) {
 		return m.GetRepositoryNameFn()
 	}
 	return "test-repo", nil
+}
+
+func (m *mockGit) GetRepositoryRoot() (string, error) {
+	if m.GetRepositoryRootFn != nil {
+		return m.GetRepositoryRootFn()
+	}
+	// Default to cwd so existing tests that rely on relative `../<name>`
+	// behavior keep working — they typically chdir into a temp dir first.
+	cwd, _ := os.Getwd()
+	return cwd, nil
 }
 
 func (m *mockGit) FetchAll() error {
@@ -938,6 +949,64 @@ func TestCheckoutCommand_Execute_CreateWorktreeFromBranchError(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "failed to create worktree") {
 		t.Errorf("Expected 'failed to create worktree' error, got: %v", err)
+	}
+}
+
+func TestCheckoutCommand_Execute_WorktreePathAnchoredToRepoRoot(t *testing.T) {
+	// Regression: running `gw checkout` from a sub directory of the repo used
+	// to create the worktree as a sibling of the sub directory because the
+	// command joined "../<name>" relative to the current working directory.
+	// The worktree must be anchored to the repository root instead.
+	originalDir, _ := os.Getwd()
+	defer os.Chdir(originalDir)
+
+	tempDir, err := os.MkdirTemp("", "gw-test-*")
+	if err != nil {
+		t.Fatalf("Failed to create temp dir: %v", err)
+	}
+	defer os.RemoveAll(tempDir)
+
+	repoRoot := filepath.Join(tempDir, "repo")
+	subDir := filepath.Join(repoRoot, "apps", "admin")
+	if err := os.MkdirAll(subDir, 0755); err != nil {
+		t.Fatalf("Failed to create sub directory: %v", err)
+	}
+	if err := os.Chdir(subDir); err != nil {
+		t.Fatalf("Failed to chdir into sub directory: %v", err)
+	}
+
+	var capturedWorktreePath string
+	mockGitInstance := &mockGit{
+		isGitRepo: true,
+		envFiles:  []git.EnvFile{},
+	}
+	mockGitInstance.GetRepositoryNameFn = func() (string, error) { return "repo", nil }
+	mockGitInstance.GetRepositoryRootFn = func() (string, error) { return repoRoot, nil }
+	mockGitInstance.BranchExistsFn = func(branch string) (bool, error) { return true, nil }
+	mockGitInstance.CreateWorktreeFromBranchFn = func(worktreePath, sourceBranch, targetBranch string) error {
+		capturedWorktreePath = worktreePath
+		os.MkdirAll(worktreePath, 0755)
+		return nil
+	}
+
+	stdout := &bytes.Buffer{}
+	stderr := &bytes.Buffer{}
+	deps := &Dependencies{
+		Git:    mockGitInstance,
+		UI:     &mockUI{},
+		Detect: &mockDetect{},
+		Stdout: stdout,
+		Stderr: stderr,
+	}
+
+	cmd := NewCheckoutCommandWithConfig(deps, false, true, &config.Config{})
+	if err := cmd.Execute(testBranchFeature); err != nil {
+		t.Fatalf("Unexpected error: %v", err)
+	}
+
+	expected := filepath.Join(tempDir, "repo-feature_test")
+	if filepath.Clean(capturedWorktreePath) != expected {
+		t.Errorf("worktree path not anchored to repo root.\n  got:  %s\n  want: %s", capturedWorktreePath, expected)
 	}
 }
 
