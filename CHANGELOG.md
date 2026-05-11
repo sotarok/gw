@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.8.1] - 2026-05-11
+
+### Fixed
+- `gw checkout` now anchors the worktree path to the repository root, so running it from a sub directory no longer creates the worktree alongside the sub directory (e.g. `<repo>/apps/<repo>-<branch>`).
+
 ## [0.8.0] - 2026-05-05
 
 ### Added
