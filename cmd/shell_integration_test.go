@@ -267,6 +267,45 @@ func TestFindWorktreePath_DirectoryExists(t *testing.T) {
 	}
 }
 
+func TestFindWorktreePath_DirectoryExists_FromSubDirectory(t *testing.T) {
+	// Regression: `gw shell-integration --print-path` used `filepath.Join("..", name)`
+	// then `filepath.Abs`, so invocations from a sub directory resolved the
+	// "expected worktree" against the sub directory's parent (e.g.
+	// `<repo>/apps/<repo>-<id>`) instead of as a sibling of the repo root.
+	tempDir := t.TempDir()
+	repoDir := filepath.Join(tempDir, "test-repo")
+	worktreeDir := filepath.Join(tempDir, "test-repo-123")
+	subDir := filepath.Join(repoDir, "apps", "admin")
+	os.MkdirAll(subDir, 0755)
+	os.MkdirAll(worktreeDir, 0755)
+
+	originalDir, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("failed to get current dir: %v", err)
+	}
+	defer os.Chdir(originalDir)
+
+	if err := os.Chdir(subDir); err != nil {
+		t.Fatalf("failed to change dir: %v", err)
+	}
+
+	mock := &mockGit{
+		isGitRepo: true,
+	}
+	mock.GetRepositoryRootFn = func() (string, error) { return repoDir, nil }
+
+	path, err := findWorktreePath(mock, "123")
+	if err != nil {
+		t.Fatalf("expected no error, got: %v", err)
+	}
+
+	resolvedPath, _ := filepath.EvalSymlinks(path)
+	resolvedExpected, _ := filepath.EvalSymlinks(worktreeDir)
+	if resolvedPath != resolvedExpected {
+		t.Errorf("expected %q, got %q", resolvedExpected, resolvedPath)
+	}
+}
+
 func TestFindWorktreePath_MatchesByBranch(t *testing.T) {
 	tempDir := t.TempDir()
 	repoDir := filepath.Join(tempDir, "test-repo")

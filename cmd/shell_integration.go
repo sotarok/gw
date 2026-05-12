@@ -295,20 +295,24 @@ func (c *ShellIntegrationCommand) printWorktreePath() error {
 }
 
 func findWorktreePath(gitClient git.Interface, identifier string) (string, error) {
-	// Get repository name
+	// Get repository name and root
 	repoName, err := gitClient.GetRepositoryName()
+	if err != nil {
+		return "", err
+	}
+	// Anchor the expected worktree lookup to the repository root so that
+	// invocations from a sub directory still resolve to the worktree sitting
+	// as a sibling of the repo (rather than a sibling of the sub directory).
+	repoRoot, err := gitClient.GetRepositoryRoot()
 	if err != nil {
 		return "", err
 	}
 
 	// First, check if the expected directory exists (most common case after 'gw start')
 	// This works even if git worktree list hasn't updated yet
-	expectedPath := filepath.Join("..", fmt.Sprintf("%s-%s", repoName, identifier))
-	absPath, err := filepath.Abs(expectedPath)
-	if err == nil {
-		if info, err := os.Stat(absPath); err == nil && info.IsDir() {
-			return absPath, nil
-		}
+	expectedPath := filepath.Join(repoRoot, "..", fmt.Sprintf("%s-%s", repoName, identifier))
+	if info, err := os.Stat(expectedPath); err == nil && info.IsDir() {
+		return expectedPath, nil
 	}
 
 	// Next, try to find via git worktree list
@@ -329,12 +333,9 @@ func findWorktreePath(gitClient git.Interface, identifier string) (string, error
 	// If not found as issue, try as branch name (for checkout command)
 	sanitizedBranchName := gitClient.SanitizeBranchNameForDirectory(identifier)
 	if sanitizedBranchName != identifier {
-		expectedPath = filepath.Join("..", fmt.Sprintf("%s-%s", repoName, sanitizedBranchName))
-		absPath, err = filepath.Abs(expectedPath)
-		if err == nil {
-			if info, err := os.Stat(absPath); err == nil && info.IsDir() {
-				return absPath, nil
-			}
+		expectedPath = filepath.Join(repoRoot, "..", fmt.Sprintf("%s-%s", repoName, sanitizedBranchName))
+		if info, err := os.Stat(expectedPath); err == nil && info.IsDir() {
+			return expectedPath, nil
 		}
 	}
 
