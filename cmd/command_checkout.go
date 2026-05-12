@@ -79,9 +79,10 @@ func (c *CheckoutCommand) Execute(branch string) error {
 	sanitizedBranchName := c.deps.Git.SanitizeBranchNameForDirectory(branchName)
 	worktreeName := fmt.Sprintf("%s-%s", repoName, sanitizedBranchName)
 
-	// Anchor the worktree path to the repository root so that running checkout
-	// from a sub directory still creates the worktree as a sibling of the repo
-	// (rather than a sibling of the current sub directory).
+	// Anchor the worktree path and env file scan to the repository root so
+	// that running checkout from a sub directory still creates the worktree as
+	// a sibling of the repo (rather than a sibling of the current sub
+	// directory) and scans the whole repo for env files.
 	repoRoot, err := c.deps.Git.GetRepositoryRoot()
 	if err != nil {
 		return fmt.Errorf("failed to get repository root: %w", err)
@@ -95,12 +96,6 @@ func (c *CheckoutCommand) Execute(branch string) error {
 	}
 	if !exists {
 		return fmt.Errorf("branch '%s' does not exist in the repository\nUse 'git branch -a' to see all available branches", branch)
-	}
-
-	// Get the original repository root before creating worktree
-	originalDir, err := os.Getwd()
-	if err != nil {
-		return fmt.Errorf("failed to get current directory: %w", err)
 	}
 
 	// Create worktree with spinner
@@ -130,7 +125,7 @@ func (c *CheckoutCommand) Execute(branch string) error {
 	}
 
 	// Handle environment files
-	if err := c.handleEnvFiles(originalDir, absolutePath); err != nil {
+	if err := c.handleEnvFiles(repoRoot, absolutePath); err != nil {
 		// Don't fail the command, just warn
 		fmt.Fprintf(c.deps.Stderr, "%s Failed to handle env files: %v\n", coloredWarning(), err)
 	}

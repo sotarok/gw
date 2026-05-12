@@ -18,6 +18,7 @@ import (
 
 const testBranch123 = "123/impl"
 const testBranchFeature = "feature/test"
+const testRepoNameShort = "repo"
 
 type mockGit struct {
 	isGitRepo           bool
@@ -43,6 +44,7 @@ type mockGit struct {
 	GetRepositoryNameFn        func() (string, error)
 	GetRepositoryRootFn        func() (string, error)
 	CreateWorktreeFromBranchFn func(string, string, string) error
+	FindUntrackedEnvFilesFn    func(string) ([]git.EnvFile, error)
 	SanitizeBranchNameForDirFn func(string) string
 }
 
@@ -163,6 +165,9 @@ func (m *mockGit) IsMergedToOrigin(targetBranch string) (bool, error) {
 }
 
 func (m *mockGit) FindUntrackedEnvFiles(repoPath string) ([]git.EnvFile, error) {
+	if m.FindUntrackedEnvFilesFn != nil {
+		return m.FindUntrackedEnvFilesFn(repoPath)
+	}
 	if m.findEnvError != nil {
 		return nil, m.findEnvError
 	}
@@ -980,7 +985,7 @@ func TestCheckoutCommand_Execute_WorktreePathAnchoredToRepoRoot(t *testing.T) {
 		isGitRepo: true,
 		envFiles:  []git.EnvFile{},
 	}
-	mockGitInstance.GetRepositoryNameFn = func() (string, error) { return "repo", nil }
+	mockGitInstance.GetRepositoryNameFn = func() (string, error) { return testRepoNameShort, nil }
 	mockGitInstance.GetRepositoryRootFn = func() (string, error) { return repoRoot, nil }
 	mockGitInstance.BranchExistsFn = func(branch string) (bool, error) { return true, nil }
 	mockGitInstance.CreateWorktreeFromBranchFn = func(worktreePath, sourceBranch, targetBranch string) error {
@@ -1779,6 +1784,118 @@ func TestStartCommand_Execute_ConfigCopyEnvsTrue(t *testing.T) {
 	}
 	if !contains(stdout.String(), "Environment files copied successfully") {
 		t.Error("Expected copy success message")
+	}
+}
+
+func TestStartCommand_Execute_EnvSourceAnchoredToRepoRoot(t *testing.T) {
+	// Regression: env file scan used cwd, so running `gw start` from a sub
+	// directory missed env files at the repo root and copied sub-dir env files
+	// to the worktree root with wrong relative paths.
+	originalDir, _ := os.Getwd()
+	defer os.Chdir(originalDir)
+
+	tempDir, err := os.MkdirTemp("", "gw-test-*")
+	if err != nil {
+		t.Fatalf("Failed to create temp dir: %v", err)
+	}
+	defer os.RemoveAll(tempDir)
+
+	repoRoot := filepath.Join(tempDir, "repo")
+	subDir := filepath.Join(repoRoot, "apps", "admin")
+	if err := os.MkdirAll(subDir, 0755); err != nil {
+		t.Fatalf("Failed to create sub directory: %v", err)
+	}
+	if err := os.Chdir(subDir); err != nil {
+		t.Fatalf("Failed to chdir into sub directory: %v", err)
+	}
+
+	worktreeDir, _ := os.MkdirTemp("", "gw-worktree-*")
+	defer os.RemoveAll(worktreeDir)
+
+	var capturedScanRoot string
+	mockGitInstance := &mockGit{
+		isGitRepo:    true,
+		worktreePath: worktreeDir,
+	}
+	mockGitInstance.GetRepositoryRootFn = func() (string, error) { return repoRoot, nil }
+	mockGitInstance.FindUntrackedEnvFilesFn = func(p string) ([]git.EnvFile, error) {
+		capturedScanRoot = p
+		return nil, nil
+	}
+
+	stdout := &bytes.Buffer{}
+	stderr := &bytes.Buffer{}
+	deps := &Dependencies{
+		Git:    mockGitInstance,
+		UI:     &mockUI{},
+		Detect: &mockDetect{},
+		Stdout: stdout,
+		Stderr: stderr,
+	}
+
+	cmd := NewStartCommandWithConfig(deps, true, true, &config.Config{})
+	if err := cmd.Execute("123", "main"); err != nil {
+		t.Fatalf("Unexpected error: %v", err)
+	}
+
+	if capturedScanRoot != repoRoot {
+		t.Errorf("FindUntrackedEnvFiles called with wrong root.\n  got:  %s\n  want: %s", capturedScanRoot, repoRoot)
+	}
+}
+
+func TestCheckoutCommand_Execute_EnvSourceAnchoredToRepoRoot(t *testing.T) {
+	// Regression: env file scan used cwd, so running `gw checkout` from a sub
+	// directory missed env files at the repo root.
+	originalDir, _ := os.Getwd()
+	defer os.Chdir(originalDir)
+
+	tempDir, err := os.MkdirTemp("", "gw-test-*")
+	if err != nil {
+		t.Fatalf("Failed to create temp dir: %v", err)
+	}
+	defer os.RemoveAll(tempDir)
+
+	repoRoot := filepath.Join(tempDir, "repo")
+	subDir := filepath.Join(repoRoot, "apps", "admin")
+	if err := os.MkdirAll(subDir, 0755); err != nil {
+		t.Fatalf("Failed to create sub directory: %v", err)
+	}
+	if err := os.Chdir(subDir); err != nil {
+		t.Fatalf("Failed to chdir into sub directory: %v", err)
+	}
+
+	var capturedScanRoot string
+	mockGitInstance := &mockGit{
+		isGitRepo: true,
+	}
+	mockGitInstance.GetRepositoryNameFn = func() (string, error) { return testRepoNameShort, nil }
+	mockGitInstance.GetRepositoryRootFn = func() (string, error) { return repoRoot, nil }
+	mockGitInstance.BranchExistsFn = func(string) (bool, error) { return true, nil }
+	mockGitInstance.CreateWorktreeFromBranchFn = func(worktreePath, _, _ string) error {
+		return os.MkdirAll(worktreePath, 0755)
+	}
+	mockGitInstance.FindUntrackedEnvFilesFn = func(p string) ([]git.EnvFile, error) {
+		capturedScanRoot = p
+		return nil, nil
+	}
+
+	stdout := &bytes.Buffer{}
+	stderr := &bytes.Buffer{}
+	deps := &Dependencies{
+		Git:    mockGitInstance,
+		UI:     &mockUI{},
+		Detect: &mockDetect{},
+		Stdout: stdout,
+		Stderr: stderr,
+	}
+
+	cmd := NewCheckoutCommandWithConfig(deps, true, true, &config.Config{})
+	if err := cmd.Execute(testBranchFeature); err != nil {
+		t.Fatalf("Unexpected error: %v", err)
+	}
+
+	if capturedScanRoot != repoRoot {
+		t.Errorf("FindUntrackedEnvFiles called with wrong root.\n  got:  %s\n  want: %s", capturedScanRoot, repoRoot)
 	}
 }
 

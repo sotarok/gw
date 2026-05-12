@@ -64,10 +64,12 @@ func (c *StartCommand) Execute(issueNumber, baseBranch string) error {
 		_ = iterm2.UpdateTabName(c.deps.Stdout, repoName, issueNumber)
 	}
 
-	// Get the original repository root before creating worktree
-	originalDir, err := os.Getwd()
+	// Anchor env file lookup/copy to the repository root so that running start
+	// from a sub directory still scans the whole repo (rather than just the
+	// sub directory) and preserves the relative paths of copied files.
+	envSourceRoot, err := c.deps.Git.GetRepositoryRoot()
 	if err != nil {
-		return fmt.Errorf("failed to get current directory: %w", err)
+		return fmt.Errorf("failed to get repository root: %w", err)
 	}
 
 	// Create the worktree with spinner
@@ -95,7 +97,7 @@ func (c *StartCommand) Execute(issueNumber, baseBranch string) error {
 	}
 
 	// Handle environment files
-	if err := c.handleEnvFiles(originalDir, worktreePath); err != nil {
+	if err := c.handleEnvFiles(envSourceRoot, worktreePath); err != nil {
 		// Don't fail the command, just warn
 		if c.deps.Stderr != nil {
 			fmt.Fprintf(c.deps.Stderr, "%s Failed to handle env files: %v\n", coloredWarning(), err)
