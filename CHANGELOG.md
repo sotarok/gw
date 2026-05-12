@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.8.2] - 2026-05-13
+
+### Fixed
+- `gw start` / `gw checkout` now scan for untracked env files from the repository root, so running them from a sub directory no longer misses repo-root env files or copies sub-directory env files to the wrong location in the new worktree.
+- `gw shell-integration --print-path` now resolves the expected worktree directory against the repository root, so it no longer fails to locate the worktree when invoked from a sub directory of the repo.
+
 ## [0.8.1] - 2026-05-11
 
 ### Fixed
