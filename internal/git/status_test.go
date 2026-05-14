@@ -78,7 +78,7 @@ func TestHasUncommittedChanges(t *testing.T) {
 		}
 
 		// Now check for uncommitted changes
-		hasChanges, err := HasUncommittedChanges()
+		hasChanges, err := HasUncommittedChanges(tempDir)
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
@@ -127,7 +127,7 @@ func TestHasUncommittedChanges(t *testing.T) {
 		}
 
 		// Check for uncommitted changes
-		hasChanges, err := HasUncommittedChanges()
+		hasChanges, err := HasUncommittedChanges(tempDir)
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
@@ -166,7 +166,7 @@ func TestHasUncommittedChanges(t *testing.T) {
 		}
 
 		// Check for uncommitted changes
-		hasChanges, err := HasUncommittedChanges()
+		hasChanges, err := HasUncommittedChanges(tempDir)
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
@@ -334,7 +334,8 @@ func TestHasUnpushedCommits(t *testing.T) {
 		}
 
 		// Check for unpushed commits
-		hasUnpushed, err := HasUnpushedCommits()
+		branch, _ := GetCurrentBranch()
+		hasUnpushed, err := HasUnpushedCommits(tempDir, branch)
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
@@ -418,7 +419,8 @@ func TestHasUnpushedCommits(t *testing.T) {
 		}
 
 		// Check for unpushed commits
-		hasUnpushed, err := HasUnpushedCommits()
+		branch, _ := GetCurrentBranch()
+		hasUnpushed, err := HasUnpushedCommits(tempDir, branch)
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
@@ -468,7 +470,8 @@ func TestHasUnpushedCommits(t *testing.T) {
 		}
 
 		// Check for unpushed commits - should return true for branch with no upstream
-		hasUnpushed, err := HasUnpushedCommits()
+		branch, _ := GetCurrentBranch()
+		hasUnpushed, err := HasUnpushedCommits(tempDir, branch)
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
@@ -603,7 +606,8 @@ func TestHasUnpushedCommits(t *testing.T) {
 
 		// Now check for unpushed commits
 		// Should return false because the branch is merged even though upstream is gone
-		hasUnpushed, err := HasUnpushedCommits()
+		branch, _ := GetCurrentBranch()
+		hasUnpushed, err := HasUnpushedCommits(tempDir, branch)
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
@@ -721,7 +725,8 @@ func TestIsMergedToOrigin(t *testing.T) {
 		}
 
 		// Check if merged
-		isMerged, err := IsMergedToOrigin("main")
+		branch, _ := GetCurrentBranch()
+		isMerged, err := IsMergedToOrigin(tempDir, branch, "main")
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
@@ -814,7 +819,8 @@ func TestIsMergedToOrigin(t *testing.T) {
 		}
 
 		// Check if merged (should be false)
-		isMerged, err := IsMergedToOrigin("main")
+		branch, _ := GetCurrentBranch()
+		isMerged, err := IsMergedToOrigin(tempDir, branch, "main")
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}

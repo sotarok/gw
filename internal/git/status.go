@@ -6,9 +6,12 @@ import (
 	"strings"
 )
 
-// HasUncommittedChanges checks if there are uncommitted changes in the current worktree
-func HasUncommittedChanges() (bool, error) {
-	cmd := exec.Command("git", "status", "--porcelain")
+// HasUncommittedChanges checks if the worktree at worktreePath has any
+// uncommitted changes. The function uses `git -C` instead of relying on the
+// process cwd so callers can run multiple checks against different worktrees
+// concurrently without serializing on os.Chdir.
+func HasUncommittedChanges(worktreePath string) (bool, error) {
+	cmd := exec.Command("git", "-C", worktreePath, "status", "--porcelain")
 	output, err := cmd.Output()
 	if err != nil {
 		return false, fmt.Errorf("failed to check git status: %w", err)
@@ -17,20 +20,19 @@ func HasUncommittedChanges() (bool, error) {
 	return strings.TrimSpace(string(output)) != "", nil
 }
 
-// HasUnpushedCommits checks if there are unpushed commits in the current branch
-func HasUnpushedCommits() (bool, error) {
-	branch, err := GetCurrentBranch()
-	if err != nil {
-		return false, err
-	}
-
+// HasUnpushedCommits checks whether currentBranch in the worktree at
+// worktreePath has commits that haven't been pushed to its upstream. When the
+// branch has no upstream configured, the function falls back to checking
+// whether it is already merged to origin/main (covering the common
+// "PR merged then remote branch auto-deleted" case).
+func HasUnpushedCommits(worktreePath, currentBranch string) (bool, error) {
 	// Check if the branch has an upstream
-	cmd := exec.Command("git", "rev-parse", "--abbrev-ref", branch+"@{upstream}")
+	cmd := exec.Command("git", "-C", worktreePath, "rev-parse", "--abbrev-ref", currentBranch+"@{upstream}")
 	if err := cmd.Run(); err != nil {
-		// No upstream branch configured
-		// Check if the branch is already merged to main/master
-		// This handles the case where the branch was merged and remote was deleted
-		merged, mergeErr := IsMergedToOrigin("main")
+		// No upstream branch configured.
+		// Check if the branch is already merged to main/master. This handles
+		// the case where the branch was merged and the remote was deleted.
+		merged, mergeErr := IsMergedToOrigin(worktreePath, currentBranch, "main")
 		if mergeErr == nil && merged {
 			// Branch is merged, so no unpushed commits
 			return false, nil
@@ -42,7 +44,7 @@ func HasUnpushedCommits() (bool, error) {
 	}
 
 	// Check if there are commits ahead of upstream
-	cmd = exec.Command("git", "rev-list", "--count", branch+"@{upstream}.."+branch)
+	cmd = exec.Command("git", "-C", worktreePath, "rev-list", "--count", currentBranch+"@{upstream}.."+currentBranch)
 	output, err := cmd.Output()
 	if err != nil {
 		return false, fmt.Errorf("failed to check unpushed commits: %w", err)
@@ -52,19 +54,16 @@ func HasUnpushedCommits() (bool, error) {
 	return count != "0", nil
 }
 
-// IsMergedToOrigin checks if the current branch is merged to origin/<targetBranch>.
+// IsMergedToOrigin checks if currentBranch in the worktree at worktreePath is
+// merged into origin/<targetBranch>.
+//
 // This function does NOT fetch from origin — callers are expected to have
 // already updated remote-tracking refs (e.g. via `fetchIfConfigured`) when a
 // fresh view is required. Avoiding the internal fetch keeps `gw clean` from
 // hitting the network once per worktree.
-func IsMergedToOrigin(targetBranch string) (bool, error) {
-	currentBranch, err := GetCurrentBranch()
-	if err != nil {
-		return false, err
-	}
-
+func IsMergedToOrigin(worktreePath, currentBranch, targetBranch string) (bool, error) {
 	// Check if the current branch is merged into origin/targetBranch
-	cmd := exec.Command("git", "branch", "-r", "--contains", currentBranch)
+	cmd := exec.Command("git", "-C", worktreePath, "branch", "-r", "--contains", currentBranch)
 	output, err := cmd.Output()
 	if err != nil {
 		return false, fmt.Errorf("failed to check merge status: %w", err)

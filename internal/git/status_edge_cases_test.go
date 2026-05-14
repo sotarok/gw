@@ -22,7 +22,7 @@ func TestHasUncommittedChanges_EdgeCases(t *testing.T) {
 		os.Chdir(tmpDir)
 
 		// Should return error when git status fails
-		_, err = HasUncommittedChanges()
+		_, err = HasUncommittedChanges(tmpDir)
 		if err == nil {
 			t.Error("Expected error when running git status outside repository")
 		}
@@ -30,26 +30,6 @@ func TestHasUncommittedChanges_EdgeCases(t *testing.T) {
 }
 
 func TestHasUnpushedCommits_EdgeCases(t *testing.T) {
-	t.Run("GetCurrentBranch fails", func(t *testing.T) {
-		// Create a directory that's not a git repository
-		tmpDir, err := os.MkdirTemp("", "gw-test-nogit-*")
-		if err != nil {
-			t.Fatalf("Failed to create temp dir: %v", err)
-		}
-		defer os.RemoveAll(tmpDir)
-
-		// Change to non-git directory
-		originalDir, _ := os.Getwd()
-		defer os.Chdir(originalDir)
-		os.Chdir(tmpDir)
-
-		// Should return error when GetCurrentBranch fails
-		_, err = HasUnpushedCommits()
-		if err == nil {
-			t.Error("Expected error when GetCurrentBranch fails")
-		}
-	})
-
 	t.Run("rev-list command fails", func(t *testing.T) {
 		// Create temporary directory
 		tmpDir, err := os.MkdirTemp("", "gw-test-*")
@@ -88,7 +68,7 @@ func TestHasUnpushedCommits_EdgeCases(t *testing.T) {
 
 		// The command might not fail in all cases
 		// Just check that it doesn't panic
-		_, _ = HasUnpushedCommits()
+		_, _ = HasUnpushedCommits(tmpDir, "test-branch")
 		// Note: The behavior varies based on git version and configuration
 	})
 }
@@ -121,7 +101,7 @@ func TestIsMergedToOrigin_EdgeCases(t *testing.T) {
 		cmd.Run()
 
 		// Should fail when branch command fails
-		_, err = IsMergedToOrigin("main")
+		_, err = IsMergedToOrigin(tmpDir, "main", "main")
 		// The error might come from GetCurrentBranch or the fetch, not the branch command
 		// in a bare repository, so we check if there's any error
 		if err == nil {
@@ -180,7 +160,7 @@ func TestIsMergedToOrigin_EdgeCases(t *testing.T) {
 		os.Chdir(tmpDir)
 
 		// Should return false when branch is not merged
-		merged, err := IsMergedToOrigin(defaultBranch)
+		merged, err := IsMergedToOrigin(tmpDir, "feature-branch", defaultBranch)
 		if err != nil {
 			t.Fatalf("IsMergedToOrigin failed: %v", err)
 		}

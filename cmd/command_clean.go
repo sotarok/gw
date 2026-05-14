@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 
 	"github.com/sotarok/gw/internal/config"
 	"github.com/sotarok/gw/internal/git"
@@ -63,24 +64,29 @@ func (c *CleanCommand) Execute() error {
 		return fmt.Errorf("failed to list worktrees: %w", err)
 	}
 
-	// Filter out the main worktree and check each worktree with spinner
-	statuses := make([]*WorktreeStatus, 0, len(worktrees))
-	originalDir, err := os.Getwd()
-	if err != nil {
-		return fmt.Errorf("failed to get current directory: %w", err)
-	}
-
-	sp := spinner.New("Checking worktrees...", c.deps.Stdout)
-	sp.Start()
+	// Filter out the main worktree, then check the remaining worktrees in
+	// parallel. The checks use `git -C <path>` so they don't share cwd and
+	// safely run concurrently.
+	candidates := make([]git.WorktreeInfo, 0, len(worktrees))
 	for _, wt := range worktrees {
-		// Skip the main worktree (no branch or main/master branch)
 		if wt.Branch == "" || wt.Branch == defaultBaseBranch || wt.Branch == "master" {
 			continue
 		}
-
-		status := c.checkWorktree(&wt, originalDir)
-		statuses = append(statuses, status)
+		candidates = append(candidates, wt)
 	}
+
+	statuses := make([]*WorktreeStatus, len(candidates))
+	sp := spinner.New("Checking worktrees...", c.deps.Stdout)
+	sp.Start()
+	var wg sync.WaitGroup
+	wg.Add(len(candidates))
+	for i := range candidates {
+		go func(idx int) {
+			defer wg.Done()
+			statuses[idx] = c.checkWorktree(&candidates[idx])
+		}(i)
+	}
+	wg.Wait()
 	sp.Stop()
 
 	// Display results
@@ -129,31 +135,25 @@ func (c *CleanCommand) Execute() error {
 	return c.removeWorktrees(statuses)
 }
 
-// checkWorktree checks if a worktree can be safely removed
-func (c *CleanCommand) checkWorktree(info *git.WorktreeInfo, originalDir string) *WorktreeStatus {
+// checkWorktree checks if a worktree can be safely removed. Uses `git -C` so
+// it never mutates the process cwd, allowing the caller to run multiple checks
+// concurrently.
+func (c *CleanCommand) checkWorktree(info *git.WorktreeInfo) *WorktreeStatus {
 	status := &WorktreeStatus{
 		Info:      info,
 		CanRemove: true,
 		Warnings:  []string{},
 	}
 
-	// Change to the worktree directory to check status
-	if err := os.Chdir(info.Path); err != nil {
-		status.Warnings = append(status.Warnings, fmt.Sprintf("Could not access directory: %v", err))
-		status.CanRemove = false
-		return status
-	}
-
-	// Check 1: Uncommitted changes
-	hasChanges, err := c.deps.Git.HasUncommittedChanges()
+	// Check 1: Uncommitted changes (also surfaces a broken/missing worktree).
+	hasChanges, err := c.deps.Git.HasUncommittedChanges(info.Path)
 	if err != nil {
-		// Check if this is a broken worktree (exit status 128 typically means git repository is invalid)
+		// exit status 128 / "not a git repository" indicate the worktree is
+		// fundamentally broken — short-circuit and skip the remaining checks.
 		errMsg := err.Error()
 		if strings.Contains(errMsg, "exit status 128") || strings.Contains(errMsg, "not a git repository") {
 			status.Warnings = append(status.Warnings, "invalid git repository")
 			status.CanRemove = false
-			// Don't run further checks if the worktree is fundamentally broken
-			_ = os.Chdir(originalDir)
 			return status
 		}
 		status.Warnings = append(status.Warnings, fmt.Sprintf("Could not check uncommitted changes: %v", err))
@@ -164,7 +164,7 @@ func (c *CleanCommand) checkWorktree(info *git.WorktreeInfo, originalDir string)
 	}
 
 	// Check 2: Unpushed commits
-	hasUnpushed, err := c.deps.Git.HasUnpushedCommits()
+	hasUnpushed, err := c.deps.Git.HasUnpushedCommits(info.Path, info.Branch)
 	if err != nil {
 		status.Warnings = append(status.Warnings, fmt.Sprintf("Could not check unpushed commits: %v", err))
 		status.CanRemove = false
@@ -174,7 +174,7 @@ func (c *CleanCommand) checkWorktree(info *git.WorktreeInfo, originalDir string)
 	}
 
 	// Check 3: Merge status with origin/main
-	isMerged, err := c.deps.Git.IsMergedToOrigin("main")
+	isMerged, err := c.deps.Git.IsMergedToOrigin(info.Path, info.Branch, "main")
 	if err != nil {
 		status.Warnings = append(status.Warnings, fmt.Sprintf("Could not check merge status: %v", err))
 		status.CanRemove = false
@@ -182,9 +182,6 @@ func (c *CleanCommand) checkWorktree(info *git.WorktreeInfo, originalDir string)
 		status.Warnings = append(status.Warnings, "not merged")
 		status.CanRemove = false
 	}
-
-	// Change back to original directory
-	_ = os.Chdir(originalDir)
 
 	return status
 }

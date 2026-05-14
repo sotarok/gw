@@ -23,9 +23,9 @@ type Interface interface {
 	DeleteBranch(branch string) error
 
 	// Status operations
-	HasUncommittedChanges() (bool, error)
-	HasUnpushedCommits() (bool, error)
-	IsMergedToOrigin(targetBranch string) (bool, error)
+	HasUncommittedChanges(worktreePath string) (bool, error)
+	HasUnpushedCommits(worktreePath, currentBranch string) (bool, error)
+	IsMergedToOrigin(worktreePath, currentBranch, targetBranch string) (bool, error)
 
 	// Environment file operations
 	FindUntrackedEnvFiles(repoPath string) ([]EnvFile, error)
@@ -107,16 +107,16 @@ func (c *DefaultClient) DeleteBranch(branch string) error {
 }
 
 // Status operations
-func (c *DefaultClient) HasUncommittedChanges() (bool, error) {
-	return HasUncommittedChanges()
+func (c *DefaultClient) HasUncommittedChanges(worktreePath string) (bool, error) {
+	return HasUncommittedChanges(worktreePath)
 }
 
-func (c *DefaultClient) HasUnpushedCommits() (bool, error) {
-	return HasUnpushedCommits()
+func (c *DefaultClient) HasUnpushedCommits(worktreePath, currentBranch string) (bool, error) {
+	return HasUnpushedCommits(worktreePath, currentBranch)
 }
 
-func (c *DefaultClient) IsMergedToOrigin(targetBranch string) (bool, error) {
-	return IsMergedToOrigin(targetBranch)
+func (c *DefaultClient) IsMergedToOrigin(worktreePath, currentBranch, targetBranch string) (bool, error) {
+	return IsMergedToOrigin(worktreePath, currentBranch, targetBranch)
 }
 
 // Environment file operations

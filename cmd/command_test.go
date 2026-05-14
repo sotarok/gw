@@ -30,14 +30,20 @@ type mockGit struct {
 	copyEnvError        error
 
 	// Override functions for custom behavior
-	FetchAllFn                 func() error
-	BranchExistsFn             func(string) (bool, error)
-	ListAllBranchesFn          func() ([]string, error)
-	GetCurrentBranchFn         func() (string, error)
-	GetWorktreeForIssueFn      func(string) (*git.WorktreeInfo, error)
-	HasUncommittedChangesFn    func() (bool, error)
-	HasUnpushedCommitsFn       func() (bool, error)
-	IsMergedToOriginFn         func(string) (bool, error)
+	FetchAllFn              func() error
+	BranchExistsFn          func(string) (bool, error)
+	ListAllBranchesFn       func() ([]string, error)
+	GetCurrentBranchFn      func() (string, error)
+	GetWorktreeForIssueFn   func(string) (*git.WorktreeInfo, error)
+	HasUncommittedChangesFn func() (bool, error)
+	HasUnpushedCommitsFn    func() (bool, error)
+	IsMergedToOriginFn      func(string) (bool, error)
+	// "*AtFn" callbacks receive the same args as the real Git interface
+	// methods. Use them when a test needs to vary results by worktree path or
+	// branch (the simpler Fn forms above still work for fixed return values).
+	HasUncommittedChangesAtFn  func(worktreePath string) (bool, error)
+	HasUnpushedCommitsAtFn     func(worktreePath, currentBranch string) (bool, error)
+	IsMergedToOriginAtFn       func(worktreePath, currentBranch, targetBranch string) (bool, error)
 	DeleteBranchFn             func(string) error
 	ListWorktreesFn            func() ([]git.WorktreeInfo, error)
 	RemoveWorktreeByPathFn     func(string) error
@@ -142,21 +148,30 @@ func (m *mockGit) ListAllBranches() ([]string, error) {
 	return []string{defaultBaseBranch, "feature"}, nil
 }
 
-func (m *mockGit) HasUncommittedChanges() (bool, error) {
+func (m *mockGit) HasUncommittedChanges(worktreePath string) (bool, error) {
+	if m.HasUncommittedChangesAtFn != nil {
+		return m.HasUncommittedChangesAtFn(worktreePath)
+	}
 	if m.HasUncommittedChangesFn != nil {
 		return m.HasUncommittedChangesFn()
 	}
 	return false, nil
 }
 
-func (m *mockGit) HasUnpushedCommits() (bool, error) {
+func (m *mockGit) HasUnpushedCommits(worktreePath, currentBranch string) (bool, error) {
+	if m.HasUnpushedCommitsAtFn != nil {
+		return m.HasUnpushedCommitsAtFn(worktreePath, currentBranch)
+	}
 	if m.HasUnpushedCommitsFn != nil {
 		return m.HasUnpushedCommitsFn()
 	}
 	return false, nil
 }
 
-func (m *mockGit) IsMergedToOrigin(targetBranch string) (bool, error) {
+func (m *mockGit) IsMergedToOrigin(worktreePath, currentBranch, targetBranch string) (bool, error) {
+	if m.IsMergedToOriginAtFn != nil {
+		return m.IsMergedToOriginAtFn(worktreePath, currentBranch, targetBranch)
+	}
 	if m.IsMergedToOriginFn != nil {
 		return m.IsMergedToOriginFn(targetBranch)
 	}
@@ -339,7 +354,7 @@ func TestEndCommand_PerformSafetyChecks(t *testing.T) {
 			}
 
 			cmd := NewEndCommand(deps, false, true)
-			warnings := cmd.performSafetyChecks()
+			warnings := cmd.performSafetyChecks("/test/worktree", "feature/test")
 
 			// Check warnings count
 			if len(warnings) != len(tt.expectedWarnings) {
@@ -1925,19 +1940,6 @@ func TestEndCommand_Execute(t *testing.T) {
 			expectedError: "worktree not found for issue 123",
 		},
 		{
-			name:        "error changing to worktree directory",
-			issueNumber: "123",
-			mockSetup: func() (*mockGit, *mockUI, *mockDetect, func()) {
-				mockGitInstance := &mockGit{}
-				mockGitInstance.GetWorktreeForIssueFn = func(issueNumber string) (*git.WorktreeInfo, error) {
-					// Return a non-existent path
-					return &git.WorktreeInfo{Path: "/nonexistent/path"}, nil
-				}
-				return mockGitInstance, &mockUI{}, &mockDetect{}, func() {}
-			},
-			expectedError: "failed to change to worktree directory",
-		},
-		{
 			name:        "successful removal without warnings",
 			issueNumber: "123",
 			mockSetup: func() (*mockGit, *mockUI, *mockDetect, func()) {
@@ -2593,10 +2595,8 @@ func TestCleanCommand_Execute_MixedRemovability(t *testing.T) {
 				{Path: wt3, Branch: "789/impl"},    // Not merged
 			}, nil
 		},
-		HasUncommittedChangesFn: func() (bool, error) {
-			// Check current directory to determine which worktree we're checking
-			cwd, _ := os.Getwd()
-			if strings.Contains(cwd, "wt2") {
+		HasUncommittedChangesAtFn: func(worktreePath string) (bool, error) {
+			if strings.Contains(worktreePath, "wt2") {
 				return true, nil
 			}
 			return false, nil
@@ -2604,10 +2604,8 @@ func TestCleanCommand_Execute_MixedRemovability(t *testing.T) {
 		HasUnpushedCommitsFn: func() (bool, error) {
 			return false, nil
 		},
-		IsMergedToOriginFn: func(branch string) (bool, error) {
-			// Check current directory to determine which worktree we're checking
-			cwd, _ := os.Getwd()
-			if strings.Contains(cwd, "wt3") {
+		IsMergedToOriginAtFn: func(worktreePath, _, _ string) (bool, error) {
+			if strings.Contains(worktreePath, "wt3") {
 				return false, nil
 			}
 			return true, nil
@@ -3217,7 +3215,7 @@ func TestEndCommand_PerformSafetyChecks_MergeStatusError(t *testing.T) {
 	}
 
 	cmd := NewEndCommand(deps, false, true)
-	warnings := cmd.performSafetyChecks()
+	warnings := cmd.performSafetyChecks("/test/worktree", "feature/test")
 
 	if len(warnings) != 0 {
 		t.Errorf("Expected 0 warnings on error, got %d: %v", len(warnings), warnings)
@@ -3296,34 +3294,6 @@ func TestCleanCommand_Execute_ConfirmPromptError(t *testing.T) {
 	}
 }
 
-func TestCleanCommand_CheckWorktree_ChdirError(t *testing.T) {
-	originalDir, _ := os.Getwd()
-	defer os.Chdir(originalDir)
-
-	deps := &Dependencies{
-		Git:    &mockGit{},
-		UI:     &mockUI{},
-		Stdout: &bytes.Buffer{},
-		Stderr: &bytes.Buffer{},
-	}
-
-	cmd := NewCleanCommandWithConfig(deps, false, false, true, &config.Config{})
-
-	info := &git.WorktreeInfo{
-		Path:   "/nonexistent/path/that/does/not/exist",
-		Branch: "test/impl",
-	}
-
-	status := cmd.checkWorktree(info, originalDir)
-
-	if status.CanRemove {
-		t.Error("Expected CanRemove to be false for inaccessible directory")
-	}
-	if len(status.Warnings) == 0 || !strings.Contains(status.Warnings[0], "Could not access directory") {
-		t.Errorf("Expected 'Could not access directory' warning, got: %v", status.Warnings)
-	}
-}
-
 func TestCleanCommand_CheckWorktree_UnpushedCommitsError(t *testing.T) {
 	originalDir, _ := os.Getwd()
 	defer os.Chdir(originalDir)
@@ -3350,7 +3320,7 @@ func TestCleanCommand_CheckWorktree_UnpushedCommitsError(t *testing.T) {
 	cmd := NewCleanCommandWithConfig(deps, false, false, true, &config.Config{})
 
 	info := &git.WorktreeInfo{Path: wt1, Branch: "test/impl"}
-	status := cmd.checkWorktree(info, originalDir)
+	status := cmd.checkWorktree(info)
 
 	if status.CanRemove {
 		t.Error("Expected CanRemove to be false when unpushed check errors")
@@ -3392,7 +3362,7 @@ func TestCleanCommand_CheckWorktree_MergeStatusError(t *testing.T) {
 	cmd := NewCleanCommandWithConfig(deps, false, false, true, &config.Config{})
 
 	info := &git.WorktreeInfo{Path: wt1, Branch: "test/impl"}
-	status := cmd.checkWorktree(info, originalDir)
+	status := cmd.checkWorktree(info)
 
 	if status.CanRemove {
 		t.Error("Expected CanRemove to be false when merge check errors")
@@ -3434,7 +3404,7 @@ func TestCleanCommand_CheckWorktree_UncommittedChangesNon128Error(t *testing.T) 
 	cmd := NewCleanCommandWithConfig(deps, false, false, true, &config.Config{})
 
 	info := &git.WorktreeInfo{Path: wt1, Branch: "test/impl"}
-	status := cmd.checkWorktree(info, originalDir)
+	status := cmd.checkWorktree(info)
 
 	if status.CanRemove {
 		t.Error("Expected CanRemove to be false when uncommitted check errors")
@@ -3474,7 +3444,7 @@ func TestCleanCommand_CheckWorktree_UnpushedCommitsTrue(t *testing.T) {
 	cmd := NewCleanCommandWithConfig(deps, false, false, true, &config.Config{})
 
 	info := &git.WorktreeInfo{Path: wt1, Branch: "test/impl"}
-	status := cmd.checkWorktree(info, originalDir)
+	status := cmd.checkWorktree(info)
 
 	if status.CanRemove {
 		t.Error("Expected CanRemove to be false when there are unpushed commits")
@@ -3514,7 +3484,7 @@ func TestCleanCommand_CheckWorktree_NotMerged(t *testing.T) {
 	cmd := NewCleanCommandWithConfig(deps, false, false, true, &config.Config{})
 
 	info := &git.WorktreeInfo{Path: wt1, Branch: "test/impl"}
-	status := cmd.checkWorktree(info, originalDir)
+	status := cmd.checkWorktree(info)
 
 	if status.CanRemove {
 		t.Error("Expected CanRemove to be false when not merged")

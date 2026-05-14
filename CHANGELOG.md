@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Performance
 - `gw end` and `gw clean` no longer re-fetch `origin/<main>` inside the merge-status safety check. The fetch is now done once up-front by `fetch_before_command` (and skipped by `--no-fetch`), so `gw clean` over N worktrees no longer triggers N redundant network round-trips.
+- `gw clean` now runs safety checks for all worktrees in parallel, and `gw end` runs its three safety checks (uncommitted changes / unpushed commits / merge status) concurrently. Both rely on `git -C <path>` instead of `os.Chdir`, so per-worktree work no longer serializes on the process cwd.
 
 ### Fixed
 - `--no-fetch` is now honored end-to-end for the merge-status check (previously `IsMergedToOrigin` always fetched internally regardless of the flag).

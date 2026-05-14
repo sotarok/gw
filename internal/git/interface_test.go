@@ -257,7 +257,7 @@ func TestDefaultClient_StatusOperations(t *testing.T) {
 	client := NewDefaultClient()
 
 	// Test HasUncommittedChanges - should be false for clean repo
-	hasChanges, err := client.HasUncommittedChanges()
+	hasChanges, err := client.HasUncommittedChanges(tempDir)
 	if err != nil {
 		t.Fatalf("HasUncommittedChanges() failed: %v", err)
 	}
@@ -271,7 +271,7 @@ func TestDefaultClient_StatusOperations(t *testing.T) {
 	}
 
 	// Test HasUncommittedChanges - should be true with untracked file
-	hasChanges, err = client.HasUncommittedChanges()
+	hasChanges, err = client.HasUncommittedChanges(tempDir)
 	if err != nil {
 		t.Fatalf("HasUncommittedChanges() failed: %v", err)
 	}
@@ -283,7 +283,8 @@ func TestDefaultClient_StatusOperations(t *testing.T) {
 	os.Remove("test.txt")
 
 	// Test HasUnpushedCommits - should return true (no upstream)
-	hasUnpushed, err := client.HasUnpushedCommits()
+	branch, _ := GetCurrentBranch()
+	hasUnpushed, err := client.HasUnpushedCommits(tempDir, branch)
 	if err != nil {
 		t.Fatalf("HasUnpushedCommits() failed: %v", err)
 	}
@@ -491,7 +492,7 @@ func TestDefaultClient_IsMergedToOrigin(t *testing.T) {
 	}
 
 	// The method should at least not panic
-	_, _ = client.IsMergedToOrigin("main")
+	_, _ = client.IsMergedToOrigin(tempDir, "main", "main")
 }
 
 func TestDefaultClient_CreateWorktreeFromBranch(t *testing.T) {

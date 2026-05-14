@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 
 	"github.com/sotarok/gw/internal/config"
 	"github.com/sotarok/gw/internal/hook"
@@ -83,28 +84,20 @@ func (c *EndCommand) Execute(issueNumber string) error {
 	// Fetch from remotes if configured
 	fetchIfConfigured(c.deps, c.config, c.noFetch)
 
-	// Change to the worktree directory to check status
-	originalDir, err := os.Getwd()
-	if err != nil {
-		return fmt.Errorf("failed to get current directory: %w", err)
-	}
-
-	// Capture repo name before chdir into the worktree, since GetRepositoryName
-	// returns the worktree directory name when called from inside a worktree.
+	// Capture repo name from the current working directory, before any chdir
+	// happens, since GetRepositoryName returns the worktree directory name when
+	// called from inside a worktree (the hook expects the original repo name).
 	var hookRepoName string
 	if c.config != nil && c.config.PreEndHook != "" {
 		hookRepoName, _ = c.deps.Git.GetRepositoryName()
 	}
 
-	if err := os.Chdir(worktreePath); err != nil {
-		return fmt.Errorf("failed to change to worktree directory: %w", err)
-	}
-
-	// Perform safety checks unless forced
+	// Perform safety checks unless forced. Checks operate via `git -C <path>`
+	// so no chdir is needed and the three checks can run in parallel.
 	if !c.force {
 		sp := spinner.New(fmt.Sprintf("Checking worktree for issue #%s...", issueNumber), c.deps.Stdout)
 		sp.Start()
-		warnings := c.performSafetyChecks()
+		warnings := c.performSafetyChecks(worktreePath, branchName)
 		sp.Stop()
 
 		// If there are warnings, ask for confirmation
@@ -117,36 +110,20 @@ func (c *EndCommand) Execute(issueNumber string) error {
 			fmt.Fprintf(c.deps.Stdout, "\nDo you want to continue?")
 			confirmed, err := c.deps.UI.ConfirmPrompt(" (y/N): ")
 			if err != nil {
-				_ = os.Chdir(originalDir)
 				return fmt.Errorf("failed to read response: %w", err)
 			}
 
 			if !confirmed {
 				fmt.Fprintf(c.deps.Stdout, "Aborted.\n")
-				_ = os.Chdir(originalDir)
 				return nil
 			}
 		}
 	}
 
-	// Execute pre-end hook while still inside the worktree directory, so the
-	// hook can operate on files that are about to disappear (e.g. docker compose).
+	// Execute pre-end hook with cwd set to the worktree so the hook can operate
+	// on files that are about to disappear (e.g. docker compose).
 	if c.config != nil && c.config.PreEndHook != "" {
-		absWorktreePath, _ := filepath.Abs(worktreePath)
-		hookEnv := hook.Env{
-			WorktreePath: absWorktreePath,
-			BranchName:   branchName,
-			RepoName:     hookRepoName,
-			Command:      "end",
-		}
-		if err := hook.Execute(c.config.PreEndHook, hookEnv, c.deps.Stdout, c.deps.Stderr); err != nil {
-			fmt.Fprintf(c.deps.Stderr, "%s Pre-end hook failed: %v\n", coloredWarning(), err)
-		}
-	}
-
-	// Change back to original directory before removing
-	if err := os.Chdir(originalDir); err != nil {
-		return fmt.Errorf("failed to change back to original directory: %w", err)
+		c.runPreEndHook(worktreePath, branchName, hookRepoName)
 	}
 
 	// Remove the worktree with spinner
@@ -186,32 +163,83 @@ func (c *EndCommand) Execute(issueNumber string) error {
 	return nil
 }
 
-func (c *EndCommand) performSafetyChecks() []string {
+// runPreEndHook runs pre_end_hook with the worktree as cwd, then restores the
+// original directory regardless of hook outcome. Hook failures are warnings.
+func (c *EndCommand) runPreEndHook(worktreePath, branchName, repoName string) {
+	originalDir, err := os.Getwd()
+	if err != nil {
+		fmt.Fprintf(c.deps.Stderr, "%s Could not capture cwd for pre-end hook: %v\n", coloredWarning(), err)
+		return
+	}
+	if err := os.Chdir(worktreePath); err != nil {
+		fmt.Fprintf(c.deps.Stderr, "%s Could not enter %s to run pre-end hook: %v\n", coloredWarning(), worktreePath, err)
+		return
+	}
+	defer func() { _ = os.Chdir(originalDir) }()
+
+	absWorktreePath, _ := filepath.Abs(worktreePath)
+	hookEnv := hook.Env{
+		WorktreePath: absWorktreePath,
+		BranchName:   branchName,
+		RepoName:     repoName,
+		Command:      "end",
+	}
+	if err := hook.Execute(c.config.PreEndHook, hookEnv, c.deps.Stdout, c.deps.Stderr); err != nil {
+		fmt.Fprintf(c.deps.Stderr, "%s Pre-end hook failed: %v\n", coloredWarning(), err)
+	}
+}
+
+// performSafetyChecks runs the three safety checks (uncommitted changes,
+// unpushed commits, merge status) for the worktree at worktreePath in
+// parallel. The checks are independent and now use `git -C <path>` instead of
+// relying on cwd, so they can safely overlap.
+func (c *EndCommand) performSafetyChecks(worktreePath, branchName string) []string {
+	type result struct {
+		warning string
+		errMsg  string // empty when no stderr message to emit
+	}
+
+	var wg sync.WaitGroup
+	results := make([]result, 3)
+
+	wg.Add(3)
+	go func() {
+		defer wg.Done()
+		hasChanges, err := c.deps.Git.HasUncommittedChanges(worktreePath)
+		if err != nil {
+			results[0].errMsg = fmt.Sprintf("Could not check for uncommitted changes: %v", err)
+		} else if hasChanges {
+			results[0].warning = "You have uncommitted changes"
+		}
+	}()
+	go func() {
+		defer wg.Done()
+		hasUnpushed, err := c.deps.Git.HasUnpushedCommits(worktreePath, branchName)
+		if err != nil {
+			results[1].errMsg = fmt.Sprintf("Could not check for unpushed commits: %v", err)
+		} else if hasUnpushed {
+			results[1].warning = "You have unpushed commits"
+		}
+	}()
+	go func() {
+		defer wg.Done()
+		isMerged, err := c.deps.Git.IsMergedToOrigin(worktreePath, branchName, "main")
+		if err != nil {
+			results[2].errMsg = fmt.Sprintf("Could not check merge status: %v", err)
+		} else if !isMerged {
+			results[2].warning = "Branch is not merged to origin/main"
+		}
+	}()
+	wg.Wait()
+
 	var warnings []string
-
-	// Check for uncommitted changes
-	hasChanges, err := c.deps.Git.HasUncommittedChanges()
-	if err != nil {
-		fmt.Fprintf(c.deps.Stderr, "%s Warning: Could not check for uncommitted changes: %v\n", coloredWarning(), err)
-	} else if hasChanges {
-		warnings = append(warnings, "You have uncommitted changes")
+	for _, r := range results {
+		if r.errMsg != "" {
+			fmt.Fprintf(c.deps.Stderr, "%s Warning: %s\n", coloredWarning(), r.errMsg)
+		}
+		if r.warning != "" {
+			warnings = append(warnings, r.warning)
+		}
 	}
-
-	// Check for unpushed commits
-	hasUnpushed, err := c.deps.Git.HasUnpushedCommits()
-	if err != nil {
-		fmt.Fprintf(c.deps.Stderr, "%s Warning: Could not check for unpushed commits: %v\n", coloredWarning(), err)
-	} else if hasUnpushed {
-		warnings = append(warnings, "You have unpushed commits")
-	}
-
-	// Check if merged to origin
-	isMerged, err := c.deps.Git.IsMergedToOrigin("main")
-	if err != nil {
-		fmt.Fprintf(c.deps.Stderr, "%s Warning: Could not check merge status: %v\n", coloredWarning(), err)
-	} else if !isMerged {
-		warnings = append(warnings, "Branch is not merged to origin/main")
-	}
-
 	return warnings
 }
