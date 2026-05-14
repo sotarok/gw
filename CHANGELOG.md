@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Performance
+- `gw end` and `gw clean` no longer re-fetch `origin/<main>` inside the merge-status safety check. The fetch is now done once up-front by `fetch_before_command` (and skipped by `--no-fetch`), so `gw clean` over N worktrees no longer triggers N redundant network round-trips.
+
+### Fixed
+- `--no-fetch` is now honored end-to-end for the merge-status check (previously `IsMergedToOrigin` always fetched internally regardless of the flag).
+
 ## [0.8.2] - 2026-05-13
 
 ### Fixed

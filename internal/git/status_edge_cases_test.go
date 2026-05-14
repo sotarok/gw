@@ -94,40 +94,6 @@ func TestHasUnpushedCommits_EdgeCases(t *testing.T) {
 }
 
 func TestIsMergedToOrigin_EdgeCases(t *testing.T) {
-	t.Run("fetch command fails", func(t *testing.T) {
-		// Create temporary directory
-		tmpDir, err := os.MkdirTemp("", "gw-test-*")
-		if err != nil {
-			t.Fatalf("Failed to create temp dir: %v", err)
-		}
-		defer os.RemoveAll(tmpDir)
-
-		// Initialize git repository
-		runGitCommand(t, tmpDir, "init")
-		runGitCommand(t, tmpDir, "config", "user.email", "test@example.com")
-		runGitCommand(t, tmpDir, "config", "user.name", "Test User")
-
-		// Create initial commit
-		testFile := filepath.Join(tmpDir, "test.txt")
-		os.WriteFile(testFile, []byte("test"), 0644)
-		runGitCommand(t, tmpDir, "add", "test.txt")
-		runGitCommand(t, tmpDir, "commit", "-m", "Initial commit")
-
-		// Add a non-existent remote
-		runGitCommand(t, tmpDir, "remote", "add", "origin", "https://nonexistent.invalid/repo.git")
-
-		// Change to the repository directory
-		originalDir, _ := os.Getwd()
-		defer os.Chdir(originalDir)
-		os.Chdir(tmpDir)
-
-		// Should fail when fetch fails
-		_, err = IsMergedToOrigin("main")
-		if err == nil {
-			t.Error("Expected error when fetch fails")
-		}
-	})
-
 	t.Run("branch command fails", func(t *testing.T) {
 		// Create temporary directory
 		tmpDir, err := os.MkdirTemp("", "gw-test-*")

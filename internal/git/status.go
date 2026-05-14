@@ -52,21 +52,19 @@ func HasUnpushedCommits() (bool, error) {
 	return count != "0", nil
 }
 
-// IsMergedToOrigin checks if the current branch is merged to origin
+// IsMergedToOrigin checks if the current branch is merged to origin/<targetBranch>.
+// This function does NOT fetch from origin — callers are expected to have
+// already updated remote-tracking refs (e.g. via `fetchIfConfigured`) when a
+// fresh view is required. Avoiding the internal fetch keeps `gw clean` from
+// hitting the network once per worktree.
 func IsMergedToOrigin(targetBranch string) (bool, error) {
 	currentBranch, err := GetCurrentBranch()
 	if err != nil {
 		return false, err
 	}
 
-	// Fetch the latest state from origin
-	cmd := exec.Command("git", "fetch", "origin", targetBranch)
-	if err := cmd.Run(); err != nil {
-		return false, fmt.Errorf("failed to fetch origin: %w", err)
-	}
-
 	// Check if the current branch is merged into origin/targetBranch
-	cmd = exec.Command("git", "branch", "-r", "--contains", currentBranch)
+	cmd := exec.Command("git", "branch", "-r", "--contains", currentBranch)
 	output, err := cmd.Output()
 	if err != nil {
 		return false, fmt.Errorf("failed to check merge status: %w", err)
