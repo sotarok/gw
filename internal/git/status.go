@@ -7,9 +7,7 @@ import (
 )
 
 // HasUncommittedChanges checks if the worktree at worktreePath has any
-// uncommitted changes. The function uses `git -C` instead of relying on the
-// process cwd so callers can run multiple checks against different worktrees
-// concurrently without serializing on os.Chdir.
+// uncommitted changes.
 func HasUncommittedChanges(worktreePath string) (bool, error) {
 	cmd := exec.Command("git", "-C", worktreePath, "status", "--porcelain")
 	output, err := cmd.Output()
@@ -55,12 +53,8 @@ func HasUnpushedCommits(worktreePath, currentBranch string) (bool, error) {
 }
 
 // IsMergedToOrigin checks if currentBranch in the worktree at worktreePath is
-// merged into origin/<targetBranch>.
-//
-// This function does NOT fetch from origin — callers are expected to have
-// already updated remote-tracking refs (e.g. via `fetchIfConfigured`) when a
-// fresh view is required. Avoiding the internal fetch keeps `gw clean` from
-// hitting the network once per worktree.
+// merged into origin/<targetBranch>. Callers must refresh remote-tracking
+// refs themselves (e.g. via fetchIfConfigured) — this function does not fetch.
 func IsMergedToOrigin(worktreePath, currentBranch, targetBranch string) (bool, error) {
 	// Check if the current branch is merged into origin/targetBranch
 	cmd := exec.Command("git", "-C", worktreePath, "branch", "-r", "--contains", currentBranch)

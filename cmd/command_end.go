@@ -2,13 +2,10 @@ package cmd
 
 import (
 	"fmt"
-	"os"
-	"path/filepath"
 	"strings"
 	"sync"
 
 	"github.com/sotarok/gw/internal/config"
-	"github.com/sotarok/gw/internal/hook"
 	"github.com/sotarok/gw/internal/iterm2"
 	"github.com/sotarok/gw/internal/spinner"
 )
@@ -92,8 +89,7 @@ func (c *EndCommand) Execute(issueNumber string) error {
 		hookRepoName, _ = c.deps.Git.GetRepositoryName()
 	}
 
-	// Perform safety checks unless forced. Checks operate via `git -C <path>`
-	// so no chdir is needed and the three checks can run in parallel.
+	// Perform safety checks unless forced.
 	if !c.force {
 		sp := spinner.New(fmt.Sprintf("Checking worktree for issue #%s...", issueNumber), c.deps.Stdout)
 		sp.Start()
@@ -123,7 +119,7 @@ func (c *EndCommand) Execute(issueNumber string) error {
 	// Execute pre-end hook with cwd set to the worktree so the hook can operate
 	// on files that are about to disappear (e.g. docker compose).
 	if c.config != nil && c.config.PreEndHook != "" {
-		c.runPreEndHook(worktreePath, branchName, hookRepoName)
+		runPreEndHook(c.deps, c.config.PreEndHook, worktreePath, branchName, hookRepoName, "end")
 	}
 
 	// Remove the worktree with spinner
@@ -163,36 +159,8 @@ func (c *EndCommand) Execute(issueNumber string) error {
 	return nil
 }
 
-// runPreEndHook runs pre_end_hook with the worktree as cwd, then restores the
-// original directory regardless of hook outcome. Hook failures are warnings.
-func (c *EndCommand) runPreEndHook(worktreePath, branchName, repoName string) {
-	originalDir, err := os.Getwd()
-	if err != nil {
-		fmt.Fprintf(c.deps.Stderr, "%s Could not capture cwd for pre-end hook: %v\n", coloredWarning(), err)
-		return
-	}
-	if err := os.Chdir(worktreePath); err != nil {
-		fmt.Fprintf(c.deps.Stderr, "%s Could not enter %s to run pre-end hook: %v\n", coloredWarning(), worktreePath, err)
-		return
-	}
-	defer func() { _ = os.Chdir(originalDir) }()
-
-	absWorktreePath, _ := filepath.Abs(worktreePath)
-	hookEnv := hook.Env{
-		WorktreePath: absWorktreePath,
-		BranchName:   branchName,
-		RepoName:     repoName,
-		Command:      "end",
-	}
-	if err := hook.Execute(c.config.PreEndHook, hookEnv, c.deps.Stdout, c.deps.Stderr); err != nil {
-		fmt.Fprintf(c.deps.Stderr, "%s Pre-end hook failed: %v\n", coloredWarning(), err)
-	}
-}
-
-// performSafetyChecks runs the three safety checks (uncommitted changes,
-// unpushed commits, merge status) for the worktree at worktreePath in
-// parallel. The checks are independent and now use `git -C <path>` instead of
-// relying on cwd, so they can safely overlap.
+// performSafetyChecks runs the three safety checks for the worktree at
+// worktreePath in parallel.
 func (c *EndCommand) performSafetyChecks(worktreePath, branchName string) []string {
 	type result struct {
 		warning string
@@ -223,7 +191,7 @@ func (c *EndCommand) performSafetyChecks(worktreePath, branchName string) []stri
 	}()
 	go func() {
 		defer wg.Done()
-		isMerged, err := c.deps.Git.IsMergedToOrigin(worktreePath, branchName, "main")
+		isMerged, err := c.deps.Git.IsMergedToOrigin(worktreePath, branchName, defaultBaseBranch)
 		if err != nil {
 			results[2].errMsg = fmt.Sprintf("Could not check merge status: %v", err)
 		} else if !isMerged {

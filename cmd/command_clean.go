@@ -2,16 +2,19 @@ package cmd
 
 import (
 	"fmt"
-	"os"
 	"path/filepath"
 	"strings"
 	"sync"
 
 	"github.com/sotarok/gw/internal/config"
 	"github.com/sotarok/gw/internal/git"
-	"github.com/sotarok/gw/internal/hook"
 	"github.com/sotarok/gw/internal/spinner"
 )
+
+// cleanCheckConcurrency caps the number of worktrees whose safety checks may
+// run in parallel during `gw clean`. Each check forks three `git` subprocesses,
+// so the effective fd ceiling is ~3× this value.
+const cleanCheckConcurrency = 8
 
 // WorktreeStatus holds the status of a worktree for the clean command
 type WorktreeStatus struct {
@@ -64,9 +67,6 @@ func (c *CleanCommand) Execute() error {
 		return fmt.Errorf("failed to list worktrees: %w", err)
 	}
 
-	// Filter out the main worktree, then check the remaining worktrees in
-	// parallel. The checks use `git -C <path>` so they don't share cwd and
-	// safely run concurrently.
 	candidates := make([]git.WorktreeInfo, 0, len(worktrees))
 	for _, wt := range worktrees {
 		if wt.Branch == "" || wt.Branch == defaultBaseBranch || wt.Branch == "master" {
@@ -78,11 +78,17 @@ func (c *CleanCommand) Execute() error {
 	statuses := make([]*WorktreeStatus, len(candidates))
 	sp := spinner.New("Checking worktrees...", c.deps.Stdout)
 	sp.Start()
+	// Bound concurrency: each check forks three `git` subprocesses, so
+	// unbounded fan-out over a large worktree count could exhaust file
+	// descriptors and saturate the disk.
+	sem := make(chan struct{}, cleanCheckConcurrency)
 	var wg sync.WaitGroup
 	wg.Add(len(candidates))
 	for i := range candidates {
 		go func(idx int) {
 			defer wg.Done()
+			sem <- struct{}{}
+			defer func() { <-sem }()
 			statuses[idx] = c.checkWorktree(&candidates[idx])
 		}(i)
 	}
@@ -135,9 +141,7 @@ func (c *CleanCommand) Execute() error {
 	return c.removeWorktrees(statuses)
 }
 
-// checkWorktree checks if a worktree can be safely removed. Uses `git -C` so
-// it never mutates the process cwd, allowing the caller to run multiple checks
-// concurrently.
+// checkWorktree checks if a worktree can be safely removed.
 func (c *CleanCommand) checkWorktree(info *git.WorktreeInfo) *WorktreeStatus {
 	status := &WorktreeStatus{
 		Info:      info,
@@ -145,11 +149,11 @@ func (c *CleanCommand) checkWorktree(info *git.WorktreeInfo) *WorktreeStatus {
 		Warnings:  []string{},
 	}
 
-	// Check 1: Uncommitted changes (also surfaces a broken/missing worktree).
 	hasChanges, err := c.deps.Git.HasUncommittedChanges(info.Path)
 	if err != nil {
-		// exit status 128 / "not a git repository" indicate the worktree is
-		// fundamentally broken — short-circuit and skip the remaining checks.
+		// A broken or missing worktree surfaces as `exit status 128` /
+		// "not a git repository" — short-circuit and skip the remaining checks
+		// so the user sees a single clear reason instead of three.
 		errMsg := err.Error()
 		if strings.Contains(errMsg, "exit status 128") || strings.Contains(errMsg, "not a git repository") {
 			status.Warnings = append(status.Warnings, "invalid git repository")
@@ -163,7 +167,6 @@ func (c *CleanCommand) checkWorktree(info *git.WorktreeInfo) *WorktreeStatus {
 		status.CanRemove = false
 	}
 
-	// Check 2: Unpushed commits
 	hasUnpushed, err := c.deps.Git.HasUnpushedCommits(info.Path, info.Branch)
 	if err != nil {
 		status.Warnings = append(status.Warnings, fmt.Sprintf("Could not check unpushed commits: %v", err))
@@ -173,8 +176,7 @@ func (c *CleanCommand) checkWorktree(info *git.WorktreeInfo) *WorktreeStatus {
 		status.CanRemove = false
 	}
 
-	// Check 3: Merge status with origin/main
-	isMerged, err := c.deps.Git.IsMergedToOrigin(info.Path, info.Branch, "main")
+	isMerged, err := c.deps.Git.IsMergedToOrigin(info.Path, info.Branch, defaultBaseBranch)
 	if err != nil {
 		status.Warnings = append(status.Warnings, fmt.Sprintf("Could not check merge status: %v", err))
 		status.CanRemove = false
@@ -230,11 +232,6 @@ func (c *CleanCommand) removeWorktrees(statuses []*WorktreeStatus) error {
 	successCount := 0
 	failCount := 0
 
-	originalDir, err := os.Getwd()
-	if err != nil {
-		return fmt.Errorf("failed to get current directory: %w", err)
-	}
-
 	var repoName string
 	if c.config != nil && c.config.PreEndHook != "" {
 		repoName, _ = c.deps.Git.GetRepositoryName()
@@ -249,7 +246,7 @@ func (c *CleanCommand) removeWorktrees(statuses []*WorktreeStatus) error {
 
 		// Run pre-end hook from inside the worktree before it gets removed.
 		if c.config != nil && c.config.PreEndHook != "" {
-			c.runPreEndHook(status.Info, repoName, originalDir)
+			runPreEndHook(c.deps, c.config.PreEndHook, status.Info.Path, status.Info.Branch, repoName, "clean")
 		}
 
 		// Remove the worktree with spinner
@@ -289,25 +286,4 @@ func (c *CleanCommand) removeWorktrees(statuses []*WorktreeStatus) error {
 	}
 
 	return nil
-}
-
-// runPreEndHook runs pre_end_hook with the worktree as cwd, then restores the
-// original directory regardless of hook outcome. Hook failures are warnings.
-func (c *CleanCommand) runPreEndHook(info *git.WorktreeInfo, repoName, originalDir string) {
-	if err := os.Chdir(info.Path); err != nil {
-		fmt.Fprintf(c.deps.Stderr, "%s Could not enter %s to run pre-end hook: %v\n", coloredWarning(), info.Path, err)
-		return
-	}
-	defer func() { _ = os.Chdir(originalDir) }()
-
-	absWorktreePath, _ := filepath.Abs(info.Path)
-	hookEnv := hook.Env{
-		WorktreePath: absWorktreePath,
-		BranchName:   info.Branch,
-		RepoName:     repoName,
-		Command:      "clean",
-	}
-	if err := hook.Execute(c.config.PreEndHook, hookEnv, c.deps.Stdout, c.deps.Stderr); err != nil {
-		fmt.Fprintf(c.deps.Stderr, "%s Pre-end hook failed for %s: %v\n", coloredWarning(), filepath.Base(info.Path), err)
-	}
 }

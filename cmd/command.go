@@ -4,11 +4,13 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"path/filepath"
 
 	"github.com/charmbracelet/lipgloss"
 	"github.com/sotarok/gw/internal/config"
 	"github.com/sotarok/gw/internal/detect"
 	"github.com/sotarok/gw/internal/git"
+	"github.com/sotarok/gw/internal/hook"
 	"github.com/sotarok/gw/internal/spinner"
 	"github.com/sotarok/gw/internal/ui"
 )
@@ -52,6 +54,34 @@ func DefaultDependencies() *Dependencies {
 		Detect: detect.NewDefaultDetector(),
 		Stdout: os.Stdout,
 		Stderr: os.Stderr,
+	}
+}
+
+// runPreEndHook runs pre_end_hook with cwd set to worktreePath, then restores
+// the original directory regardless of hook outcome. Hook failures are
+// reported as warnings on stderr; commandLabel ("end" or "clean") flows into
+// GW_COMMAND for the hook process.
+func runPreEndHook(deps *Dependencies, hookCmd, worktreePath, branchName, repoName, commandLabel string) {
+	originalDir, err := os.Getwd()
+	if err != nil {
+		fmt.Fprintf(deps.Stderr, "%s Could not capture cwd for pre-end hook: %v\n", coloredWarning(), err)
+		return
+	}
+	if err := os.Chdir(worktreePath); err != nil {
+		fmt.Fprintf(deps.Stderr, "%s Could not enter %s to run pre-end hook: %v\n", coloredWarning(), worktreePath, err)
+		return
+	}
+	defer func() { _ = os.Chdir(originalDir) }()
+
+	absWorktreePath, _ := filepath.Abs(worktreePath)
+	hookEnv := hook.Env{
+		WorktreePath: absWorktreePath,
+		BranchName:   branchName,
+		RepoName:     repoName,
+		Command:      commandLabel,
+	}
+	if err := hook.Execute(hookCmd, hookEnv, deps.Stdout, deps.Stderr); err != nil {
+		fmt.Fprintf(deps.Stderr, "%s Pre-end hook failed for %s: %v\n", coloredWarning(), filepath.Base(worktreePath), err)
 	}
 }
 
