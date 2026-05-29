@@ -13,6 +13,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 - `--no-fetch` is now honored end-to-end for the merge-status check (previously `IsMergedToOrigin` always fetched internally regardless of the flag).
+- `gw checkout` run from *inside* a worktree no longer creates a doubly-named worktree (e.g. `<repo>-<branch>-<newbranch>`). The new worktree path is now anchored to the original repository name, matching `gw start`. The iTerm2 tab name and `gw shell-integration --print-path` lookup were aligned to the original repository name for the same reason.
 
 ## [0.8.2] - 2026-05-13
 

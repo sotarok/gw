@@ -295,8 +295,10 @@ func (c *ShellIntegrationCommand) printWorktreePath() error {
 }
 
 func findWorktreePath(gitClient git.Interface, identifier string) (string, error) {
-	// Get repository name and root
-	repoName, err := gitClient.GetRepositoryName()
+	// Get the original repository name (not the worktree directory name) so the
+	// expected path matches how worktrees are created — anchored to the repo
+	// name — even when this runs from inside an existing worktree.
+	repoName, err := gitClient.GetOriginalRepositoryName()
 	if err != nil {
 		return "", err
 	}

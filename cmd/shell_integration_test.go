@@ -306,6 +306,44 @@ func TestFindWorktreePath_DirectoryExists_FromSubDirectory(t *testing.T) {
 	}
 }
 
+func TestFindWorktreePath_FromInsideWorktree(t *testing.T) {
+	// Regression: when invoked from inside a worktree, findWorktreePath used the
+	// worktree directory name (via GetRepositoryName) to build the expected path,
+	// producing a doubled `<repo>-<branch>-<id>` lookup that never matched. It
+	// must anchor to the original repository name instead.
+	tempDir := t.TempDir()
+	currentWorktree := filepath.Join(tempDir, "test-repo-existing")
+	targetWorktree := filepath.Join(tempDir, "test-repo-123")
+	os.MkdirAll(currentWorktree, 0755)
+	os.MkdirAll(targetWorktree, 0755)
+
+	originalDir, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("failed to get current dir: %v", err)
+	}
+	defer os.Chdir(originalDir)
+
+	if err := os.Chdir(currentWorktree); err != nil {
+		t.Fatalf("failed to change dir: %v", err)
+	}
+
+	mock := &mockGit{isGitRepo: true}
+	mock.GetRepositoryNameFn = func() (string, error) { return "test-repo-existing", nil }
+	mock.GetOriginalRepositoryNameFn = func() (string, error) { return testRepoName, nil }
+	mock.GetRepositoryRootFn = func() (string, error) { return currentWorktree, nil }
+
+	path, err := findWorktreePath(mock, "123")
+	if err != nil {
+		t.Fatalf("expected no error, got: %v", err)
+	}
+
+	resolvedPath, _ := filepath.EvalSymlinks(path)
+	resolvedExpected, _ := filepath.EvalSymlinks(targetWorktree)
+	if resolvedPath != resolvedExpected {
+		t.Errorf("expected %q, got %q", resolvedExpected, resolvedPath)
+	}
+}
+
 func TestFindWorktreePath_MatchesByBranch(t *testing.T) {
 	tempDir := t.TempDir()
 	repoDir := filepath.Join(tempDir, "test-repo")
@@ -454,12 +492,18 @@ func TestFindWorktreePath_GetRepoNameError(t *testing.T) {
 	}
 }
 
-// mockGitWithRepoError is a mock that returns an error from GetRepositoryName
+// mockGitWithRepoError is a mock that returns an error when resolving the
+// repository name. findWorktreePath resolves the original repository name, so
+// override both to keep the error path covered.
 type mockGitWithRepoError struct {
 	mockGit
 }
 
 func (m *mockGitWithRepoError) GetRepositoryName() (string, error) {
+	return "", fmt.Errorf("mock repo name error")
+}
+
+func (m *mockGitWithRepoError) GetOriginalRepositoryName() (string, error) {
 	return "", fmt.Errorf("mock repo name error")
 }
 

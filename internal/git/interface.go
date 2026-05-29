@@ -5,6 +5,7 @@ type Interface interface {
 	// Repository operations
 	IsGitRepository() bool
 	GetRepositoryName() (string, error)
+	GetOriginalRepositoryName() (string, error)
 	GetRepositoryRoot() (string, error)
 	GetCurrentBranch() (string, error)
 	FetchAll() error
@@ -54,6 +55,10 @@ func (c *DefaultClient) IsGitRepository() bool {
 
 func (c *DefaultClient) GetRepositoryName() (string, error) {
 	return GetRepositoryName()
+}
+
+func (c *DefaultClient) GetOriginalRepositoryName() (string, error) {
+	return GetOriginalRepositoryName()
 }
 
 func (c *DefaultClient) GetRepositoryRoot() (string, error) {

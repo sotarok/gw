@@ -19,6 +19,7 @@ import (
 const testBranch123 = "123/impl"
 const testBranchFeature = "feature/test"
 const testRepoNameShort = "repo"
+const testRepoName = "test-repo"
 
 type mockGit struct {
 	isGitRepo           bool
@@ -41,17 +42,18 @@ type mockGit struct {
 	// "*AtFn" callbacks receive the same args as the real Git interface
 	// methods. Use them when a test needs to vary results by worktree path or
 	// branch (the simpler Fn forms above still work for fixed return values).
-	HasUncommittedChangesAtFn  func(worktreePath string) (bool, error)
-	HasUnpushedCommitsAtFn     func(worktreePath, currentBranch string) (bool, error)
-	IsMergedToOriginAtFn       func(worktreePath, currentBranch, targetBranch string) (bool, error)
-	DeleteBranchFn             func(string) error
-	ListWorktreesFn            func() ([]git.WorktreeInfo, error)
-	RemoveWorktreeByPathFn     func(string) error
-	GetRepositoryNameFn        func() (string, error)
-	GetRepositoryRootFn        func() (string, error)
-	CreateWorktreeFromBranchFn func(string, string, string) error
-	FindUntrackedEnvFilesFn    func(string) ([]git.EnvFile, error)
-	SanitizeBranchNameForDirFn func(string) string
+	HasUncommittedChangesAtFn   func(worktreePath string) (bool, error)
+	HasUnpushedCommitsAtFn      func(worktreePath, currentBranch string) (bool, error)
+	IsMergedToOriginAtFn        func(worktreePath, currentBranch, targetBranch string) (bool, error)
+	DeleteBranchFn              func(string) error
+	ListWorktreesFn             func() ([]git.WorktreeInfo, error)
+	RemoveWorktreeByPathFn      func(string) error
+	GetRepositoryNameFn         func() (string, error)
+	GetOriginalRepositoryNameFn func() (string, error)
+	GetRepositoryRootFn         func() (string, error)
+	CreateWorktreeFromBranchFn  func(string, string, string) error
+	FindUntrackedEnvFilesFn     func(string) ([]git.EnvFile, error)
+	SanitizeBranchNameForDirFn  func(string) string
 }
 
 func (m *mockGit) IsGitRepository() bool {
@@ -62,7 +64,17 @@ func (m *mockGit) GetRepositoryName() (string, error) {
 	if m.GetRepositoryNameFn != nil {
 		return m.GetRepositoryNameFn()
 	}
-	return "test-repo", nil
+	return testRepoName, nil
+}
+
+func (m *mockGit) GetOriginalRepositoryName() (string, error) {
+	if m.GetOriginalRepositoryNameFn != nil {
+		return m.GetOriginalRepositoryNameFn()
+	}
+	// Default to the same value as GetRepositoryName: outside a worktree the
+	// original repo name and the current repo name are identical, so tests that
+	// only set GetRepositoryNameFn keep working.
+	return m.GetRepositoryName()
 }
 
 func (m *mockGit) GetRepositoryRoot() (string, error) {
@@ -1027,6 +1039,68 @@ func TestCheckoutCommand_Execute_WorktreePathAnchoredToRepoRoot(t *testing.T) {
 	expected := filepath.Join(tempDir, "repo-feature_test")
 	if filepath.Clean(capturedWorktreePath) != expected {
 		t.Errorf("worktree path not anchored to repo root.\n  got:  %s\n  want: %s", capturedWorktreePath, expected)
+	}
+}
+
+func TestCheckoutCommand_Execute_FromInsideWorktreeUsesOriginalRepoName(t *testing.T) {
+	// Regression: running `gw checkout` from *inside* a worktree used the worktree
+	// directory name (via GetRepositoryName) when building the new worktree path,
+	// producing a doubled name like `<repo>-<branch>-<newbranch>`. The new worktree
+	// must be named after the original repository, e.g. `<repo>-<newbranch>`.
+	originalDir, _ := os.Getwd()
+	defer os.Chdir(originalDir)
+
+	tempDir, err := os.MkdirTemp("", "gw-test-*")
+	if err != nil {
+		t.Fatalf("Failed to create temp dir: %v", err)
+	}
+	defer os.RemoveAll(tempDir)
+
+	// We are currently sitting inside an existing worktree of "repo".
+	currentWorktree := filepath.Join(tempDir, "repo-existing")
+	if err := os.MkdirAll(currentWorktree, 0755); err != nil {
+		t.Fatalf("Failed to create worktree dir: %v", err)
+	}
+	if err := os.Chdir(currentWorktree); err != nil {
+		t.Fatalf("Failed to chdir into worktree: %v", err)
+	}
+
+	var capturedWorktreePath string
+	mockGitInstance := &mockGit{
+		isGitRepo: true,
+		envFiles:  []git.EnvFile{},
+	}
+	// Inside a worktree these two differ: GetRepositoryName yields the worktree
+	// directory name while GetOriginalRepositoryName yields the real repo name.
+	mockGitInstance.GetRepositoryNameFn = func() (string, error) { return "repo-existing", nil }
+	mockGitInstance.GetOriginalRepositoryNameFn = func() (string, error) { return testRepoNameShort, nil }
+	mockGitInstance.GetRepositoryRootFn = func() (string, error) { return currentWorktree, nil }
+	mockGitInstance.BranchExistsFn = func(branch string) (bool, error) { return true, nil }
+	mockGitInstance.CreateWorktreeFromBranchFn = func(worktreePath, sourceBranch, targetBranch string) error {
+		capturedWorktreePath = worktreePath
+		os.MkdirAll(worktreePath, 0755)
+		return nil
+	}
+
+	stdout := &bytes.Buffer{}
+	stderr := &bytes.Buffer{}
+	deps := &Dependencies{
+		Git:    mockGitInstance,
+		UI:     &mockUI{},
+		Detect: &mockDetect{},
+		Stdout: stdout,
+		Stderr: stderr,
+	}
+
+	cmd := NewCheckoutCommandWithConfig(deps, false, true, &config.Config{})
+	if err := cmd.Execute(testBranchFeature); err != nil {
+		t.Fatalf("Unexpected error: %v", err)
+	}
+
+	expected := filepath.Join(tempDir, "repo-feature_test")
+	if filepath.Clean(capturedWorktreePath) != expected {
+		t.Errorf("worktree path should use the original repo name, not the worktree dir name.\n  got:  %s\n  want: %s",
+			capturedWorktreePath, expected)
 	}
 }
 

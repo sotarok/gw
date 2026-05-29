@@ -56,8 +56,9 @@ func (c *StartCommand) Execute(issueNumber, baseBranch string) error {
 		return fmt.Errorf("worktree for issue %s already exists at %s", issueNumber, wt.Path)
 	}
 
-	// Get repository name for iTerm2 tab
-	repoName, _ := c.deps.Git.GetRepositoryName()
+	// Get the original repository name for the iTerm2 tab so that, when run from
+	// inside a worktree, the tab shows the repo name rather than the worktree dir.
+	repoName, _ := c.deps.Git.GetOriginalRepositoryName()
 
 	// Update iTerm2 tab if configured
 	if c.config != nil && iterm2.ShouldUpdateTab(c.config.UpdateITerm2Tab) {

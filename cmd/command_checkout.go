@@ -57,8 +57,10 @@ func (c *CheckoutCommand) Execute(branch string) error {
 	// Fetch from remotes if configured
 	fetchIfConfigured(c.deps, c.config, c.noFetch)
 
-	// Get repository name
-	repoName, err := c.deps.Git.GetRepositoryName()
+	// Get the original repository name (not the worktree directory name) so that
+	// running checkout from inside a worktree still names the new worktree after
+	// the repo, e.g. `<repo>-<branch>` rather than `<worktree-dir>-<branch>`.
+	repoName, err := c.deps.Git.GetOriginalRepositoryName()
 	if err != nil {
 		return fmt.Errorf("failed to get repository name: %w", err)
 	}
