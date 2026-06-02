@@ -7,6 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- `gw end` now accepts the full branch name (e.g. `527/impl`) in addition to the bare issue number (`527`). Previously passing `527/impl` — which is what shell completion suggests — failed with "worktree for 527/impl not found" because the branch name was mapped to a different directory suffix. The worktree is now resolved by matching the branch name as well as the computed path, and removal uses the resolved path.
+
 ## [0.8.3] - 2026-05-29
 
 ### Performance

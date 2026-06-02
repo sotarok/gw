@@ -44,7 +44,6 @@ func NewEndCommandWithConfig(deps *Dependencies, force, noFetch bool, cfg *confi
 func (c *EndCommand) Execute(issueNumber string) error {
 	var worktreePath string
 	var branchName string
-	var isInteractiveMode bool
 
 	if issueNumber == "" {
 		// Interactive mode
@@ -62,7 +61,6 @@ func (c *EndCommand) Execute(issueNumber string) error {
 		}
 		worktreePath = selected.Path
 		branchName = selected.Branch
-		isInteractiveMode = true
 	} else {
 		// Find the worktree for this issue
 		wt, err := c.deps.Git.GetWorktreeForIssue(issueNumber)
@@ -71,7 +69,6 @@ func (c *EndCommand) Execute(issueNumber string) error {
 		}
 		worktreePath = wt.Path
 		branchName = wt.Branch
-		isInteractiveMode = false
 	}
 
 	if issueNumber == "" {
@@ -125,14 +122,11 @@ func (c *EndCommand) Execute(issueNumber string) error {
 	// Remove the worktree with spinner
 	sp := spinner.New(fmt.Sprintf("Removing worktree for issue #%s...", issueNumber), c.deps.Stdout)
 	sp.Start()
-	var removeErr error
-	if isInteractiveMode {
-		// Use the actual path when selected from interactive mode
-		removeErr = c.deps.Git.RemoveWorktreeByPath(worktreePath)
-	} else {
-		// Use issue number template when specified directly
-		removeErr = c.deps.Git.RemoveWorktree(issueNumber)
-	}
+	// Remove by the resolved worktree path. Whether selected interactively or
+	// looked up from the issue number / branch name, worktreePath already points
+	// at the actual worktree, so this works regardless of how the input maps to a
+	// directory suffix (e.g. "527" vs "527/impl").
+	removeErr := c.deps.Git.RemoveWorktreeByPath(worktreePath)
 	sp.Stop()
 	if removeErr != nil {
 		return removeErr

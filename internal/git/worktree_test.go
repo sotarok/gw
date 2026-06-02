@@ -446,6 +446,18 @@ func TestGetWorktreeForIssue(t *testing.T) {
 		if !strings.Contains(wt.Path, "999") {
 			t.Errorf("expected path to contain '999', got %q", wt.Path)
 		}
+
+		// The same worktree must also be found by its full branch name, which is
+		// what shell completion suggests (e.g. "999/impl"), even though the
+		// directory suffix derived from it ("999-impl") differs from the actual
+		// directory ("999").
+		wtByBranch, err := GetWorktreeForIssue("999/impl")
+		if err != nil {
+			t.Fatalf("failed to get worktree by branch name: %v", err)
+		}
+		if wtByBranch.Path != wt.Path {
+			t.Errorf("expected branch lookup to resolve to %q, got %q", wt.Path, wtByBranch.Path)
+		}
 	})
 
 	t.Run("returns error for non-existent worktree", func(t *testing.T) {

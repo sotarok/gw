@@ -213,8 +213,8 @@ func GetWorktreeForIssue(issueNumberOrBranch string) (*WorktreeInfo, error) {
 		return nil, err
 	}
 
-	// Determine directory suffix
-	_, dirSuffix := DetermineWorktreeNames(issueNumberOrBranch)
+	// Determine the branch name and directory suffix
+	branchName, dirSuffix := DetermineWorktreeNames(issueNumberOrBranch)
 
 	targetPath := fmt.Sprintf("%s-%s", repoName, dirSuffix)
 
@@ -223,8 +223,12 @@ func GetWorktreeForIssue(issueNumberOrBranch string) (*WorktreeInfo, error) {
 		return nil, err
 	}
 
+	// Match by branch name first, then fall back to the computed directory path.
+	// Matching by branch name lets the same worktree be found whether the user
+	// passes the issue number ("527") or the full branch name ("527/impl"),
+	// which is what shell completion suggests.
 	for _, wt := range worktrees {
-		if strings.Contains(wt.Path, targetPath) {
+		if wt.Branch == branchName || strings.Contains(wt.Path, targetPath) {
 			return &wt, nil
 		}
 	}
