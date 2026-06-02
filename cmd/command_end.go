@@ -185,11 +185,11 @@ func (c *EndCommand) performSafetyChecks(worktreePath, branchName string) []stri
 	}()
 	go func() {
 		defer wg.Done()
-		isMerged, err := c.deps.Git.IsMergedToOrigin(worktreePath, branchName, defaultBaseBranch)
+		isMerged, err := c.deps.Git.IsMergedToBaseBranch(worktreePath, branchName, defaultBaseBranch)
 		if err != nil {
 			results[2].errMsg = fmt.Sprintf("Could not check merge status: %v", err)
 		} else if !isMerged {
-			results[2].warning = "Branch is not merged to origin/main"
+			results[2].warning = "Branch is not merged to main"
 		}
 	}()
 	wg.Wait()

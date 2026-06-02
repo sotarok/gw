@@ -73,7 +73,7 @@ func TestHasUnpushedCommits_EdgeCases(t *testing.T) {
 	})
 }
 
-func TestIsMergedToOrigin_EdgeCases(t *testing.T) {
+func TestIsMergedToBaseBranch_EdgeCases(t *testing.T) {
 	t.Run("branch command fails", func(t *testing.T) {
 		// Create temporary directory
 		tmpDir, err := os.MkdirTemp("", "gw-test-*")
@@ -101,7 +101,7 @@ func TestIsMergedToOrigin_EdgeCases(t *testing.T) {
 		cmd.Run()
 
 		// Should fail when branch command fails
-		_, err = IsMergedToOrigin(tmpDir, "main", "main")
+		_, err = IsMergedToBaseBranch(tmpDir, "main", "main")
 		// The error might come from GetCurrentBranch or the fetch, not the branch command
 		// in a bare repository, so we check if there's any error
 		if err == nil {
@@ -160,9 +160,9 @@ func TestIsMergedToOrigin_EdgeCases(t *testing.T) {
 		os.Chdir(tmpDir)
 
 		// Should return false when branch is not merged
-		merged, err := IsMergedToOrigin(tmpDir, "feature-branch", defaultBranch)
+		merged, err := IsMergedToBaseBranch(tmpDir, "feature-branch", defaultBranch)
 		if err != nil {
-			t.Fatalf("IsMergedToOrigin failed: %v", err)
+			t.Fatalf("IsMergedToBaseBranch failed: %v", err)
 		}
 		if merged {
 			t.Error("Expected branch to not be merged")

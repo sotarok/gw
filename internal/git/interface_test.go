@@ -282,6 +282,18 @@ func TestDefaultClient_StatusOperations(t *testing.T) {
 	// Clean up
 	os.Remove("test.txt")
 
+	// Create a feature branch with its own commit so it has work that is
+	// neither pushed nor merged into the base branch.
+	if err := RunCommand("git checkout -b feature-no-upstream"); err != nil {
+		t.Fatalf("failed to create branch: %v", err)
+	}
+	if err := os.WriteFile("feature.txt", []byte("feature"), 0644); err != nil {
+		t.Fatalf("failed to create file: %v", err)
+	}
+	if err := RunCommand("git add . && git commit -m 'feature'"); err != nil {
+		t.Fatalf("failed to create commit: %v", err)
+	}
+
 	// Test HasUnpushedCommits - should return true (no upstream)
 	branch, _ := GetCurrentBranch()
 	hasUnpushed, err := client.HasUnpushedCommits(tempDir, branch)
@@ -464,7 +476,7 @@ func TestDefaultClient_UtilityOperations(t *testing.T) {
 	}
 }
 
-func TestDefaultClient_IsMergedToOrigin(t *testing.T) {
+func TestDefaultClient_IsMergedToBaseBranch(t *testing.T) {
 	// This is a complex test that requires a remote repository
 	// For now, just test that the method exists and can be called
 	client := NewDefaultClient()
@@ -492,7 +504,7 @@ func TestDefaultClient_IsMergedToOrigin(t *testing.T) {
 	}
 
 	// The method should at least not panic
-	_, _ = client.IsMergedToOrigin(tempDir, "main", "main")
+	_, _ = client.IsMergedToBaseBranch(tempDir, "main", "main")
 }
 
 func TestDefaultClient_CreateWorktreeFromBranch(t *testing.T) {

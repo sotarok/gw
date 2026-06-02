@@ -463,10 +463,21 @@ func TestHasUnpushedCommits(t *testing.T) {
 			t.Fatalf("failed to commit: %v", err)
 		}
 
-		// Create a new branch without upstream
+		// Create a new branch without upstream, with its own commit so it has
+		// work that is neither pushed nor merged into the base branch.
 		cmd = exec.Command("git", "checkout", "-b", "no-upstream-branch")
 		if err := cmd.Run(); err != nil {
 			t.Fatalf("failed to create branch: %v", err)
+		}
+
+		if err := os.WriteFile(testFile, []byte("no upstream change"), 0644); err != nil {
+			t.Fatalf("failed to modify file: %v", err)
+		}
+		if err := exec.Command("git", "add", "test.txt").Run(); err != nil {
+			t.Fatalf("failed to add file: %v", err)
+		}
+		if err := exec.Command("git", "commit", "-m", "no upstream commit").Run(); err != nil {
+			t.Fatalf("failed to commit: %v", err)
 		}
 
 		// Check for unpushed commits - should return true for branch with no upstream
@@ -618,7 +629,7 @@ func TestHasUnpushedCommits(t *testing.T) {
 	})
 }
 
-func TestIsMergedToOrigin(t *testing.T) {
+func TestIsMergedToBaseBranch(t *testing.T) {
 	t.Run("returns true when branch is merged", func(t *testing.T) {
 		tempDir, cleanup := createTestRepo(t)
 		defer cleanup()
@@ -726,7 +737,7 @@ func TestIsMergedToOrigin(t *testing.T) {
 
 		// Check if merged
 		branch, _ := GetCurrentBranch()
-		isMerged, err := IsMergedToOrigin(tempDir, branch, "main")
+		isMerged, err := IsMergedToBaseBranch(tempDir, branch, "main")
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
@@ -820,13 +831,77 @@ func TestIsMergedToOrigin(t *testing.T) {
 
 		// Check if merged (should be false)
 		branch, _ := GetCurrentBranch()
-		isMerged, err := IsMergedToOrigin(tempDir, branch, "main")
+		isMerged, err := IsMergedToBaseBranch(tempDir, branch, "main")
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
 
 		if isMerged {
 			t.Error("expected branch to not be merged to origin/main")
+		}
+	})
+
+	t.Run("returns true when merged to local main but not pushed", func(t *testing.T) {
+		tempDir, cleanup := createTestRepo(t)
+		defer cleanup()
+
+		originalDir, err := os.Getwd()
+		if err != nil {
+			t.Fatalf("failed to get current dir: %v", err)
+		}
+		defer func() {
+			_ = os.Chdir(originalDir)
+		}()
+
+		if err := os.Chdir(tempDir); err != nil {
+			t.Fatalf("failed to change dir: %v", err)
+		}
+
+		// Initial commit on main (no remote configured at all).
+		testFile := filepath.Join(tempDir, "test.txt")
+		if err := os.WriteFile(testFile, []byte("test"), 0644); err != nil {
+			t.Fatalf("failed to create test file: %v", err)
+		}
+		if err := exec.Command("git", "add", "test.txt").Run(); err != nil {
+			t.Fatalf("failed to add file: %v", err)
+		}
+		if err := exec.Command("git", "commit", "-m", "initial").Run(); err != nil {
+			t.Fatalf("failed to commit: %v", err)
+		}
+		cmd := exec.Command("git", "branch", "-m", "main")
+		_ = cmd.Run()
+
+		// Feature branch with a commit.
+		if err := exec.Command("git", "checkout", "-b", "feature").Run(); err != nil {
+			t.Fatalf("failed to create feature branch: %v", err)
+		}
+		if err := os.WriteFile(testFile, []byte("feature"), 0644); err != nil {
+			t.Fatalf("failed to modify file: %v", err)
+		}
+		if err := exec.Command("git", "add", "test.txt").Run(); err != nil {
+			t.Fatalf("failed to add file: %v", err)
+		}
+		if err := exec.Command("git", "commit", "-m", "feature commit").Run(); err != nil {
+			t.Fatalf("failed to commit: %v", err)
+		}
+
+		// Merge into local main, but never push (there is no remote).
+		if err := exec.Command("git", "checkout", "main").Run(); err != nil {
+			t.Fatalf("failed to checkout main: %v", err)
+		}
+		if err := exec.Command("git", "merge", "feature").Run(); err != nil {
+			t.Fatalf("failed to merge feature: %v", err)
+		}
+		if err := exec.Command("git", "checkout", "feature").Run(); err != nil {
+			t.Fatalf("failed to checkout feature: %v", err)
+		}
+
+		isMerged, err := IsMergedToBaseBranch(tempDir, "feature", "main")
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if !isMerged {
+			t.Error("expected branch merged into local main to be considered merged")
 		}
 	})
 }

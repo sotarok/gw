@@ -26,7 +26,7 @@ type Interface interface {
 	// Status operations
 	HasUncommittedChanges(worktreePath string) (bool, error)
 	HasUnpushedCommits(worktreePath, currentBranch string) (bool, error)
-	IsMergedToOrigin(worktreePath, currentBranch, targetBranch string) (bool, error)
+	IsMergedToBaseBranch(worktreePath, currentBranch, targetBranch string) (bool, error)
 
 	// Environment file operations
 	FindUntrackedEnvFiles(repoPath string) ([]EnvFile, error)
@@ -120,8 +120,8 @@ func (c *DefaultClient) HasUnpushedCommits(worktreePath, currentBranch string) (
 	return HasUnpushedCommits(worktreePath, currentBranch)
 }
 
-func (c *DefaultClient) IsMergedToOrigin(worktreePath, currentBranch, targetBranch string) (bool, error) {
-	return IsMergedToOrigin(worktreePath, currentBranch, targetBranch)
+func (c *DefaultClient) IsMergedToBaseBranch(worktreePath, currentBranch, targetBranch string) (bool, error) {
+	return IsMergedToBaseBranch(worktreePath, currentBranch, targetBranch)
 }
 
 // Environment file operations

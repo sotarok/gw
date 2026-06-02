@@ -21,8 +21,9 @@ func HasUncommittedChanges(worktreePath string) (bool, error) {
 // HasUnpushedCommits checks whether currentBranch in the worktree at
 // worktreePath has commits that haven't been pushed to its upstream. When the
 // branch has no upstream configured, the function falls back to checking
-// whether it is already merged to origin/main (covering the common
-// "PR merged then remote branch auto-deleted" case).
+// whether it is already merged into the base branch (local main or
+// origin/main), covering both the "PR merged then remote branch auto-deleted"
+// case and the "merged into local main before pushing" case.
 func HasUnpushedCommits(worktreePath, currentBranch string) (bool, error) {
 	// Check if the branch has an upstream
 	cmd := exec.Command("git", "-C", worktreePath, "rev-parse", "--abbrev-ref", currentBranch+"@{upstream}")
@@ -30,7 +31,7 @@ func HasUnpushedCommits(worktreePath, currentBranch string) (bool, error) {
 		// No upstream branch configured.
 		// Check if the branch is already merged to main/master. This handles
 		// the case where the branch was merged and the remote was deleted.
-		merged, mergeErr := IsMergedToOrigin(worktreePath, currentBranch, "main")
+		merged, mergeErr := IsMergedToBaseBranch(worktreePath, currentBranch, "main")
 		if mergeErr == nil && merged {
 			// Branch is merged, so no unpushed commits
 			return false, nil
@@ -52,22 +53,51 @@ func HasUnpushedCommits(worktreePath, currentBranch string) (bool, error) {
 	return count != "0", nil
 }
 
-// IsMergedToOrigin checks if currentBranch in the worktree at worktreePath is
-// merged into origin/<targetBranch>. Callers must refresh remote-tracking
-// refs themselves (e.g. via fetchIfConfigured) — this function does not fetch.
-func IsMergedToOrigin(worktreePath, currentBranch, targetBranch string) (bool, error) {
-	// Check if the current branch is merged into origin/targetBranch
-	cmd := exec.Command("git", "-C", worktreePath, "branch", "-r", "--contains", currentBranch)
-	output, err := cmd.Output()
+// IsMergedToBaseBranch reports whether currentBranch in the worktree at
+// worktreePath is already merged into the base branch, considering both the
+// local <targetBranch> and origin/<targetBranch>. A branch merged into the
+// local base branch is treated as merged even when that merge hasn't been
+// pushed yet, since the work is preserved in the local base branch's history
+// and is therefore safe to remove. Callers must refresh remote-tracking refs
+// themselves (e.g. via fetchIfConfigured) — this function does not fetch.
+func IsMergedToBaseBranch(worktreePath, currentBranch, targetBranch string) (bool, error) {
+	// Merged into the remote base branch (origin/<targetBranch>).
+	remoteMerged, err := branchListContains(worktreePath, currentBranch, true, "origin/"+targetBranch)
+	if err != nil {
+		return false, err
+	}
+	if remoteMerged {
+		return true, nil
+	}
+
+	// Merged into the local base branch. This covers the common case of
+	// merging the branch into local main before pushing main.
+	return branchListContains(worktreePath, currentBranch, false, targetBranch)
+}
+
+// branchListContains reports whether wantRef appears in the output of
+// `git branch [-r] --contains currentBranch`, i.e. whether wantRef's history
+// contains the tip of currentBranch. When remote is true it inspects
+// remote-tracking branches, otherwise local branches.
+func branchListContains(worktreePath, currentBranch string, remote bool, wantRef string) (bool, error) {
+	args := []string{"-C", worktreePath, "branch"}
+	if remote {
+		args = append(args, "-r")
+	}
+	args = append(args, "--contains", currentBranch)
+
+	output, err := exec.Command("git", args...).Output()
 	if err != nil {
 		return false, fmt.Errorf("failed to check merge status: %w", err)
 	}
 
-	branches := strings.Split(string(output), "\n")
-	targetRef := fmt.Sprintf("origin/%s", targetBranch)
-
-	for _, branch := range branches {
-		if strings.TrimSpace(branch) == targetRef {
+	for _, line := range strings.Split(string(output), "\n") {
+		// Strip the leading markers git prints: "* " for the current branch and
+		// "+ " for a branch checked out in another worktree (e.g. local main).
+		name := strings.TrimSpace(line)
+		name = strings.TrimPrefix(name, "* ")
+		name = strings.TrimPrefix(name, "+ ")
+		if strings.TrimSpace(name) == wantRef {
 			return true, nil
 		}
 	}

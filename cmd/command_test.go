@@ -38,13 +38,13 @@ type mockGit struct {
 	GetWorktreeForIssueFn   func(string) (*git.WorktreeInfo, error)
 	HasUncommittedChangesFn func() (bool, error)
 	HasUnpushedCommitsFn    func() (bool, error)
-	IsMergedToOriginFn      func(string) (bool, error)
+	IsMergedToBaseBranchFn  func(string) (bool, error)
 	// "*AtFn" callbacks receive the same args as the real Git interface
 	// methods. Use them when a test needs to vary results by worktree path or
 	// branch (the simpler Fn forms above still work for fixed return values).
 	HasUncommittedChangesAtFn   func(worktreePath string) (bool, error)
 	HasUnpushedCommitsAtFn      func(worktreePath, currentBranch string) (bool, error)
-	IsMergedToOriginAtFn        func(worktreePath, currentBranch, targetBranch string) (bool, error)
+	IsMergedToBaseBranchAtFn    func(worktreePath, currentBranch, targetBranch string) (bool, error)
 	DeleteBranchFn              func(string) error
 	ListWorktreesFn             func() ([]git.WorktreeInfo, error)
 	RemoveWorktreeByPathFn      func(string) error
@@ -180,12 +180,12 @@ func (m *mockGit) HasUnpushedCommits(worktreePath, currentBranch string) (bool, 
 	return false, nil
 }
 
-func (m *mockGit) IsMergedToOrigin(worktreePath, currentBranch, targetBranch string) (bool, error) {
-	if m.IsMergedToOriginAtFn != nil {
-		return m.IsMergedToOriginAtFn(worktreePath, currentBranch, targetBranch)
+func (m *mockGit) IsMergedToBaseBranch(worktreePath, currentBranch, targetBranch string) (bool, error) {
+	if m.IsMergedToBaseBranchAtFn != nil {
+		return m.IsMergedToBaseBranchAtFn(worktreePath, currentBranch, targetBranch)
 	}
-	if m.IsMergedToOriginFn != nil {
-		return m.IsMergedToOriginFn(targetBranch)
+	if m.IsMergedToBaseBranchFn != nil {
+		return m.IsMergedToBaseBranchFn(targetBranch)
 	}
 	// Default to merged unless overridden
 	return true, nil
@@ -318,13 +318,13 @@ func TestEndCommand_PerformSafetyChecks(t *testing.T) {
 				return &mockGit{
 					HasUncommittedChangesFn: func() (bool, error) { return true, nil },
 					HasUnpushedCommitsFn:    func() (bool, error) { return true, nil },
-					IsMergedToOriginFn:      func(targetBranch string) (bool, error) { return false, nil },
+					IsMergedToBaseBranchFn:  func(targetBranch string) (bool, error) { return false, nil },
 				}
 			},
 			expectedWarnings: []string{
 				"You have uncommitted changes",
 				"You have unpushed commits",
-				"Branch is not merged to origin/main",
+				"Branch is not merged to main",
 			},
 		},
 		{
@@ -2600,7 +2600,7 @@ func TestCleanCommand_Execute_AllRemovable(t *testing.T) {
 		HasUnpushedCommitsFn: func() (bool, error) {
 			return false, nil
 		},
-		IsMergedToOriginFn: func(branch string) (bool, error) {
+		IsMergedToBaseBranchFn: func(branch string) (bool, error) {
 			return true, nil
 		},
 		RemoveWorktreeByPathFn: func(path string) error {
@@ -2678,7 +2678,7 @@ func TestCleanCommand_Execute_MixedRemovability(t *testing.T) {
 		HasUnpushedCommitsFn: func() (bool, error) {
 			return false, nil
 		},
-		IsMergedToOriginAtFn: func(worktreePath, _, _ string) (bool, error) {
+		IsMergedToBaseBranchAtFn: func(worktreePath, _, _ string) (bool, error) {
 			if strings.Contains(worktreePath, "wt3") {
 				return false, nil
 			}
@@ -2761,7 +2761,7 @@ func TestCleanCommand_Execute_DryRun(t *testing.T) {
 		HasUnpushedCommitsFn: func() (bool, error) {
 			return false, nil
 		},
-		IsMergedToOriginFn: func(branch string) (bool, error) {
+		IsMergedToBaseBranchFn: func(branch string) (bool, error) {
 			return true, nil
 		},
 		RemoveWorktreeByPathFn: func(path string) error {
@@ -2823,7 +2823,7 @@ func TestCleanCommand_Execute_UserDeclines(t *testing.T) {
 		HasUnpushedCommitsFn: func() (bool, error) {
 			return false, nil
 		},
-		IsMergedToOriginFn: func(branch string) (bool, error) {
+		IsMergedToBaseBranchFn: func(branch string) (bool, error) {
 			return true, nil
 		},
 		RemoveWorktreeByPathFn: func(path string) error {
@@ -2887,7 +2887,7 @@ func TestCleanCommand_Execute_Force(t *testing.T) {
 		HasUnpushedCommitsFn: func() (bool, error) {
 			return false, nil
 		},
-		IsMergedToOriginFn: func(branch string) (bool, error) {
+		IsMergedToBaseBranchFn: func(branch string) (bool, error) {
 			return true, nil
 		},
 		RemoveWorktreeByPathFn: func(path string) error {
@@ -2952,7 +2952,7 @@ func TestCleanCommand_Execute_WithBranchDeletion(t *testing.T) {
 		HasUnpushedCommitsFn: func() (bool, error) {
 			return false, nil
 		},
-		IsMergedToOriginFn: func(branch string) (bool, error) {
+		IsMergedToBaseBranchFn: func(branch string) (bool, error) {
 			return true, nil
 		},
 		RemoveWorktreeByPathFn: func(path string) error {
@@ -3029,7 +3029,7 @@ func TestCleanCommand_Execute_RemovalError(t *testing.T) {
 		HasUnpushedCommitsFn: func() (bool, error) {
 			return false, nil
 		},
-		IsMergedToOriginFn: func(branch string) (bool, error) {
+		IsMergedToBaseBranchFn: func(branch string) (bool, error) {
 			return true, nil
 		},
 		RemoveWorktreeByPathFn: func(path string) error {
@@ -3278,7 +3278,7 @@ func TestEndCommand_PerformSafetyChecks_MergeStatusError(t *testing.T) {
 	mg := &mockGit{
 		HasUncommittedChangesFn: func() (bool, error) { return false, nil },
 		HasUnpushedCommitsFn:    func() (bool, error) { return false, nil },
-		IsMergedToOriginFn: func(targetBranch string) (bool, error) {
+		IsMergedToBaseBranchFn: func(targetBranch string) (bool, error) {
 			return false, fmt.Errorf("could not check merge status")
 		},
 	}
@@ -3346,7 +3346,7 @@ func TestCleanCommand_Execute_ConfirmPromptError(t *testing.T) {
 		},
 		HasUncommittedChangesFn: func() (bool, error) { return false, nil },
 		HasUnpushedCommitsFn:    func() (bool, error) { return false, nil },
-		IsMergedToOriginFn:      func(branch string) (bool, error) { return true, nil },
+		IsMergedToBaseBranchFn:  func(branch string) (bool, error) { return true, nil },
 	}
 
 	ui := &mockUI{
@@ -3381,7 +3381,7 @@ func TestCleanCommand_CheckWorktree_UnpushedCommitsError(t *testing.T) {
 		HasUnpushedCommitsFn: func() (bool, error) {
 			return false, fmt.Errorf("no upstream branch configured")
 		},
-		IsMergedToOriginFn: func(branch string) (bool, error) { return true, nil },
+		IsMergedToBaseBranchFn: func(branch string) (bool, error) { return true, nil },
 	}
 
 	deps := &Dependencies{
@@ -3421,7 +3421,7 @@ func TestCleanCommand_CheckWorktree_MergeStatusError(t *testing.T) {
 	mg := &mockGit{
 		HasUncommittedChangesFn: func() (bool, error) { return false, nil },
 		HasUnpushedCommitsFn:    func() (bool, error) { return false, nil },
-		IsMergedToOriginFn: func(branch string) (bool, error) {
+		IsMergedToBaseBranchFn: func(branch string) (bool, error) {
 			return false, fmt.Errorf("merge check failed")
 		},
 	}
@@ -3464,8 +3464,8 @@ func TestCleanCommand_CheckWorktree_UncommittedChangesNon128Error(t *testing.T) 
 		HasUncommittedChangesFn: func() (bool, error) {
 			return false, fmt.Errorf("some other git error")
 		},
-		HasUnpushedCommitsFn: func() (bool, error) { return false, nil },
-		IsMergedToOriginFn:   func(branch string) (bool, error) { return true, nil },
+		HasUnpushedCommitsFn:   func() (bool, error) { return false, nil },
+		IsMergedToBaseBranchFn: func(branch string) (bool, error) { return true, nil },
 	}
 
 	deps := &Dependencies{
@@ -3505,7 +3505,7 @@ func TestCleanCommand_CheckWorktree_UnpushedCommitsTrue(t *testing.T) {
 	mg := &mockGit{
 		HasUncommittedChangesFn: func() (bool, error) { return false, nil },
 		HasUnpushedCommitsFn:    func() (bool, error) { return true, nil },
-		IsMergedToOriginFn:      func(branch string) (bool, error) { return true, nil },
+		IsMergedToBaseBranchFn:  func(branch string) (bool, error) { return true, nil },
 	}
 
 	deps := &Dependencies{
@@ -3545,7 +3545,7 @@ func TestCleanCommand_CheckWorktree_NotMerged(t *testing.T) {
 	mg := &mockGit{
 		HasUncommittedChangesFn: func() (bool, error) { return false, nil },
 		HasUnpushedCommitsFn:    func() (bool, error) { return false, nil },
-		IsMergedToOriginFn:      func(branch string) (bool, error) { return false, nil },
+		IsMergedToBaseBranchFn:  func(branch string) (bool, error) { return false, nil },
 	}
 
 	deps := &Dependencies{
@@ -3594,7 +3594,7 @@ func TestCleanCommand_RemoveWorktrees_BranchDeletionError(t *testing.T) {
 		},
 		HasUncommittedChangesFn: func() (bool, error) { return false, nil },
 		HasUnpushedCommitsFn:    func() (bool, error) { return false, nil },
-		IsMergedToOriginFn:      func(branch string) (bool, error) { return true, nil },
+		IsMergedToBaseBranchFn:  func(branch string) (bool, error) { return true, nil },
 		RemoveWorktreeByPathFn:  func(path string) error { return nil },
 		DeleteBranchFn: func(branch string) error {
 			return fmt.Errorf("branch deletion failed")
@@ -4063,7 +4063,7 @@ func TestCleanCommand_Execute_PreEndHook(t *testing.T) {
 		},
 		HasUncommittedChangesFn: func() (bool, error) { return false, nil },
 		HasUnpushedCommitsFn:    func() (bool, error) { return false, nil },
-		IsMergedToOriginFn:      func(string) (bool, error) { return true, nil },
+		IsMergedToBaseBranchFn:  func(string) (bool, error) { return true, nil },
 		RemoveWorktreeByPathFn: func(path string) error {
 			removedPaths = append(removedPaths, path)
 			return nil
@@ -4134,7 +4134,7 @@ func TestCleanCommand_Execute_PreEndHookFailure(t *testing.T) {
 		},
 		HasUncommittedChangesFn: func() (bool, error) { return false, nil },
 		HasUnpushedCommitsFn:    func() (bool, error) { return false, nil },
-		IsMergedToOriginFn:      func(string) (bool, error) { return true, nil },
+		IsMergedToBaseBranchFn:  func(string) (bool, error) { return true, nil },
 		RemoveWorktreeByPathFn: func(path string) error {
 			removedPaths = append(removedPaths, path)
 			return nil

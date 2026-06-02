@@ -7,6 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+- The merge-status safety check in `gw end` / `gw clean` now treats a branch merged into the **local** base branch as merged, not only one merged into `origin/<base>`. Merging into local `main` before pushing no longer raises the "Branch is not merged" (and the related "unpushed commits") warning, since the work is already preserved in local `main`'s history. The warning text changed from "Branch is not merged to origin/main" to "Branch is not merged to main".
+
 ### Fixed
 - `gw end` now accepts the full branch name (e.g. `527/impl`) in addition to the bare issue number (`527`). Previously passing `527/impl` — which is what shell completion suggests — failed with "worktree for 527/impl not found" because the branch name was mapped to a different directory suffix. The worktree is now resolved by matching the branch name as well as the computed path, and removal uses the resolved path.
 

@@ -176,7 +176,7 @@ func (c *CleanCommand) checkWorktree(info *git.WorktreeInfo) *WorktreeStatus {
 		status.CanRemove = false
 	}
 
-	isMerged, err := c.deps.Git.IsMergedToOrigin(info.Path, info.Branch, defaultBaseBranch)
+	isMerged, err := c.deps.Git.IsMergedToBaseBranch(info.Path, info.Branch, defaultBaseBranch)
 	if err != nil {
 		status.Warnings = append(status.Warnings, fmt.Sprintf("Could not check merge status: %v", err))
 		status.CanRemove = false
