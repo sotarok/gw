@@ -584,7 +584,11 @@ func TestCleanCommand_Execute_BrokenWorktree(t *testing.T) {
 		},
 		HasUncommittedChangesFn: func() (bool, error) {
 			// Simulate broken worktree with exit status 128
-			return false, fmt.Errorf("fatal: not a git repository: exit status 128")
+			return false, &git.GitError{
+				Args:     []string{"status", "--porcelain"},
+				ExitCode: 128,
+				Stderr:   "fatal: not a git repository",
+			}
 		},
 	}
 

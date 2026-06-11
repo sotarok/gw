@@ -133,38 +133,36 @@ func (c *CleanCommand) checkWorktree(info *git.WorktreeInfo) *WorktreeStatus {
 		Warnings:  []string{},
 	}
 
-	hasChanges, err := c.deps.Git.HasUncommittedChanges(info.Path)
-	if err != nil {
-		// A broken or missing worktree surfaces as `exit status 128` /
-		// "not a git repository" — short-circuit and skip the remaining checks
-		// so the user sees a single clear reason instead of three.
-		errMsg := err.Error()
-		if strings.Contains(errMsg, "exit status 128") || strings.Contains(errMsg, "not a git repository") {
-			status.Warnings = append(status.Warnings, "invalid git repository")
-			status.CanRemove = false
-			return status
-		}
-		status.Warnings = append(status.Warnings, fmt.Sprintf("Could not check uncommitted changes: %v", err))
+	res := runSafetyChecks(c.deps.Git, info.Path, info.Branch, defaultBaseBranch)
+
+	// A broken or missing worktree (git exit 128) — surface a single clear
+	// reason instead of three meaningless ones.
+	if res.InvalidRepo {
+		status.Warnings = append(status.Warnings, "invalid git repository")
 		status.CanRemove = false
-	} else if hasChanges {
+		return status
+	}
+
+	if res.Uncommitted.Err != nil {
+		status.Warnings = append(status.Warnings, fmt.Sprintf("Could not check uncommitted changes: %v", res.Uncommitted.Err))
+		status.CanRemove = false
+	} else if res.Uncommitted.Tripped {
 		status.Warnings = append(status.Warnings, "uncommitted changes")
 		status.CanRemove = false
 	}
 
-	hasUnpushed, err := c.deps.Git.HasUnpushedCommits(info.Path, info.Branch)
-	if err != nil {
-		status.Warnings = append(status.Warnings, fmt.Sprintf("Could not check unpushed commits: %v", err))
+	if res.Unpushed.Err != nil {
+		status.Warnings = append(status.Warnings, fmt.Sprintf("Could not check unpushed commits: %v", res.Unpushed.Err))
 		status.CanRemove = false
-	} else if hasUnpushed {
+	} else if res.Unpushed.Tripped {
 		status.Warnings = append(status.Warnings, "unpushed commits")
 		status.CanRemove = false
 	}
 
-	isMerged, err := c.deps.Git.IsMergedToBaseBranch(info.Path, info.Branch, defaultBaseBranch)
-	if err != nil {
-		status.Warnings = append(status.Warnings, fmt.Sprintf("Could not check merge status: %v", err))
+	if res.Merged.Err != nil {
+		status.Warnings = append(status.Warnings, fmt.Sprintf("Could not check merge status: %v", res.Merged.Err))
 		status.CanRemove = false
-	} else if !isMerged {
+	} else if res.Merged.Tripped {
 		status.Warnings = append(status.Warnings, "not merged")
 		status.CanRemove = false
 	}

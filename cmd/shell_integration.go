@@ -318,7 +318,7 @@ func findWorktreePath(gitClient git.Interface, identifier string) (string, error
 
 	// First, check if the expected directory exists (most common case after 'gw start')
 	// This works even if git worktree list hasn't updated yet
-	expectedPath := filepath.Join(repoRoot, "..", fmt.Sprintf("%s-%s", repoName, identifier))
+	expectedPath := git.ResolveWorktreePath(repoRoot, repoName, identifier)
 	if info, err := os.Stat(expectedPath); err == nil && info.IsDir() {
 		return expectedPath, nil
 	}
@@ -341,7 +341,7 @@ func findWorktreePath(gitClient git.Interface, identifier string) (string, error
 	// If not found as issue, try as branch name (for checkout command)
 	sanitizedBranchName := gitClient.SanitizeBranchNameForDirectory(identifier)
 	if sanitizedBranchName != identifier {
-		expectedPath = filepath.Join(repoRoot, "..", fmt.Sprintf("%s-%s", repoName, sanitizedBranchName))
+		expectedPath = git.ResolveWorktreePath(repoRoot, repoName, sanitizedBranchName)
 		if info, err := os.Stat(expectedPath); err == nil && info.IsDir() {
 			return expectedPath, nil
 		}

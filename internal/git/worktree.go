@@ -33,6 +33,14 @@ func DetermineWorktreeNames(input string) (branchName, dirSuffix string) {
 	return branchName, dirSuffix
 }
 
+// ResolveWorktreePath derives the worktree directory path for a given
+// repository name and suffix, anchored as a sibling of the repository root:
+// `<repoRoot>/../<repoName>-<suffix>`. This is the single source of truth for
+// the worktree naming convention shared by creation, checkout and lookup.
+func ResolveWorktreePath(repoRoot, repoName, suffix string) string {
+	return filepath.Join(repoRoot, "..", fmt.Sprintf("%s-%s", repoName, suffix))
+}
+
 // ResolveBaseBranch resolves the base branch, checking local first, then remote
 // Returns the resolved branch reference and whether it's a remote branch
 func (c *Client) ResolveBaseBranch(baseBranch string) (string, bool) {
@@ -80,7 +88,7 @@ func (c *Client) CreateWorktree(issueNumberOrBranch, baseBranch string) (string,
 	branchName, dirSuffix := DetermineWorktreeNames(issueNumberOrBranch)
 
 	// Create worktree directory path relative to repository root
-	worktreeDir := filepath.Join(repoRoot, "..", fmt.Sprintf("%s-%s", repoName, dirSuffix))
+	worktreeDir := ResolveWorktreePath(repoRoot, repoName, dirSuffix)
 
 	// Resolve base branch (check local first, then remote)
 	resolvedBaseBranch, _ := c.ResolveBaseBranch(baseBranch)
@@ -120,7 +128,7 @@ func (c *Client) RemoveWorktree(issueNumberOrBranch string) error {
 	_, dirSuffix := DetermineWorktreeNames(issueNumberOrBranch)
 
 	// Create worktree directory path relative to repository root
-	worktreeDir := filepath.Join(repoRoot, "..", fmt.Sprintf("%s-%s", repoName, dirSuffix))
+	worktreeDir := ResolveWorktreePath(repoRoot, repoName, dirSuffix)
 	return c.RemoveWorktreeByPath(worktreeDir)
 }
 

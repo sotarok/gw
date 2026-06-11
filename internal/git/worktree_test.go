@@ -169,6 +169,48 @@ func TestDetermineWorktreeNames(t *testing.T) {
 	}
 }
 
+func TestResolveWorktreePath(t *testing.T) {
+	tests := []struct {
+		name     string
+		repoRoot string
+		repoName string
+		suffix   string
+		expected string
+	}{
+		{
+			name:     "issue suffix",
+			repoRoot: "/home/user/projects/myrepo",
+			repoName: "myrepo",
+			suffix:   "123",
+			expected: "/home/user/projects/myrepo-123",
+		},
+		{
+			name:     "sanitized branch suffix",
+			repoRoot: "/home/user/projects/myrepo",
+			repoName: "myrepo",
+			suffix:   "feature-new",
+			expected: "/home/user/projects/myrepo-feature-new",
+		},
+		{
+			name:     "trailing slash on root is normalized",
+			repoRoot: "/home/user/projects/myrepo/",
+			repoName: "myrepo",
+			suffix:   "123",
+			expected: "/home/user/projects/myrepo-123",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := ResolveWorktreePath(tt.repoRoot, tt.repoName, tt.suffix)
+			if got != tt.expected {
+				t.Errorf("ResolveWorktreePath(%q, %q, %q) = %q, want %q",
+					tt.repoRoot, tt.repoName, tt.suffix, got, tt.expected)
+			}
+		})
+	}
+}
+
 func TestListWorktrees(t *testing.T) {
 	t.Run("lists worktrees correctly", func(t *testing.T) {
 		// Save and restore working directory first

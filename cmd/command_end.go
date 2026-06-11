@@ -3,7 +3,6 @@ package cmd
 import (
 	"fmt"
 	"strings"
-	"sync"
 
 	"github.com/sotarok/gw/internal/iterm2"
 	"github.com/sotarok/gw/internal/spinner"
@@ -139,53 +138,29 @@ func (c *EndCommand) Execute(issueNumber string) error {
 }
 
 // performSafetyChecks runs the three safety checks for the worktree at
-// worktreePath in parallel.
+// worktreePath in parallel and formats them into end's warning wording.
+// Check failures are reported on stderr; only tripped checks become warnings.
 func (c *EndCommand) performSafetyChecks(worktreePath, branchName string) []string {
-	type result struct {
-		warning string
-		errMsg  string // empty when no stderr message to emit
+	res := runSafetyChecks(c.deps.Git, worktreePath, branchName, defaultBaseBranch)
+
+	checks := []struct {
+		check    safetyCheck
+		warning  string
+		errLabel string
+	}{
+		{res.Uncommitted, "You have uncommitted changes", "Could not check for uncommitted changes"},
+		{res.Unpushed, "You have unpushed commits", "Could not check for unpushed commits"},
+		{res.Merged, "Branch is not merged to main", "Could not check merge status"},
 	}
 
-	var wg sync.WaitGroup
-	results := make([]result, 3)
-
-	wg.Add(3)
-	go func() {
-		defer wg.Done()
-		hasChanges, err := c.deps.Git.HasUncommittedChanges(worktreePath)
-		if err != nil {
-			results[0].errMsg = fmt.Sprintf("Could not check for uncommitted changes: %v", err)
-		} else if hasChanges {
-			results[0].warning = "You have uncommitted changes"
-		}
-	}()
-	go func() {
-		defer wg.Done()
-		hasUnpushed, err := c.deps.Git.HasUnpushedCommits(worktreePath, branchName)
-		if err != nil {
-			results[1].errMsg = fmt.Sprintf("Could not check for unpushed commits: %v", err)
-		} else if hasUnpushed {
-			results[1].warning = "You have unpushed commits"
-		}
-	}()
-	go func() {
-		defer wg.Done()
-		isMerged, err := c.deps.Git.IsMergedToBaseBranch(worktreePath, branchName, defaultBaseBranch)
-		if err != nil {
-			results[2].errMsg = fmt.Sprintf("Could not check merge status: %v", err)
-		} else if !isMerged {
-			results[2].warning = "Branch is not merged to main"
-		}
-	}()
-	wg.Wait()
-
 	var warnings []string
-	for _, r := range results {
-		if r.errMsg != "" {
-			fmt.Fprintf(c.deps.Stderr, "%s Warning: %s\n", coloredWarning(), r.errMsg)
+	for _, c2 := range checks {
+		if c2.check.Err != nil {
+			fmt.Fprintf(c.deps.Stderr, "%s Warning: %s: %v\n", coloredWarning(), c2.errLabel, c2.check.Err)
+			continue
 		}
-		if r.warning != "" {
-			warnings = append(warnings, r.warning)
+		if c2.check.Tripped {
+			warnings = append(warnings, c2.warning)
 		}
 	}
 	return warnings

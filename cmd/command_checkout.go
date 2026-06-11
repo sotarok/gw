@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/sotarok/gw/internal/git"
 	"github.com/sotarok/gw/internal/hook"
 	"github.com/sotarok/gw/internal/iterm2"
 	"github.com/sotarok/gw/internal/spinner"
@@ -64,7 +65,6 @@ func (c *CheckoutCommand) Execute(branch string) error {
 
 	// Create worktree directory name
 	sanitizedBranchName := c.deps.Git.SanitizeBranchNameForDirectory(branchName)
-	worktreeName := fmt.Sprintf("%s-%s", repoName, sanitizedBranchName)
 
 	// Anchor the worktree path and env file scan to the repository root so
 	// that running checkout from a sub directory still creates the worktree as
@@ -74,7 +74,7 @@ func (c *CheckoutCommand) Execute(branch string) error {
 	if err != nil {
 		return fmt.Errorf("failed to get repository root: %w", err)
 	}
-	worktreePath := filepath.Join(repoRoot, "..", worktreeName)
+	worktreePath := git.ResolveWorktreePath(repoRoot, repoName, sanitizedBranchName)
 
 	// Check if branch exists
 	exists, err := c.deps.Git.BranchExists(branch)
