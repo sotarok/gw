@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.9.0] - 2026-06-11
+
 ### Changed
 - The merge-status safety check in `gw end` / `gw clean` now treats a branch merged into the **local** base branch as merged, not only one merged into `origin/<base>`. Merging into local `main` before pushing no longer raises the "Branch is not merged" (and the related "unpushed commits") warning, since the work is already preserved in local `main`'s history. The warning text changed from "Branch is not merged to origin/main" to "Branch is not merged to main".
 
