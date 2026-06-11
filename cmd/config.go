@@ -20,6 +20,14 @@ var (
 const (
 	statusTrue  = "true"
 	statusFalse = "false"
+
+	// listHeightOffset reserves space for the status bar / help line at the
+	// bottom of the terminal window so the config list does not overflow.
+	listHeightOffset = 3
+
+	// permShellRC is the permission for shell RC files (e.g. .bashrc, .zshrc).
+	// 0644 (rw-r--r--) matches the conventional mode for user config files.
+	permShellRC = 0o644
 )
 
 var configCmd = &cobra.Command{
@@ -197,7 +205,7 @@ func (m *configModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.width = msg.Width
 		m.height = msg.Height
 		m.list.SetWidth(msg.Width)
-		m.list.SetHeight(msg.Height - 3)
+		m.list.SetHeight(msg.Height - listHeightOffset)
 		return m, nil
 
 	case tea.KeyMsg:

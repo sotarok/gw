@@ -34,9 +34,11 @@ clean: ## Clean build artifacts
 	rm -f $(BINARY_NAME)
 	rm -f coverage.txt coverage.html
 
+GOLANGCI_LINT_VERSION=v1.64.8
+
 lint: ## Run linter
 	@if ! which golangci-lint > /dev/null; then \
-		echo "golangci-lint not found. Install v1.x from https://golangci-lint.run/usage/install/"; \
+		echo "golangci-lint not found. Install $(GOLANGCI_LINT_VERSION) from https://golangci-lint.run/usage/install/"; \
 		exit 1; \
 	fi
 	golangci-lint run

@@ -1,5 +1,5 @@
 run:
-  deadline: 5m
+  timeout: 5m
   tests: true
 
 linters:
@@ -11,6 +11,7 @@ linters:
     - errorlint
     - copyloopvar
     - exhaustive
+    - funlen
     - gochecknoinits
     - goconst
     - gocritic
@@ -49,9 +50,11 @@ linters-settings:
   lll:
     line-length: 140
   mnd:
-    settings:
-      mnd:
-        checks: argument,case,condition,return
+    checks:
+      - argument
+      - case
+      - condition
+      - return
   gocritic:
     enabled-tags:
       - diagnostic
@@ -59,15 +62,22 @@ linters-settings:
       - opinionated
       - performance
       - style
+  funlen:
+    lines: 80
+    statements: 60
 
 issues:
   exclude-rules:
     - path: _test\.go
       linters:
-        - mnd
         - dupl
-        - gosec
         - errcheck
+        - funlen
+        - gocyclo
+        - goconst
+        - gocritic
+        - gosec
+        - mnd
     - text: "weak cryptographic primitive"
       linters:
         - gosec
@@ -84,9 +94,6 @@ issues:
         - revive
       text: "unused-parameter"
     - linters:
-        - gocyclo
-      text: "cyclomatic complexity"
-    - linters:
         - gocritic
       text: "octalLiteral"
     - linters:
@@ -95,12 +102,3 @@ issues:
     - linters:
         - revive
       text: "type name will be used as git.GitError by other packages"
-    - linters:
-        - gocritic
-      text: "unnamedResult"
-    - linters:
-        - mnd
-      text: "Magic number"
-    - linters:
-        - goconst
-      text: "string `npm` has 3 occurrences"

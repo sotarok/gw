@@ -7,68 +7,83 @@ import (
 	"strings"
 )
 
+const (
+	permEnvDir  = 0o755 // directories: rwxr-xr-x
+	permEnvFile = 0o600 // env files: rw------- (owner-only, contains secrets)
+)
+
 // EnvFile represents an environment file found in the repository
 type EnvFile struct {
 	Path         string // Relative path from repository root
 	AbsolutePath string // Absolute path
 }
 
-// FindUntrackedEnvFiles finds all untracked .env* files in the repository
-func (c *Client) FindUntrackedEnvFiles(repoPath string) ([]EnvFile, error) {
-	// Get all .env* files
-	var allEnvFiles []string
+// skipDirs is the set of directory names that FindUntrackedEnvFiles skips when
+// walking the repository tree.
+var skipDirs = map[string]bool{
+	gitDir:         true,
+	"node_modules": true,
+	"vendor":       true,
+	"dist":         true,
+	"build":        true,
+}
+
+// collectEnvFiles returns the relative paths of all .env* files found while
+// walking repoPath, excluding directories in skipDirs.
+func collectEnvFiles(repoPath string) ([]string, error) {
+	var paths []string
 	err := filepath.Walk(repoPath, func(path string, info os.FileInfo, err error) error {
 		if err != nil {
 			return nil // Skip directories we can't read
 		}
-
-		// Skip .git directory
-		if info.IsDir() && info.Name() == gitDir {
+		if info.IsDir() && skipDirs[info.Name()] {
 			return filepath.SkipDir
 		}
-
-		// Skip node_modules and similar directories
-		if info.IsDir() && (info.Name() == "node_modules" || info.Name() == "vendor" || info.Name() == "dist" || info.Name() == "build") {
-			return filepath.SkipDir
-		}
-
-		// Check if it's an .env file
 		if !info.IsDir() && strings.HasPrefix(info.Name(), ".env") {
-			relPath, err := filepath.Rel(repoPath, path)
-			if err != nil {
+			rel, relErr := filepath.Rel(repoPath, path)
+			if relErr != nil {
 				return nil
 			}
-			allEnvFiles = append(allEnvFiles, relPath)
+			paths = append(paths, rel)
 		}
-
 		return nil
 	})
+	return paths, err
+}
 
+// trackedFileSet returns the set of files currently tracked by git in repoPath.
+func (c *Client) trackedFileSet(repoPath string) (map[string]bool, error) {
+	out, err := c.r.run(repoPath, "ls-files", "--cached")
+	if err != nil {
+		return nil, fmt.Errorf("failed to get tracked files: %w", err)
+	}
+	tracked := make(map[string]bool)
+	for _, f := range strings.Split(out, "\n") {
+		if f != "" {
+			tracked[f] = true
+		}
+	}
+	return tracked, nil
+}
+
+// FindUntrackedEnvFiles finds all untracked .env* files in the repository
+func (c *Client) FindUntrackedEnvFiles(repoPath string) ([]EnvFile, error) {
+	allEnvFiles, err := collectEnvFiles(repoPath)
 	if err != nil {
 		return nil, fmt.Errorf("failed to walk directory: %w", err)
 	}
 
-	// Get only tracked files from git
-	trackedOutput, err := c.r.run(repoPath, "ls-files", "--cached")
+	trackedFiles, err := c.trackedFileSet(repoPath)
 	if err != nil {
-		return nil, fmt.Errorf("failed to get tracked files: %w", err)
+		return nil, err
 	}
 
-	trackedFiles := make(map[string]bool)
-	for _, file := range strings.Split(trackedOutput, "\n") {
-		if file != "" {
-			trackedFiles[file] = true
-		}
-	}
-
-	// Filter out tracked files
 	var untrackedEnvFiles []EnvFile
 	for _, envFile := range allEnvFiles {
 		if !trackedFiles[envFile] {
-			absPath := filepath.Join(repoPath, envFile)
 			untrackedEnvFiles = append(untrackedEnvFiles, EnvFile{
 				Path:         envFile,
-				AbsolutePath: absPath,
+				AbsolutePath: filepath.Join(repoPath, envFile),
 			})
 		}
 	}
@@ -84,7 +99,7 @@ func (c *Client) CopyEnvFiles(envFiles []EnvFile, sourceRoot, destRoot string) e
 
 		// Create destination directory if it doesn't exist
 		destDir := filepath.Dir(destPath)
-		if err := os.MkdirAll(destDir, 0755); err != nil {
+		if err := os.MkdirAll(destDir, permEnvDir); err != nil {
 			return fmt.Errorf("failed to create directory %s: %w", destDir, err)
 		}
 
@@ -95,7 +110,7 @@ func (c *Client) CopyEnvFiles(envFiles []EnvFile, sourceRoot, destRoot string) e
 		}
 
 		// Write to destination with secure permissions
-		if err := os.WriteFile(destPath, data, 0600); err != nil {
+		if err := os.WriteFile(destPath, data, permEnvFile); err != nil {
 			return fmt.Errorf("failed to write file %s: %w", destPath, err)
 		}
 

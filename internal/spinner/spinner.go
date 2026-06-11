@@ -10,6 +10,9 @@ import (
 	"golang.org/x/term"
 )
 
+// spinnerInterval is the refresh rate for the spinner animation.
+const spinnerInterval = 100 * time.Millisecond
+
 // Spinner wraps the briandowns/spinner for use in gw
 type Spinner struct {
 	s       *spinner.Spinner
@@ -28,7 +31,7 @@ func New(message string, w io.Writer) *Spinner {
 	}
 
 	// CharSets[14] is a clean dot spinner: ⣾⣽⣻⢿⡿⣟⣯⣷
-	s := spinner.New(spinner.CharSets[14], 100*time.Millisecond, spinner.WithWriter(w))
+	s := spinner.New(spinner.CharSets[14], spinnerInterval, spinner.WithWriter(w))
 	s.Suffix = " " + message
 
 	return &Spinner{s: s, enabled: enabled, writer: w, message: message}

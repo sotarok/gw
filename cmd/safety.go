@@ -29,6 +29,11 @@ type safetyResult struct {
 	InvalidRepo bool
 }
 
+// numSafetyChecks is the number of parallel goroutines started by runSafetyChecks
+// (uncommitted, unpushed, merged). Centralized so wg.Add stays in sync with
+// the actual goroutine count.
+const numSafetyChecks = 3
+
 // runSafetyChecks runs the three pre-removal checks in parallel against the
 // worktree at worktreePath using the StatusChecker.
 //
@@ -39,7 +44,7 @@ func runSafetyChecks(g git.StatusChecker, worktreePath, branch, baseBranch strin
 	var result safetyResult
 
 	var wg sync.WaitGroup
-	wg.Add(3)
+	wg.Add(numSafetyChecks)
 	go func() {
 		defer wg.Done()
 		hasChanges, err := g.HasUncommittedChanges(worktreePath)

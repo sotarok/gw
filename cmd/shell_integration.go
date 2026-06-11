@@ -121,6 +121,12 @@ func (c *ShellIntegrationCommand) detectShell() string {
 	}
 }
 
+// getBashZshScript returns the shell integration script for bash/zsh.
+// The function body is dominated by raw string literals containing the embedded
+// shell script and zsh completion definition — not by Go logic — so the line
+// count is an artifact of the template rather than structural complexity.
+//
+//nolint:funlen // shell-script template string accounts for the line count
 func (c *ShellIntegrationCommand) getBashZshScript(shell string) string {
 	shebang := "#!/bin/bash"
 	if shell == shellZsh {

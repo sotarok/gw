@@ -367,7 +367,7 @@ func (c *InitCommand) addShellIntegration(rcPath, shell string) error {
 	}
 
 	// Open file for appending
-	file, err := os.OpenFile(rcPath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+	file, err := os.OpenFile(rcPath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, permShellRC)
 	if err != nil {
 		return fmt.Errorf("failed to open %s: %w", rcPath, err)
 	}

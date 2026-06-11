@@ -26,7 +26,7 @@ Examples:
   gw start 123              # Creates branch "123/impl"
   gw start 476/impl-migration-script  # Creates branch "476/impl-migration-script"
   gw start feature/new-feature        # Creates branch "feature/new-feature"`,
-	Args: cobra.RangeArgs(1, 2),
+	Args: cobra.RangeArgs(1, 2), //nolint:mnd // min=1 (issue), max=2 (issue + base-branch) — obvious in context
 	RunE: runStart,
 }
 

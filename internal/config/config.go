@@ -20,6 +20,13 @@ const (
 	postStartHookKey      = "post_start_hook"
 	postCheckoutHookKey   = "post_checkout_hook"
 	preEndHookKey         = "pre_end_hook"
+
+	// File permission bits
+	permConfigDir  = 0o755 // directories: rwxr-xr-x
+	permConfigFile = 0o600 // config files: rw------- (owner-only read/write)
+
+	// kvParts is the expected number of tokens when splitting "key = value" lines.
+	kvParts = 2
 )
 
 // fieldKind classifies how a config field is parsed, presented and saved.
@@ -183,8 +190,8 @@ func Load(path string) (*Config, error) {
 		}
 
 		// Parse key = value
-		parts := strings.SplitN(line, "=", 2)
-		if len(parts) != 2 {
+		parts := strings.SplitN(line, "=", kvParts)
+		if len(parts) != kvParts {
 			continue
 		}
 
@@ -207,7 +214,7 @@ func Load(path string) (*Config, error) {
 func (c *Config) Save(path string) error {
 	// Ensure directory exists
 	dir := filepath.Dir(path)
-	if err := os.MkdirAll(dir, 0755); err != nil {
+	if err := os.MkdirAll(dir, permConfigDir); err != nil {
 		return fmt.Errorf("failed to create config directory: %w", err)
 	}
 
@@ -245,7 +252,7 @@ func (c *Config) Save(path string) error {
 # Runs with cwd set to the worktree. Same env vars as above; GW_COMMAND is "end" or "clean"
 %s`, boolLines, copyEnvsStr, postHookLines, preHookLines)
 
-	if err := os.WriteFile(path, []byte(content), 0600); err != nil {
+	if err := os.WriteFile(path, []byte(content), permConfigFile); err != nil {
 		return fmt.Errorf("failed to write config file: %w", err)
 	}
 
