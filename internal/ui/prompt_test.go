@@ -290,13 +290,14 @@ func TestConfirmModelInit(t *testing.T) {
 }
 
 func TestShowEnvFilesList(t *testing.T) {
+	ui := NewDefaultUI()
 	t.Run("shows files list", func(t *testing.T) {
 		// Capture stdout
 		old := os.Stdout
 		r, w, _ := os.Pipe()
 		os.Stdout = w
 
-		ShowEnvFilesList([]string{".env", ".env.local"})
+		ui.ShowEnvFilesList([]string{".env", ".env.local"})
 
 		w.Close()
 		os.Stdout = old
@@ -321,7 +322,7 @@ func TestShowEnvFilesList(t *testing.T) {
 		r, w, _ := os.Pipe()
 		os.Stdout = w
 
-		ShowEnvFilesList([]string{})
+		ui.ShowEnvFilesList([]string{})
 
 		w.Close()
 		os.Stdout = old

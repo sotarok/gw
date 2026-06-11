@@ -1,29 +1,10 @@
 package ui
 
 import (
-	"fmt"
 	"strings"
 
 	tea "github.com/charmbracelet/bubbletea"
-	"github.com/charmbracelet/lipgloss"
 )
-
-// ConfirmPrompt shows a yes/no prompt to the user
-func ConfirmPrompt(message string) (bool, error) {
-	m := confirmModel{
-		message: message,
-		cursor:  0, // Default to "yes"
-	}
-
-	p := tea.NewProgram(m)
-	result, err := p.Run()
-	if err != nil {
-		return false, err
-	}
-
-	model := result.(confirmModel)
-	return model.confirmed, nil
-}
 
 type confirmModel struct {
 	message   string
@@ -91,21 +72,4 @@ func (m confirmModel) View() string {
 	s.WriteString(dimStyle.Render("(y/n, ←/→ to select, enter to confirm)"))
 
 	return s.String()
-}
-
-// ShowEnvFilesList displays a list of environment files
-func ShowEnvFilesList(files []string) {
-	if len(files) == 0 {
-		fmt.Println("No environment files found.")
-		return
-	}
-
-	fmt.Println("\nThe following environment files will be copied:")
-	headerStyle := lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("214"))
-	fileStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("242"))
-
-	for _, file := range files {
-		fmt.Printf("  %s %s\n", headerStyle.Render("→"), fileStyle.Render(file))
-	}
-	fmt.Println()
 }
