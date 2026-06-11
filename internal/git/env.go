@@ -3,7 +3,6 @@ package git
 import (
 	"fmt"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strings"
 )
@@ -15,7 +14,7 @@ type EnvFile struct {
 }
 
 // FindUntrackedEnvFiles finds all untracked .env* files in the repository
-func FindUntrackedEnvFiles(repoPath string) ([]EnvFile, error) {
+func (c *Client) FindUntrackedEnvFiles(repoPath string) ([]EnvFile, error) {
 	// Get all .env* files
 	var allEnvFiles []string
 	err := filepath.Walk(repoPath, func(path string, info os.FileInfo, err error) error {
@@ -50,15 +49,13 @@ func FindUntrackedEnvFiles(repoPath string) ([]EnvFile, error) {
 	}
 
 	// Get only tracked files from git
-	cmd := exec.Command("git", "ls-files", "--cached")
-	cmd.Dir = repoPath
-	trackedOutput, err := cmd.Output()
+	trackedOutput, err := c.r.run(repoPath, "ls-files", "--cached")
 	if err != nil {
 		return nil, fmt.Errorf("failed to get tracked files: %w", err)
 	}
 
 	trackedFiles := make(map[string]bool)
-	for _, file := range strings.Split(string(trackedOutput), "\n") {
+	for _, file := range strings.Split(trackedOutput, "\n") {
 		if file != "" {
 			trackedFiles[file] = true
 		}
@@ -80,7 +77,7 @@ func FindUntrackedEnvFiles(repoPath string) ([]EnvFile, error) {
 }
 
 // CopyEnvFiles copies environment files from source to destination
-func CopyEnvFiles(envFiles []EnvFile, sourceRoot, destRoot string) error {
+func (c *Client) CopyEnvFiles(envFiles []EnvFile, sourceRoot, destRoot string) error {
 	for _, envFile := range envFiles {
 		srcPath := filepath.Join(sourceRoot, envFile.Path)
 		destPath := filepath.Join(destRoot, envFile.Path)

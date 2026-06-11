@@ -145,7 +145,7 @@ func isNumeric(s string) bool {
 
 // SelectWorktree shows an interactive UI to select a worktree
 func SelectWorktree() (*git.WorktreeInfo, error) {
-	worktrees, err := git.ListWorktrees()
+	worktrees, err := git.NewClient().ListWorktrees()
 	if err != nil {
 		return nil, err
 	}

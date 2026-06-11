@@ -49,7 +49,7 @@ type Dependencies struct {
 // DefaultDependencies returns the default dependencies
 func DefaultDependencies() *Dependencies {
 	return &Dependencies{
-		Git:    git.NewDefaultClient(),
+		Git:    git.NewClient(),
 		UI:     ui.NewDefaultUI(),
 		Detect: detect.NewDefaultDetector(),
 		Stdout: os.Stdout,

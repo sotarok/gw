@@ -93,6 +93,9 @@ issues:
         - revive
       text: "func name will be used as detect.DetectPackageManager by other packages"
     - linters:
+        - revive
+      text: "type name will be used as git.GitError by other packages"
+    - linters:
         - gocritic
       text: "unnamedResult"
     - linters:

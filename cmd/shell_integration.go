@@ -274,7 +274,7 @@ func (c *ShellIntegrationCommand) printWorktreePath() error {
 	}
 
 	// Use git client to find worktree
-	gitClient := git.NewDefaultClient()
+	gitClient := git.NewClient()
 
 	// Check if we're in a git repository
 	if !gitClient.IsGitRepository() {

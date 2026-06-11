@@ -12,6 +12,56 @@ const (
 	defaultMasterBranch = "master"
 )
 
+// testClient is the shared git.Client used by the package-level test helpers
+// below. The helpers exist so the large body of existing integration tests can
+// keep calling git operations by short names while every call routes through a
+// real *Client method (the production entry point after the runner/Client
+// refactor).
+var testClient = NewClient()
+
+func RunCommand(command string) error            { return testClient.RunCommand(command) }
+func IsGitRepository() bool                      { return testClient.IsGitRepository() }
+func GetRepositoryName() (string, error)         { return testClient.GetRepositoryName() }
+func GetOriginalRepositoryName() (string, error) { return testClient.GetOriginalRepositoryName() }
+func GetRepositoryRoot() (string, error)         { return testClient.GetRepositoryRoot() }
+func GetCurrentBranch() (string, error)          { return testClient.GetCurrentBranch() }
+func FetchAll() error                            { return testClient.FetchAll() }
+func ListAllBranches() ([]string, error)         { return testClient.ListAllBranches() }
+func BranchExists(branch string) (bool, error)   { return testClient.BranchExists(branch) }
+func DeleteBranch(branch string) error           { return testClient.DeleteBranch(branch) }
+func ListWorktrees() ([]WorktreeInfo, error)     { return testClient.ListWorktrees() }
+func RemoveWorktree(issueNumber string) error    { return testClient.RemoveWorktree(issueNumber) }
+func RemoveWorktreeByPath(worktreePath string) error {
+	return testClient.RemoveWorktreeByPath(worktreePath)
+}
+func CreateWorktree(issueNumberOrBranch, baseBranch string) (string, error) {
+	return testClient.CreateWorktree(issueNumberOrBranch, baseBranch)
+}
+func CreateWorktreeFromBranch(worktreePath, sourceBranch, targetBranch string) error {
+	return testClient.CreateWorktreeFromBranch(worktreePath, sourceBranch, targetBranch)
+}
+func GetWorktreeForIssue(issueNumberOrBranch string) (*WorktreeInfo, error) {
+	return testClient.GetWorktreeForIssue(issueNumberOrBranch)
+}
+func ResolveBaseBranch(baseBranch string) (string, bool) {
+	return testClient.ResolveBaseBranch(baseBranch)
+}
+func HasUncommittedChanges(worktreePath string) (bool, error) {
+	return testClient.HasUncommittedChanges(worktreePath)
+}
+func HasUnpushedCommits(worktreePath, currentBranch string) (bool, error) {
+	return testClient.HasUnpushedCommits(worktreePath, currentBranch)
+}
+func IsMergedToBaseBranch(worktreePath, currentBranch, targetBranch string) (bool, error) {
+	return testClient.IsMergedToBaseBranch(worktreePath, currentBranch, targetBranch)
+}
+func FindUntrackedEnvFiles(repoPath string) ([]EnvFile, error) {
+	return testClient.FindUntrackedEnvFiles(repoPath)
+}
+func CopyEnvFiles(envFiles []EnvFile, sourceRoot, destRoot string) error {
+	return testClient.CopyEnvFiles(envFiles, sourceRoot, destRoot)
+}
+
 // Helper function to run git commands in tests
 func runGitCommand(t *testing.T, dir string, args ...string) {
 	cmd := exec.Command("git", args...)

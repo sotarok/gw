@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -602,6 +603,64 @@ func TestCleanCommand_Execute_BrokenWorktree(t *testing.T) {
 
 	if !contains(output, "No worktrees to remove") {
 		t.Errorf("Expected 'No worktrees to remove' message, got: %s", output)
+	}
+}
+
+// TestCleanCommand_checkWorktree_DeletedWorktreeDir_Integration drives the
+// real git.Client (not a mock) against a worktree whose directory has been
+// removed from disk, reproducing the user scenario behind the runner fix.
+// git itself must report exit 128 ("cannot change to '<dir>'") so the
+// broken-worktree short-circuit fires and the user sees exactly one
+// "invalid git repository" warning instead of three meaningless ones.
+func TestCleanCommand_checkWorktree_DeletedWorktreeDir_Integration(t *testing.T) {
+	if _, err := exec.LookPath("git"); err != nil {
+		t.Skip("git not available")
+	}
+
+	repo := t.TempDir()
+	runGit := func(dir string, args ...string) {
+		t.Helper()
+		cmd := exec.Command("git", args...)
+		cmd.Dir = dir
+		if out, err := cmd.CombinedOutput(); err != nil {
+			t.Fatalf("git %v failed: %v\n%s", args, err, out)
+		}
+	}
+
+	runGit(repo, "init")
+	runGit(repo, "config", "user.email", "test@example.com")
+	runGit(repo, "config", "user.name", "Test User")
+	if err := os.WriteFile(filepath.Join(repo, "f.txt"), []byte("x"), 0644); err != nil {
+		t.Fatalf("write file: %v", err)
+	}
+	runGit(repo, "add", "f.txt")
+	runGit(repo, "commit", "-m", "initial")
+
+	// Create a real worktree on a feature branch, then delete its directory.
+	wtPath := filepath.Join(t.TempDir(), "wt-feature")
+	runGit(repo, "worktree", "add", wtPath, "-b", "feature/impl")
+	if err := os.RemoveAll(wtPath); err != nil {
+		t.Fatalf("remove worktree dir: %v", err)
+	}
+
+	deps := &Dependencies{
+		Git:    git.NewClient(),
+		UI:     &mockUI{},
+		Stdout: &bytes.Buffer{},
+		Stderr: &bytes.Buffer{},
+	}
+	cmd := NewCleanCommandWithConfig(deps, false, true, true, &config.Config{})
+
+	status := cmd.checkWorktree(&git.WorktreeInfo{Path: wtPath, Branch: "feature/impl"})
+
+	if status.CanRemove {
+		t.Errorf("expected CanRemove=false for deleted worktree dir")
+	}
+	if len(status.Warnings) != 1 {
+		t.Fatalf("expected exactly 1 warning, got %d: %v", len(status.Warnings), status.Warnings)
+	}
+	if status.Warnings[0] != "invalid git repository" {
+		t.Errorf("expected single 'invalid git repository' warning, got: %q", status.Warnings[0])
 	}
 }
 

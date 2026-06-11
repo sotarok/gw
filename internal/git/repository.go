@@ -2,7 +2,6 @@ package git
 
 import (
 	"fmt"
-	"os/exec"
 	"path/filepath"
 	"strings"
 )
@@ -12,20 +11,19 @@ const gitDir = ".git"
 // showTopLevel returns the absolute path of the current git repository root by
 // running `git rev-parse --show-toplevel`. It is the shared implementation
 // behind GetRepositoryName and GetRepositoryRoot.
-func showTopLevel() (string, error) {
-	cmd := exec.Command("git", "rev-parse", "--show-toplevel")
-	output, err := cmd.Output()
+func (c *Client) showTopLevel() (string, error) {
+	out, err := c.r.run("", "rev-parse", "--show-toplevel")
 	if err != nil {
 		return "", fmt.Errorf("not in a git repository: %w", err)
 	}
-	return strings.TrimSpace(string(output)), nil
+	return out, nil
 }
 
 // GetRepositoryName returns the name of the current git repository
 // Note: In a worktree, this returns the worktree directory name, not the original repository name.
 // Use GetOriginalRepositoryName() if you need the original repository name.
-func GetRepositoryName() (string, error) {
-	repoPath, err := showTopLevel()
+func (c *Client) GetRepositoryName() (string, error) {
+	repoPath, err := c.showTopLevel()
 	if err != nil {
 		return "", err
 	}
@@ -35,17 +33,16 @@ func GetRepositoryName() (string, error) {
 // GetRepositoryRoot returns the absolute path of the current git repository root.
 // When invoked from a sub directory, this still returns the repository root (not cwd).
 // In a worktree, this returns the worktree's root directory, not the main repo's root.
-func GetRepositoryRoot() (string, error) {
-	return showTopLevel()
+func (c *Client) GetRepositoryRoot() (string, error) {
+	return c.showTopLevel()
 }
 
 // GetOriginalRepositoryName returns the name of the original git repository.
 // In a worktree, this returns the name of the main repository, not the worktree directory.
 // This is useful for creating new worktrees with consistent naming.
-func GetOriginalRepositoryName() (string, error) {
+func (c *Client) GetOriginalRepositoryName() (string, error) {
 	// Get the git common directory (points to original .git in worktrees)
-	cmd := exec.Command("git", "rev-parse", "--git-common-dir")
-	output, err := cmd.Output()
+	out, err := c.r.run("", "rev-parse", "--git-common-dir")
 	if err != nil {
 		return "", fmt.Errorf("not in a git repository: %w", err)
 	}
@@ -55,7 +52,7 @@ func GetOriginalRepositoryName() (string, error) {
 	// called from inside a worktree. Resolve to absolute before extracting the
 	// repository directory name — otherwise sub-directory invocations yield
 	// "..", "..-{branch}", etc.
-	absGitCommonDir, err := filepath.Abs(strings.TrimSpace(string(output)))
+	absGitCommonDir, err := filepath.Abs(out)
 	if err != nil {
 		return "", fmt.Errorf("failed to resolve git common dir: %w", err)
 	}
@@ -64,50 +61,43 @@ func GetOriginalRepositoryName() (string, error) {
 }
 
 // IsGitRepository checks if the current directory is inside a git repository
-func IsGitRepository() bool {
-	cmd := exec.Command("git", "rev-parse", "--git-dir")
-	err := cmd.Run()
+func (c *Client) IsGitRepository() bool {
+	_, err := c.r.run("", "rev-parse", "--git-dir")
 	return err == nil
 }
 
 // FetchAll fetches from all remotes and prunes deleted remote-tracking branches
-func FetchAll() error {
-	cmd := exec.Command("git", "fetch", "--all", "--prune")
-	output, err := cmd.CombinedOutput()
-	if err != nil {
-		return fmt.Errorf("failed to fetch from remotes: %s: %w", strings.TrimSpace(string(output)), err)
+func (c *Client) FetchAll() error {
+	if _, err := c.r.runCombined("", "fetch", "--all", "--prune"); err != nil {
+		return fmt.Errorf("failed to fetch from remotes: %w", err)
 	}
 	return nil
 }
 
 // GetCurrentBranch returns the name of the current branch
-func GetCurrentBranch() (string, error) {
-	cmd := exec.Command("git", "rev-parse", "--abbrev-ref", "HEAD")
-	output, err := cmd.Output()
+func (c *Client) GetCurrentBranch() (string, error) {
+	out, err := c.r.run("", "rev-parse", "--abbrev-ref", "HEAD")
 	if err != nil {
 		return "", fmt.Errorf("failed to get current branch: %w", err)
 	}
-
-	return strings.TrimSpace(string(output)), nil
+	return out, nil
 }
 
 // ListAllBranches returns all local and remote branches
-func ListAllBranches() ([]string, error) {
+func (c *Client) ListAllBranches() ([]string, error) {
 	// First, fetch to ensure we have latest remote branches
-	fetchCmd := exec.Command("git", "fetch", "--prune")
-	if err := fetchCmd.Run(); err != nil {
+	if _, err := c.r.run("", "fetch", "--prune"); err != nil {
 		// Continue even if fetch fails
 		fmt.Printf("Warning: failed to fetch latest branches: %v\n", err)
 	}
 
 	// Get all branches (local and remote)
-	cmd := exec.Command("git", "branch", "-a", "--format=%(refname:short)")
-	output, err := cmd.Output()
+	out, err := c.r.run("", "branch", "-a", "--format=%(refname:short)")
 	if err != nil {
 		return nil, fmt.Errorf("failed to list branches: %w", err)
 	}
 
-	lines := strings.Split(strings.TrimSpace(string(output)), "\n")
+	lines := strings.Split(out, "\n")
 	var branches []string
 	for _, line := range lines {
 		line = strings.TrimSpace(line)
@@ -120,30 +110,30 @@ func ListAllBranches() ([]string, error) {
 }
 
 // localBranchExists checks if a local branch exists
-func localBranchExists(branch string) bool {
-	cmd := exec.Command("git", "rev-parse", "--verify", "--quiet", "refs/heads/"+branch)
-	return cmd.Run() == nil
+func (c *Client) localBranchExists(branch string) bool {
+	_, err := c.r.run("", "rev-parse", "--verify", "--quiet", "refs/heads/"+branch)
+	return err == nil
 }
 
 // remoteBranchExists checks if a remote branch exists (origin/<branch>)
-func remoteBranchExists(branch string) bool {
+func (c *Client) remoteBranchExists(branch string) bool {
 	remoteRef := branch
 	if !strings.HasPrefix(branch, "origin/") {
 		remoteRef = "origin/" + branch
 	}
-	cmd := exec.Command("git", "rev-parse", "--verify", "--quiet", remoteRef)
-	return cmd.Run() == nil
+	_, err := c.r.run("", "rev-parse", "--verify", "--quiet", remoteRef)
+	return err == nil
 }
 
 // BranchExists checks if a branch exists (local or remote)
-func BranchExists(branch string) (bool, error) {
+func (c *Client) BranchExists(branch string) (bool, error) {
 	// Check if it's a local branch
-	if localBranchExists(branch) {
+	if c.localBranchExists(branch) {
 		return true, nil
 	}
 
 	// Check if it's a remote branch
-	if remoteBranchExists(branch) {
+	if c.remoteBranchExists(branch) {
 		return true, nil
 	}
 
@@ -151,12 +141,10 @@ func BranchExists(branch string) (bool, error) {
 }
 
 // DeleteBranch deletes a local git branch
-func DeleteBranch(branch string) error {
+func (c *Client) DeleteBranch(branch string) error {
 	// Use -D flag to force delete even if not merged
-	cmd := exec.Command("git", "branch", "-D", branch)
-	output, err := cmd.CombinedOutput()
-	if err != nil {
-		return fmt.Errorf("failed to delete branch %s: %s: %w", branch, string(output), err)
+	if _, err := c.r.runCombined("", "branch", "-D", branch); err != nil {
+		return fmt.Errorf("failed to delete branch %s: %w", branch, err)
 	}
 	return nil
 }

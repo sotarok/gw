@@ -10,6 +10,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 - `gw end` now writes its safety-check warning block (the "Safety check warnings:" header and the per-check bullet list) to stderr instead of stdout, matching the project's stdout/stderr policy (results and interactive prompts on stdout; warnings and errors on stderr). The confirmation prompt itself remains on stdout. This only affects output redirection (e.g. `gw end 123 1>out 2>err`); interactive behavior is unchanged.
 
+### Internal
+- Refactored the `internal/git` package (Phase 3-A): git subprocess execution is now centralized in a single `runner`, and the former package-level git functions are methods on a `*git.Client`. The 38 pass-through delegation methods and the `DefaultClient` struct were removed in favor of `git.NewClient()`. No user-facing behavior change.
+
 ## [0.9.0] - 2026-06-11
 
 ### Changed

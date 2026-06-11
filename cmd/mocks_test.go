@@ -202,7 +202,7 @@ func (m *mockGit) CopyEnvFiles(envFiles []git.EnvFile, sourceRoot, destRoot stri
 		return m.copyEnvError
 	}
 	// Actually copy files for testing
-	return git.CopyEnvFiles(envFiles, sourceRoot, destRoot)
+	return git.NewClient().CopyEnvFiles(envFiles, sourceRoot, destRoot)
 }
 
 func (m *mockGit) RunCommand(command string) error {

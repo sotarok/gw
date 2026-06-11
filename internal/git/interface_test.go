@@ -6,17 +6,17 @@ import (
 	"testing"
 )
 
-func TestNewDefaultClient(t *testing.T) {
-	client := NewDefaultClient()
+func TestNewClient(t *testing.T) {
+	client := NewClient()
 	if client == nil {
-		t.Error("NewDefaultClient() returned nil")
+		t.Error("NewClient() returned nil")
 	}
 
 	// Verify it implements Interface
 	var _ Interface = client
 }
 
-func TestDefaultClient_IsGitRepository(t *testing.T) {
+func TestClient_IsGitRepository(t *testing.T) {
 	// Create a temporary git repository
 	tempDir, err := os.MkdirTemp("", "test-default-client")
 	if err != nil {
@@ -35,7 +35,7 @@ func TestDefaultClient_IsGitRepository(t *testing.T) {
 		t.Fatalf("failed to change dir: %v", err)
 	}
 
-	client := NewDefaultClient()
+	client := NewClient()
 	if client.IsGitRepository() {
 		t.Error("IsGitRepository() should return false for non-git directory")
 	}
@@ -50,7 +50,7 @@ func TestDefaultClient_IsGitRepository(t *testing.T) {
 	}
 }
 
-func TestDefaultClient_GetRepositoryName(t *testing.T) {
+func TestClient_GetRepositoryName(t *testing.T) {
 	// Create a temporary git repository
 	tempDir, err := os.MkdirTemp("", "test-repo-name")
 	if err != nil {
@@ -78,7 +78,7 @@ func TestDefaultClient_GetRepositoryName(t *testing.T) {
 		t.Fatalf("failed to init git repo: %v", err)
 	}
 
-	client := NewDefaultClient()
+	client := NewClient()
 	name, err := client.GetRepositoryName()
 	if err != nil {
 		t.Fatalf("GetRepositoryName() failed: %v", err)
@@ -89,7 +89,7 @@ func TestDefaultClient_GetRepositoryName(t *testing.T) {
 	}
 }
 
-func TestDefaultClient_GetCurrentBranch(t *testing.T) {
+func TestClient_GetCurrentBranch(t *testing.T) {
 	// Create a temporary git repository
 	tempDir, err := os.MkdirTemp("", "test-current-branch")
 	if err != nil {
@@ -124,7 +124,7 @@ func TestDefaultClient_GetCurrentBranch(t *testing.T) {
 		t.Fatalf("failed to create commit: %v", err)
 	}
 
-	client := NewDefaultClient()
+	client := NewClient()
 	branch, err := client.GetCurrentBranch()
 	if err != nil {
 		t.Fatalf("GetCurrentBranch() failed: %v", err)
@@ -138,7 +138,7 @@ func TestDefaultClient_GetCurrentBranch(t *testing.T) {
 	}
 }
 
-func TestDefaultClient_BranchOperations(t *testing.T) {
+func TestClient_BranchOperations(t *testing.T) {
 	// Create a temporary git repository
 	tempDir, err := os.MkdirTemp("", "test-branch-ops")
 	if err != nil {
@@ -173,7 +173,7 @@ func TestDefaultClient_BranchOperations(t *testing.T) {
 		t.Fatalf("failed to create commit: %v", err)
 	}
 
-	client := NewDefaultClient()
+	client := NewClient()
 
 	// Test BranchExists
 	const mainBranch = "main"
@@ -219,7 +219,7 @@ func TestDefaultClient_BranchOperations(t *testing.T) {
 	}
 }
 
-func TestDefaultClient_StatusOperations(t *testing.T) {
+func TestClient_StatusOperations(t *testing.T) {
 	// Create a temporary git repository
 	tempDir, err := os.MkdirTemp("", "test-status-ops")
 	if err != nil {
@@ -254,7 +254,7 @@ func TestDefaultClient_StatusOperations(t *testing.T) {
 		t.Fatalf("failed to create commit: %v", err)
 	}
 
-	client := NewDefaultClient()
+	client := NewClient()
 
 	// Test HasUncommittedChanges - should be false for clean repo
 	hasChanges, err := client.HasUncommittedChanges(tempDir)
@@ -305,7 +305,7 @@ func TestDefaultClient_StatusOperations(t *testing.T) {
 	}
 }
 
-func TestDefaultClient_WorktreeOperations(t *testing.T) {
+func TestClient_WorktreeOperations(t *testing.T) {
 	// Save original directory
 	originalDir, err := os.Getwd()
 	if err != nil {
@@ -344,7 +344,7 @@ func TestDefaultClient_WorktreeOperations(t *testing.T) {
 	// Create main branch
 	RunCommand("git checkout -b main")
 
-	client := NewDefaultClient()
+	client := NewClient()
 
 	// Test CreateWorktree
 	worktreePath, err := client.CreateWorktree("123", "main")
@@ -384,7 +384,7 @@ func TestDefaultClient_WorktreeOperations(t *testing.T) {
 	}
 }
 
-func TestDefaultClient_EnvFileOperations(t *testing.T) {
+func TestClient_EnvFileOperations(t *testing.T) {
 	// Create source directory
 	srcDir, err := os.MkdirTemp("", "test-env-src")
 	if err != nil {
@@ -432,7 +432,7 @@ func TestDefaultClient_EnvFileOperations(t *testing.T) {
 	}
 	RunCommand("git add .env.example && git commit -m 'add example'")
 
-	client := NewDefaultClient()
+	client := NewClient()
 
 	// Test FindUntrackedEnvFiles
 	envFiles, err := client.FindUntrackedEnvFiles(srcDir)
@@ -460,8 +460,8 @@ func TestDefaultClient_EnvFileOperations(t *testing.T) {
 	}
 }
 
-func TestDefaultClient_UtilityOperations(t *testing.T) {
-	client := NewDefaultClient()
+func TestClient_UtilityOperations(t *testing.T) {
+	client := NewClient()
 
 	// Test SanitizeBranchNameForDirectory
 	sanitized := client.SanitizeBranchNameForDirectory("feature/test-branch")
@@ -476,10 +476,10 @@ func TestDefaultClient_UtilityOperations(t *testing.T) {
 	}
 }
 
-func TestDefaultClient_IsMergedToBaseBranch(t *testing.T) {
+func TestClient_IsMergedToBaseBranch(t *testing.T) {
 	// This is a complex test that requires a remote repository
 	// For now, just test that the method exists and can be called
-	client := NewDefaultClient()
+	client := NewClient()
 
 	// Create a temporary git repository
 	tempDir, err := os.MkdirTemp("", "test-merged")
@@ -507,7 +507,7 @@ func TestDefaultClient_IsMergedToBaseBranch(t *testing.T) {
 	_, _ = client.IsMergedToBaseBranch(tempDir, "main", "main")
 }
 
-func TestDefaultClient_CreateWorktreeFromBranch(t *testing.T) {
+func TestClient_CreateWorktreeFromBranch(t *testing.T) {
 	// Save original directory
 	originalDir, err := os.Getwd()
 	if err != nil {
@@ -557,7 +557,7 @@ func TestDefaultClient_CreateWorktreeFromBranch(t *testing.T) {
 		t.Fatalf("failed to switch back: %v", err)
 	}
 
-	client := NewDefaultClient()
+	client := NewClient()
 
 	// Test CreateWorktreeFromBranch
 	worktreePath := filepath.Join(tempDir, "..", "test-worktree")

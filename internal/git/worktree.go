@@ -3,7 +3,6 @@ package git
 import (
 	"fmt"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strings"
 )
@@ -36,15 +35,15 @@ func DetermineWorktreeNames(input string) (branchName, dirSuffix string) {
 
 // ResolveBaseBranch resolves the base branch, checking local first, then remote
 // Returns the resolved branch reference and whether it's a remote branch
-func ResolveBaseBranch(baseBranch string) (string, bool) {
+func (c *Client) ResolveBaseBranch(baseBranch string) (string, bool) {
 	// If the branch exists locally, use it as-is
-	if localBranchExists(baseBranch) {
+	if c.localBranchExists(baseBranch) {
 		return baseBranch, false
 	}
 
 	// If it already starts with origin/, check if it exists
 	if strings.HasPrefix(baseBranch, "origin/") {
-		if remoteBranchExists(baseBranch) {
+		if c.remoteBranchExists(baseBranch) {
 			return baseBranch, true
 		}
 		return baseBranch, false
@@ -52,7 +51,7 @@ func ResolveBaseBranch(baseBranch string) (string, bool) {
 
 	// Check if it exists as a remote branch
 	remoteBranch := "origin/" + baseBranch
-	if remoteBranchExists(remoteBranch) {
+	if c.remoteBranchExists(remoteBranch) {
 		return remoteBranch, true
 	}
 
@@ -61,23 +60,21 @@ func ResolveBaseBranch(baseBranch string) (string, bool) {
 }
 
 // CreateWorktree creates a new git worktree
-func CreateWorktree(issueNumberOrBranch, baseBranch string) (string, error) {
-	if !IsGitRepository() {
+func (c *Client) CreateWorktree(issueNumberOrBranch, baseBranch string) (string, error) {
+	if !c.IsGitRepository() {
 		return "", fmt.Errorf("not in a git repository")
 	}
 
-	repoName, err := GetOriginalRepositoryName()
+	repoName, err := c.GetOriginalRepositoryName()
 	if err != nil {
 		return "", err
 	}
 
 	// Get repository root directory
-	cmd := exec.Command("git", "rev-parse", "--show-toplevel")
-	output, err := cmd.Output()
+	repoRoot, err := c.r.run("", "rev-parse", "--show-toplevel")
 	if err != nil {
 		return "", fmt.Errorf("failed to get repository root: %w", err)
 	}
-	repoRoot := strings.TrimSpace(string(output))
 
 	// Determine branch name and directory suffix
 	branchName, dirSuffix := DetermineWorktreeNames(issueNumberOrBranch)
@@ -86,14 +83,10 @@ func CreateWorktree(issueNumberOrBranch, baseBranch string) (string, error) {
 	worktreeDir := filepath.Join(repoRoot, "..", fmt.Sprintf("%s-%s", repoName, dirSuffix))
 
 	// Resolve base branch (check local first, then remote)
-	resolvedBaseBranch, _ := ResolveBaseBranch(baseBranch)
+	resolvedBaseBranch, _ := c.ResolveBaseBranch(baseBranch)
 
 	// Create the worktree
-	cmd = exec.Command("git", "worktree", "add", worktreeDir, "-b", branchName, resolvedBaseBranch)
-	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
-
-	if err := cmd.Run(); err != nil {
+	if err := c.r.runStreaming("", "worktree", "add", worktreeDir, "-b", branchName, resolvedBaseBranch); err != nil {
 		return "", fmt.Errorf("failed to create worktree: %w", err)
 	}
 
@@ -107,44 +100,38 @@ func CreateWorktree(issueNumberOrBranch, baseBranch string) (string, error) {
 }
 
 // RemoveWorktree removes a git worktree by issue number or branch name
-func RemoveWorktree(issueNumberOrBranch string) error {
-	if !IsGitRepository() {
+func (c *Client) RemoveWorktree(issueNumberOrBranch string) error {
+	if !c.IsGitRepository() {
 		return fmt.Errorf("not in a git repository")
 	}
 
-	repoName, err := GetOriginalRepositoryName()
+	repoName, err := c.GetOriginalRepositoryName()
 	if err != nil {
 		return err
 	}
 
 	// Get repository root directory
-	cmd := exec.Command("git", "rev-parse", "--show-toplevel")
-	output, err := cmd.Output()
+	repoRoot, err := c.r.run("", "rev-parse", "--show-toplevel")
 	if err != nil {
 		return fmt.Errorf("failed to get repository root: %w", err)
 	}
-	repoRoot := strings.TrimSpace(string(output))
 
 	// Determine directory suffix
 	_, dirSuffix := DetermineWorktreeNames(issueNumberOrBranch)
 
 	// Create worktree directory path relative to repository root
 	worktreeDir := filepath.Join(repoRoot, "..", fmt.Sprintf("%s-%s", repoName, dirSuffix))
-	return RemoveWorktreeByPath(worktreeDir)
+	return c.RemoveWorktreeByPath(worktreeDir)
 }
 
 // RemoveWorktreeByPath removes a git worktree by its path
-func RemoveWorktreeByPath(worktreePath string) error {
-	if !IsGitRepository() {
+func (c *Client) RemoveWorktreeByPath(worktreePath string) error {
+	if !c.IsGitRepository() {
 		return fmt.Errorf("not in a git repository")
 	}
 
 	// Remove the worktree
-	cmd := exec.Command("git", "worktree", "remove", worktreePath)
-	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
-
-	if err := cmd.Run(); err != nil {
+	if err := c.r.runStreaming("", "worktree", "remove", worktreePath); err != nil {
 		return fmt.Errorf("failed to remove worktree: %w", err)
 	}
 
@@ -152,15 +139,14 @@ func RemoveWorktreeByPath(worktreePath string) error {
 }
 
 // ListWorktrees returns a list of all worktrees
-func ListWorktrees() ([]WorktreeInfo, error) {
-	cmd := exec.Command("git", "worktree", "list", "--porcelain")
-	output, err := cmd.Output()
+func (c *Client) ListWorktrees() ([]WorktreeInfo, error) {
+	output, err := c.r.run("", "worktree", "list", "--porcelain")
 	if err != nil {
 		return nil, fmt.Errorf("failed to list worktrees: %w", err)
 	}
 
 	var worktrees []WorktreeInfo
-	lines := strings.Split(string(output), "\n")
+	lines := strings.Split(output, "\n")
 	var current WorktreeInfo
 
 	for _, line := range lines {
@@ -207,8 +193,8 @@ func ListWorktrees() ([]WorktreeInfo, error) {
 }
 
 // GetWorktreeForIssue finds a worktree for a specific issue number or branch name
-func GetWorktreeForIssue(issueNumberOrBranch string) (*WorktreeInfo, error) {
-	repoName, err := GetOriginalRepositoryName()
+func (c *Client) GetWorktreeForIssue(issueNumberOrBranch string) (*WorktreeInfo, error) {
+	repoName, err := c.GetOriginalRepositoryName()
 	if err != nil {
 		return nil, err
 	}
@@ -218,7 +204,7 @@ func GetWorktreeForIssue(issueNumberOrBranch string) (*WorktreeInfo, error) {
 
 	targetPath := fmt.Sprintf("%s-%s", repoName, dirSuffix)
 
-	worktrees, err := ListWorktrees()
+	worktrees, err := c.ListWorktrees()
 	if err != nil {
 		return nil, err
 	}
@@ -237,27 +223,24 @@ func GetWorktreeForIssue(issueNumberOrBranch string) (*WorktreeInfo, error) {
 }
 
 // CreateWorktreeFromBranch creates a new git worktree from an existing branch
-func CreateWorktreeFromBranch(worktreePath, sourceBranch, targetBranch string) error {
-	if !IsGitRepository() {
+func (c *Client) CreateWorktreeFromBranch(worktreePath, sourceBranch, targetBranch string) error {
+	if !c.IsGitRepository() {
 		return fmt.Errorf("not in a git repository")
 	}
 
 	// Check if source branch starts with origin/
 	isRemoteBranch := strings.HasPrefix(sourceBranch, "origin/")
 
-	var cmd *exec.Cmd
+	var err error
 	if isRemoteBranch {
 		// For remote branches, create a new local branch tracking the remote
-		cmd = exec.Command("git", "worktree", "add", worktreePath, "-b", targetBranch, sourceBranch)
+		err = c.r.runStreaming("", "worktree", "add", worktreePath, "-b", targetBranch, sourceBranch)
 	} else {
 		// For local branches, just check it out
-		cmd = exec.Command("git", "worktree", "add", worktreePath, sourceBranch)
+		err = c.r.runStreaming("", "worktree", "add", worktreePath, sourceBranch)
 	}
 
-	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
-
-	if err := cmd.Run(); err != nil {
+	if err != nil {
 		return fmt.Errorf("failed to create worktree: %w", err)
 	}
 
@@ -265,9 +248,6 @@ func CreateWorktreeFromBranch(worktreePath, sourceBranch, targetBranch string) e
 }
 
 // RunCommand executes a command in the current directory
-func RunCommand(command string) error {
-	cmd := exec.Command("sh", "-c", command)
-	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
-	return cmd.Run()
+func (c *Client) RunCommand(command string) error {
+	return c.r.runShell(command)
 }
