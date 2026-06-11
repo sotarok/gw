@@ -95,9 +95,9 @@ func (c *EndCommand) Execute(issueNumber string) error {
 
 		// If there are warnings, ask for confirmation
 		if len(warnings) > 0 {
-			fmt.Fprintf(c.deps.Stdout, "\n%s Safety check warnings:\n", coloredWarning())
+			fmt.Fprintf(c.deps.Stderr, "\n%s Safety check warnings:\n", coloredWarning())
 			for _, warning := range warnings {
-				fmt.Fprintf(c.deps.Stdout, "  • %s\n", warning)
+				fmt.Fprintf(c.deps.Stderr, "  • %s\n", warning)
 			}
 
 			fmt.Fprintf(c.deps.Stdout, "\nDo you want to continue?")

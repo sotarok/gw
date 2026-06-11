@@ -2,6 +2,7 @@ package detect
 
 import (
 	"bytes"
+	"errors"
 	"os/exec"
 	"runtime"
 	"strings"
@@ -157,7 +158,7 @@ func TestMockExecutor(t *testing.T) {
 		}
 
 		err := mock.Execute(".", "test", nil)
-		if err != expectedErr {
+		if !errors.Is(err, expectedErr) {
 			t.Errorf("expected error %v, got %v", expectedErr, err)
 		}
 	})

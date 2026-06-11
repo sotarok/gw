@@ -1,6 +1,7 @@
 package detect
 
 import (
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -35,7 +36,8 @@ func (e *DefaultExecutor) Execute(dir, command string, args []string) error {
 
 	if err := cmd.Run(); err != nil {
 		// Provide more context in the error message
-		if exitErr, ok := err.(*exec.ExitError); ok {
+		var exitErr *exec.ExitError
+		if errors.As(err, &exitErr) {
 			return fmt.Errorf("command failed with exit code %d: %w", exitErr.ExitCode(), err)
 		}
 		return fmt.Errorf("failed to execute command: %w", err)

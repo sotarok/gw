@@ -9,17 +9,26 @@ import (
 
 const gitDir = ".git"
 
-// GetRepositoryName returns the name of the current git repository
-// Note: In a worktree, this returns the worktree directory name, not the original repository name.
-// Use GetOriginalRepositoryName() if you need the original repository name.
-func GetRepositoryName() (string, error) {
+// showTopLevel returns the absolute path of the current git repository root by
+// running `git rev-parse --show-toplevel`. It is the shared implementation
+// behind GetRepositoryName and GetRepositoryRoot.
+func showTopLevel() (string, error) {
 	cmd := exec.Command("git", "rev-parse", "--show-toplevel")
 	output, err := cmd.Output()
 	if err != nil {
 		return "", fmt.Errorf("not in a git repository: %w", err)
 	}
+	return strings.TrimSpace(string(output)), nil
+}
 
-	repoPath := strings.TrimSpace(string(output))
+// GetRepositoryName returns the name of the current git repository
+// Note: In a worktree, this returns the worktree directory name, not the original repository name.
+// Use GetOriginalRepositoryName() if you need the original repository name.
+func GetRepositoryName() (string, error) {
+	repoPath, err := showTopLevel()
+	if err != nil {
+		return "", err
+	}
 	return filepath.Base(repoPath), nil
 }
 
@@ -27,12 +36,7 @@ func GetRepositoryName() (string, error) {
 // When invoked from a sub directory, this still returns the repository root (not cwd).
 // In a worktree, this returns the worktree's root directory, not the main repo's root.
 func GetRepositoryRoot() (string, error) {
-	cmd := exec.Command("git", "rev-parse", "--show-toplevel")
-	output, err := cmd.Output()
-	if err != nil {
-		return "", fmt.Errorf("not in a git repository: %w", err)
-	}
-	return strings.TrimSpace(string(output)), nil
+	return showTopLevel()
 }
 
 // GetOriginalRepositoryName returns the name of the original git repository.
@@ -71,7 +75,7 @@ func FetchAll() error {
 	cmd := exec.Command("git", "fetch", "--all", "--prune")
 	output, err := cmd.CombinedOutput()
 	if err != nil {
-		return fmt.Errorf("failed to fetch from remotes: %s", strings.TrimSpace(string(output)))
+		return fmt.Errorf("failed to fetch from remotes: %s: %w", strings.TrimSpace(string(output)), err)
 	}
 	return nil
 }
@@ -115,14 +119,14 @@ func ListAllBranches() ([]string, error) {
 	return branches, nil
 }
 
-// LocalBranchExists checks if a local branch exists
-func LocalBranchExists(branch string) bool {
+// localBranchExists checks if a local branch exists
+func localBranchExists(branch string) bool {
 	cmd := exec.Command("git", "rev-parse", "--verify", "--quiet", "refs/heads/"+branch)
 	return cmd.Run() == nil
 }
 
-// RemoteBranchExists checks if a remote branch exists (origin/<branch>)
-func RemoteBranchExists(branch string) bool {
+// remoteBranchExists checks if a remote branch exists (origin/<branch>)
+func remoteBranchExists(branch string) bool {
 	remoteRef := branch
 	if !strings.HasPrefix(branch, "origin/") {
 		remoteRef = "origin/" + branch
@@ -134,12 +138,12 @@ func RemoteBranchExists(branch string) bool {
 // BranchExists checks if a branch exists (local or remote)
 func BranchExists(branch string) (bool, error) {
 	// Check if it's a local branch
-	if LocalBranchExists(branch) {
+	if localBranchExists(branch) {
 		return true, nil
 	}
 
 	// Check if it's a remote branch
-	if RemoteBranchExists(branch) {
+	if remoteBranchExists(branch) {
 		return true, nil
 	}
 
@@ -152,7 +156,7 @@ func DeleteBranch(branch string) error {
 	cmd := exec.Command("git", "branch", "-D", branch)
 	output, err := cmd.CombinedOutput()
 	if err != nil {
-		return fmt.Errorf("failed to delete branch %s: %s", branch, string(output))
+		return fmt.Errorf("failed to delete branch %s: %s: %w", branch, string(output), err)
 	}
 	return nil
 }

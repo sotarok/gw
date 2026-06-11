@@ -38,13 +38,13 @@ func DetermineWorktreeNames(input string) (branchName, dirSuffix string) {
 // Returns the resolved branch reference and whether it's a remote branch
 func ResolveBaseBranch(baseBranch string) (string, bool) {
 	// If the branch exists locally, use it as-is
-	if LocalBranchExists(baseBranch) {
+	if localBranchExists(baseBranch) {
 		return baseBranch, false
 	}
 
 	// If it already starts with origin/, check if it exists
 	if strings.HasPrefix(baseBranch, "origin/") {
-		if RemoteBranchExists(baseBranch) {
+		if remoteBranchExists(baseBranch) {
 			return baseBranch, true
 		}
 		return baseBranch, false
@@ -52,7 +52,7 @@ func ResolveBaseBranch(baseBranch string) (string, bool) {
 
 	// Check if it exists as a remote branch
 	remoteBranch := "origin/" + baseBranch
-	if RemoteBranchExists(remoteBranch) {
+	if remoteBranchExists(remoteBranch) {
 		return remoteBranch, true
 	}
 

@@ -7,6 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+- `gw end` now writes its safety-check warning block (the "Safety check warnings:" header and the per-check bullet list) to stderr instead of stdout, matching the project's stdout/stderr policy (results and interactive prompts on stdout; warnings and errors on stderr). The confirmation prompt itself remains on stdout. This only affects output redirection (e.g. `gw end 123 1>out 2>err`); interactive behavior is unchanged.
+
 ## [0.9.0] - 2026-06-11
 
 ### Changed

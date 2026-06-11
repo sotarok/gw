@@ -59,23 +59,6 @@ func FormatTabName(repoName, identifier string) string {
 	return fmt.Sprintf("%s %s", repoName, identifier)
 }
 
-// ExtractIssueFromBranch extracts issue number or returns branch name
-// For branches like "123/impl", returns "123"
-// For branches like "feature/new-feature", returns the full branch name
-func ExtractIssueFromBranch(branch string) string {
-	if branch == "" {
-		return ""
-	}
-
-	// Check if branch follows the pattern "number/something"
-	parts := strings.Split(branch, "/")
-	if len(parts) >= 2 && isNumericIssue(parts[0]) {
-		return parts[0]
-	}
-
-	return branch
-}
-
 // GetIdentifierFromBranch gets the appropriate identifier from a branch name
 // For issue branches (123/impl), returns just the issue number
 // For other branches, returns the full branch name
@@ -91,28 +74,6 @@ func GetIdentifierFromBranch(branch string) string {
 	}
 
 	return branch
-}
-
-// ExtractIssueNumber attempts to extract just the issue number from various formats
-func ExtractIssueNumber(input string) string {
-	if input == "" {
-		return ""
-	}
-
-	// If it's already just a number, return it
-	if isNumericIssue(input) {
-		return input
-	}
-
-	// Try to extract number from patterns like "issue/123" or "123/impl"
-	parts := strings.Split(input, "/")
-	for _, part := range parts {
-		if isNumericIssue(part) {
-			return part
-		}
-	}
-
-	return input
 }
 
 // isNumericIssue checks if a string contains only digits

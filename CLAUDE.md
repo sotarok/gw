@@ -118,6 +118,26 @@ The application uses a layered architecture where commands flow through:
 - Falls back to npm if package.json exists without lock file
 - Gracefully skips setup if no package manager detected
 
+**stdout / stderr policy**
+
+Output destinations follow a single policy so machine-parseable output and human
+diagnostics never get mixed:
+
+| Kind | Destination |
+|---|---|
+| Command results, progress, success messages | stdout |
+| Interactive prompts (confirmation / selection) | stdout |
+| Warnings (an anomaly the command continues past) | stderr |
+| Errors (an anomaly that stops the command) | stderr |
+
+Notes:
+- `gw start` / `gw checkout` write their primary path/result output to stdout;
+  shell integration consumes paths via the dedicated `gw shell-integration --print-path`
+  command (which prints only the worktree path to stdout), not by parsing other output.
+- `gw clean` treats the removable / non-removable listing as the command's result, so
+  the table (including per-worktree reasons) goes to stdout; actual removal/deletion
+  failures go to stderr.
+
 ### Important Implementation Details
 
 **Interactive UI Behavior**

@@ -2057,10 +2057,10 @@ func TestEndCommand_Execute(t *testing.T) {
 				return mockGitInstance, ui, &mockDetect{}, func() { os.RemoveAll(tempDir) }
 			},
 			checkOutput: func(t *testing.T, stdout, stderr string) {
-				if !contains(stdout, "Safety check warnings:") {
-					t.Error("Expected warnings in stdout")
+				if !contains(stderr, "Safety check warnings:") {
+					t.Error("Expected warnings in stderr")
 				}
-				if !contains(stdout, "You have uncommitted changes") {
+				if !contains(stderr, "You have uncommitted changes") {
 					t.Error("Expected uncommitted changes warning")
 				}
 				if !contains(stdout, "✓ Successfully removed worktree") {
@@ -2086,8 +2086,8 @@ func TestEndCommand_Execute(t *testing.T) {
 				return mockGitInstance, ui, &mockDetect{}, func() { os.RemoveAll(tempDir) }
 			},
 			checkOutput: func(t *testing.T, stdout, stderr string) {
-				if !contains(stdout, "Safety check warnings:") {
-					t.Error("Expected warnings in stdout")
+				if !contains(stderr, "Safety check warnings:") {
+					t.Error("Expected warnings in stderr")
 				}
 				if !contains(stdout, "Aborted.") {
 					t.Error("Expected abort message")
@@ -2115,7 +2115,7 @@ func TestEndCommand_Execute(t *testing.T) {
 				return mockGitInstance, &mockUI{}, &mockDetect{}, func() { os.RemoveAll(tempDir) }
 			},
 			checkOutput: func(t *testing.T, stdout, stderr string) {
-				if contains(stdout, "Safety check warnings:") {
+				if contains(stdout, "Safety check warnings:") || contains(stderr, "Safety check warnings:") {
 					t.Error("Should not show warnings when forced")
 				}
 				if !contains(stdout, "✓ Successfully removed worktree") {

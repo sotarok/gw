@@ -1,6 +1,7 @@
 package detect
 
 import (
+	"errors"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -285,7 +286,8 @@ func TestRunSetup_CommandExecution(t *testing.T) {
 
 		// Check if it's exec.Error type (command not found)
 		if err != nil {
-			if _, ok := err.(*exec.Error); !ok {
+			var execErr *exec.Error
+			if !errors.As(err, &execErr) {
 				// It should be wrapped, so check the error message
 				if !strings.Contains(err.Error(), "failed to run notfound-test") {
 					t.Errorf("unexpected error type/message: %v", err)
