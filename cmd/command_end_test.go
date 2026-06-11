@@ -98,6 +98,7 @@ func TestEndCommand_PerformSafetyChecks(t *testing.T) {
 			mockGit := tt.mockSetup()
 
 			deps := &Dependencies{
+				Config: config.New(),
 				Git:    mockGit,
 				Stderr: stderr,
 			}
@@ -309,6 +310,7 @@ func TestEndCommand_Execute(t *testing.T) {
 				Git:    mockGit,
 				UI:     mockUI,
 				Detect: mockDetect,
+				Config: config.New(),
 				Stdout: stdout,
 				Stderr: stderr,
 			}
@@ -512,6 +514,7 @@ func TestEndCommand_BranchDeletion(t *testing.T) {
 				Git:    mockGit,
 				UI:     mockUI,
 				Detect: mockDetect,
+				Config: config.New(),
 				Stdout: stdout,
 				Stderr: stderr,
 			}
@@ -521,7 +524,8 @@ func TestEndCommand_BranchDeletion(t *testing.T) {
 				AutoRemoveBranch: tt.autoRemoveBranch,
 			}
 
-			cmd := NewEndCommandWithConfig(deps, tt.force, true, cfg)
+			deps.Config = cfg
+			cmd := NewEndCommand(deps, tt.force, true)
 			err = cmd.Execute(tt.issueNumber)
 
 			// Check error
@@ -556,6 +560,7 @@ func TestEndCommand_Execute_InteractiveSelectError(t *testing.T) {
 	}
 
 	deps := &Dependencies{
+		Config: config.New(),
 		Git:    &mockGit{},
 		UI:     ui,
 		Stdout: stdout,
@@ -591,6 +596,7 @@ func TestEndCommand_Execute_EmptyIssueFromBranch(t *testing.T) {
 	}
 
 	deps := &Dependencies{
+		Config: config.New(),
 		Git:    &mockGit{},
 		UI:     ui,
 		Stdout: stdout,
@@ -628,6 +634,7 @@ func TestEndCommand_Execute_ConfirmPromptError(t *testing.T) {
 	}
 
 	deps := &Dependencies{
+		Config: config.New(),
 		Git:    mg,
 		UI:     ui,
 		Stdout: stdout,
@@ -668,6 +675,7 @@ func TestEndCommand_Execute_RemoveWorktreeByPathError(t *testing.T) {
 	}
 
 	deps := &Dependencies{
+		Config: config.New(),
 		Git:    mg,
 		UI:     ui,
 		Stdout: stdout,
@@ -693,6 +701,7 @@ func TestEndCommand_PerformSafetyChecks_MergeStatusError(t *testing.T) {
 	}
 
 	deps := &Dependencies{
+		Config: config.New(),
 		Git:    mg,
 		Stderr: stderr,
 	}
@@ -731,6 +740,7 @@ func TestEndCommand_Execute_PreEndHook(t *testing.T) {
 		Git:    mockGitInstance,
 		UI:     &mockUI{},
 		Detect: &mockDetect{},
+		Config: config.New(),
 		Stdout: stdout,
 		Stderr: stderr,
 	}
@@ -739,7 +749,8 @@ func TestEndCommand_Execute_PreEndHook(t *testing.T) {
 	hookCmd := fmt.Sprintf(`printf "ran:%%s:%%s:%%s:%%s\n" "$PWD" "$GW_WORKTREE_PATH" "$GW_BRANCH_NAME" "$GW_COMMAND" > %q`, hookMarker)
 
 	cfg := &config.Config{PreEndHook: hookCmd}
-	cmd := NewEndCommandWithConfig(deps, true, true, cfg)
+	deps.Config = cfg
+	cmd := NewEndCommand(deps, true, true)
 
 	if err := cmd.Execute("123"); err != nil {
 		t.Fatalf("Execute failed: %v", err)
@@ -806,6 +817,7 @@ func TestEndCommand_Execute_PreEndHookRunsBeforeRemoval(t *testing.T) {
 		Git:    mockGitInstance,
 		UI:     &mockUI{confirmResult: true},
 		Detect: &mockDetect{},
+		Config: config.New(),
 		Stdout: stdout,
 		Stderr: stderr,
 	}
@@ -818,7 +830,8 @@ func TestEndCommand_Execute_PreEndHookRunsBeforeRemoval(t *testing.T) {
 		return &git.WorktreeInfo{Path: worktreeDir, Branch: testBranch123}, nil
 	}
 
-	cmd := NewEndCommandWithConfig(deps, true, true, cfg)
+	deps.Config = cfg
+	cmd := NewEndCommand(deps, true, true)
 	if err := cmd.Execute(""); err != nil {
 		t.Fatalf("Execute failed: %v", err)
 	}
@@ -851,12 +864,14 @@ func TestEndCommand_Execute_PreEndHookFailure(t *testing.T) {
 		Git:    mockGitInstance,
 		UI:     &mockUI{},
 		Detect: &mockDetect{},
+		Config: config.New(),
 		Stdout: stdout,
 		Stderr: stderr,
 	}
 
 	cfg := &config.Config{PreEndHook: "exit 1"}
-	cmd := NewEndCommandWithConfig(deps, true, true, cfg)
+	deps.Config = cfg
+	cmd := NewEndCommand(deps, true, true)
 
 	if err := cmd.Execute("123"); err != nil {
 		t.Fatalf("Expected no error even when hook fails, got: %v", err)

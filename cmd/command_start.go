@@ -5,7 +5,6 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/sotarok/gw/internal/config"
 	"github.com/sotarok/gw/internal/hook"
 	"github.com/sotarok/gw/internal/iterm2"
 	"github.com/sotarok/gw/internal/spinner"
@@ -16,28 +15,14 @@ type StartCommand struct {
 	deps     *Dependencies
 	copyEnvs bool
 	noFetch  bool
-	config   *config.Config
 }
 
 // NewStartCommand creates a new start command handler
 func NewStartCommand(deps *Dependencies, copyEnvs, noFetch bool) *StartCommand {
-	// Load config
-	cfg, _ := config.Load(config.GetConfigPath())
 	return &StartCommand{
 		deps:     deps,
 		copyEnvs: copyEnvs,
 		noFetch:  noFetch,
-		config:   cfg,
-	}
-}
-
-// NewStartCommandWithConfig creates a new start command handler with explicit config
-func NewStartCommandWithConfig(deps *Dependencies, copyEnvs, noFetch bool, cfg *config.Config) *StartCommand {
-	return &StartCommand{
-		deps:     deps,
-		copyEnvs: copyEnvs,
-		noFetch:  noFetch,
-		config:   cfg,
 	}
 }
 
@@ -49,7 +34,7 @@ func (c *StartCommand) Execute(issueNumber, baseBranch string) error {
 	}
 
 	// Fetch from remotes if configured
-	fetchIfConfigured(c.deps, c.config, c.noFetch)
+	fetchIfConfigured(c.deps, c.noFetch)
 
 	// Check if worktree already exists
 	if wt, _ := c.deps.Git.GetWorktreeForIssue(issueNumber); wt != nil {
@@ -61,7 +46,7 @@ func (c *StartCommand) Execute(issueNumber, baseBranch string) error {
 	repoName, _ := c.deps.Git.GetOriginalRepositoryName()
 
 	// Update iTerm2 tab if configured
-	if c.config != nil && iterm2.ShouldUpdateTab(c.config.UpdateITerm2Tab) {
+	if iterm2.ShouldUpdateTab(c.deps.Config.UpdateITerm2Tab) {
 		_ = iterm2.UpdateTabName(c.deps.Stdout, repoName, issueNumber)
 	}
 
@@ -88,7 +73,7 @@ func (c *StartCommand) Execute(issueNumber, baseBranch string) error {
 
 	// Change to the new worktree directory for setup operations
 	// Note: This only affects the current process, not the parent shell
-	if c.config != nil && c.config.AutoCD {
+	if c.deps.Config.AutoCD {
 		if err := os.Chdir(worktreePath); err != nil {
 			// Don't fail the command, just log the error
 			if c.deps.Stderr != nil {
@@ -114,7 +99,7 @@ func (c *StartCommand) Execute(issueNumber, baseBranch string) error {
 	}
 
 	// Execute post-start hook if configured
-	if c.config != nil && c.config.PostStartHook != "" {
+	if c.deps.Config.PostStartHook != "" {
 		branchName := issueNumber + "/impl"
 		absWorktreePath, _ := filepath.Abs(worktreePath)
 		hookEnv := hook.Env{
@@ -123,14 +108,14 @@ func (c *StartCommand) Execute(issueNumber, baseBranch string) error {
 			RepoName:     repoName,
 			Command:      "start",
 		}
-		if err := hook.Execute(c.config.PostStartHook, hookEnv, c.deps.Stdout, c.deps.Stderr); err != nil {
+		if err := hook.Execute(c.deps.Config.PostStartHook, hookEnv, c.deps.Stdout, c.deps.Stderr); err != nil {
 			fmt.Fprintf(c.deps.Stderr, "%s Post-start hook failed: %v\n", coloredWarning(), err)
 		}
 	}
 
 	if c.deps.Stdout != nil {
 		fmt.Fprintf(c.deps.Stdout, "\n✨ Worktree ready at:\n   %s\n", worktreePath)
-		if c.config != nil && c.config.AutoCD {
+		if c.deps.Config.AutoCD {
 			fmt.Fprintf(c.deps.Stdout, "\n💡 Shell integration will change to this directory after the command completes.\n")
 		}
 	}
@@ -138,5 +123,5 @@ func (c *StartCommand) Execute(issueNumber, baseBranch string) error {
 }
 
 func (c *StartCommand) handleEnvFiles(originalDir, worktreePath string) error {
-	return handleEnvFiles(c.deps, c.config, c.copyEnvs, originalDir, worktreePath)
+	return handleEnvFiles(c.deps, c.copyEnvs, originalDir, worktreePath)
 }

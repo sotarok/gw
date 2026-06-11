@@ -39,7 +39,8 @@ func init() {
 }
 
 func runShellIntegration(cmd *cobra.Command, args []string) error {
-	shellCmd := NewShellIntegrationCommand(os.Stdout, os.Stderr)
+	deps := DefaultDependencies()
+	shellCmd := NewShellIntegrationCommand(deps.Git, os.Stdout, os.Stderr)
 	shellCmd.showScript = shellIntegrationShowScript
 	shellCmd.shell = shellIntegrationShell
 	shellCmd.printPath = shellIntegrationPrintPath
@@ -48,6 +49,7 @@ func runShellIntegration(cmd *cobra.Command, args []string) error {
 
 // ShellIntegrationCommand handles the shell-integration command logic
 type ShellIntegrationCommand struct {
+	git        git.Interface
 	stdout     io.Writer
 	stderr     io.Writer
 	showScript bool
@@ -56,8 +58,9 @@ type ShellIntegrationCommand struct {
 }
 
 // NewShellIntegrationCommand creates a new shell integration command handler
-func NewShellIntegrationCommand(stdout, stderr io.Writer) *ShellIntegrationCommand {
+func NewShellIntegrationCommand(gitClient git.Interface, stdout, stderr io.Writer) *ShellIntegrationCommand {
 	return &ShellIntegrationCommand{
+		git:    gitClient,
 		stdout: stdout,
 		stderr: stderr,
 	}
@@ -273,8 +276,11 @@ func (c *ShellIntegrationCommand) printWorktreePath() error {
 		return fmt.Errorf("--print-path requires an issue number or branch name")
 	}
 
-	// Use git client to find worktree
-	gitClient := git.NewClient()
+	// Use the injected git client to find the worktree.
+	gitClient := c.git
+	if gitClient == nil {
+		gitClient = git.NewClient()
+	}
 
 	// Check if we're in a git repository
 	if !gitClient.IsGitRepository() {

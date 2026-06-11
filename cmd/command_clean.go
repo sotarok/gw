@@ -6,7 +6,6 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/sotarok/gw/internal/config"
 	"github.com/sotarok/gw/internal/git"
 	"github.com/sotarok/gw/internal/spinner"
 )
@@ -29,37 +28,22 @@ type CleanCommand struct {
 	force   bool
 	dryRun  bool
 	noFetch bool
-	config  *config.Config
 }
 
 // NewCleanCommand creates a new clean command handler
 func NewCleanCommand(deps *Dependencies, force, dryRun, noFetch bool) *CleanCommand {
-	// Load config
-	cfg, _ := config.Load(config.GetConfigPath())
 	return &CleanCommand{
 		deps:    deps,
 		force:   force,
 		dryRun:  dryRun,
 		noFetch: noFetch,
-		config:  cfg,
-	}
-}
-
-// NewCleanCommandWithConfig creates a new clean command handler with explicit config
-func NewCleanCommandWithConfig(deps *Dependencies, force, dryRun, noFetch bool, cfg *config.Config) *CleanCommand {
-	return &CleanCommand{
-		deps:    deps,
-		force:   force,
-		dryRun:  dryRun,
-		noFetch: noFetch,
-		config:  cfg,
 	}
 }
 
 // Execute runs the clean command
 func (c *CleanCommand) Execute() error {
 	// Fetch from remotes if configured
-	fetchIfConfigured(c.deps, c.config, c.noFetch)
+	fetchIfConfigured(c.deps, c.noFetch)
 
 	// Get all worktrees
 	worktrees, err := c.deps.Git.ListWorktrees()
@@ -233,7 +217,7 @@ func (c *CleanCommand) removeWorktrees(statuses []*WorktreeStatus) error {
 	failCount := 0
 
 	var repoName string
-	if c.config != nil && c.config.PreEndHook != "" {
+	if c.deps.Config.PreEndHook != "" {
 		repoName, _ = c.deps.Git.GetRepositoryName()
 	}
 
@@ -245,8 +229,8 @@ func (c *CleanCommand) removeWorktrees(statuses []*WorktreeStatus) error {
 		dirName := filepath.Base(status.Info.Path)
 
 		// Run pre-end hook from inside the worktree before it gets removed.
-		if c.config != nil && c.config.PreEndHook != "" {
-			runPreEndHook(c.deps, c.config.PreEndHook, status.Info.Path, status.Info.Branch, repoName, "clean")
+		if c.deps.Config.PreEndHook != "" {
+			runPreEndHook(c.deps, c.deps.Config.PreEndHook, status.Info.Path, status.Info.Branch, repoName, "clean")
 		}
 
 		// Remove the worktree with spinner
@@ -264,7 +248,7 @@ func (c *CleanCommand) removeWorktrees(statuses []*WorktreeStatus) error {
 		successCount++
 
 		// Delete the branch if auto-remove is enabled
-		if c.config != nil && c.config.AutoRemoveBranch && status.Info.Branch != "" {
+		if c.deps.Config.AutoRemoveBranch && status.Info.Branch != "" {
 			fmt.Fprintf(c.deps.Stdout, "Deleting branch %s...\n", status.Info.Branch)
 			if err := c.deps.Git.DeleteBranch(status.Info.Branch); err != nil {
 				// Don't fail the command, just warn

@@ -209,7 +209,7 @@ func TestShellIntegrationCommand_Execute(t *testing.T) {
 			stdout := &bytes.Buffer{}
 			stderr := &bytes.Buffer{}
 
-			cmd := NewShellIntegrationCommand(stdout, stderr)
+			cmd := NewShellIntegrationCommand(nil, stdout, stderr)
 			cmd.showScript = tt.showScript
 			cmd.shell = tt.shell
 			cmd.printPath = tt.printPath
@@ -604,7 +604,7 @@ func TestNewShellIntegrationCommand(t *testing.T) {
 	stdout := &bytes.Buffer{}
 	stderr := &bytes.Buffer{}
 
-	cmd := NewShellIntegrationCommand(stdout, stderr)
+	cmd := NewShellIntegrationCommand(nil, stdout, stderr)
 	if cmd == nil {
 		t.Fatal("expected non-nil command")
 	}

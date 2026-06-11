@@ -125,16 +125,15 @@ func TestHandleEnvFiles_ConfigPriority(t *testing.T) {
 				Git:    mockGit,
 				UI:     mockUI,
 				Detect: &mockDetect{},
+				Config: &config.Config{
+					CopyEnvs: tt.configCopyEnvs,
+				},
 				Stdout: stdout,
 				Stderr: stderr,
 			}
 
-			cfg := &config.Config{
-				CopyEnvs: tt.configCopyEnvs,
-			}
-
 			// Execute handleEnvFiles
-			err := handleEnvFiles(deps, cfg, tt.copyEnvsFlag, originalDir, worktreeDir)
+			err := handleEnvFiles(deps, tt.copyEnvsFlag, originalDir, worktreeDir)
 			if err != nil {
 				t.Fatalf("handleEnvFiles failed: %v", err)
 			}

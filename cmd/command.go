@@ -42,16 +42,27 @@ type Dependencies struct {
 	Git    git.Interface
 	UI     ui.Interface
 	Detect detect.Interface
+	Config *config.Config // always non-nil
 	Stdout io.Writer
 	Stderr io.Writer
 }
 
-// DefaultDependencies returns the default dependencies
+// DefaultDependencies returns the default dependencies.
+//
+// Config is loaded once here. A load failure falls back to defaults with a
+// warning on stderr (previously the failure was swallowed silently), so
+// Config is guaranteed to be non-nil.
 func DefaultDependencies() *Dependencies {
+	cfg, err := config.Load(config.GetConfigPath())
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "%s Could not load ~/.gwrc, using defaults: %v\n", symbolWarning, err)
+		cfg = config.New()
+	}
 	return &Dependencies{
 		Git:    git.NewClient(),
 		UI:     ui.NewDefaultUI(),
 		Detect: detect.NewDefaultDetector(),
+		Config: cfg,
 		Stdout: os.Stdout,
 		Stderr: os.Stderr,
 	}
@@ -86,8 +97,8 @@ func runPreEndHook(deps *Dependencies, hookCmd, worktreePath, branchName, repoNa
 }
 
 // fetchIfConfigured runs git fetch --all --prune if configured and not skipped
-func fetchIfConfigured(deps *Dependencies, cfg *config.Config, noFetch bool) {
-	if noFetch || cfg == nil || !cfg.FetchBeforeCommand {
+func fetchIfConfigured(deps *Dependencies, noFetch bool) {
+	if noFetch || !deps.Config.FetchBeforeCommand {
 		return
 	}
 	sp := spinner.New("Fetching from remotes...", deps.Stdout)
@@ -104,7 +115,7 @@ func fetchIfConfigured(deps *Dependencies, cfg *config.Config, noFetch bool) {
 // 1. If --copy-envs flag is set, always copy
 // 2. If config.CopyEnvs is set (true/false), use that value (unless flag overrides)
 // 3. If neither is set, prompt user (interactive mode)
-func handleEnvFiles(deps *Dependencies, cfg *config.Config, copyEnvsFlag bool, originalDir, worktreePath string) error {
+func handleEnvFiles(deps *Dependencies, copyEnvsFlag bool, originalDir, worktreePath string) error {
 	envFiles, err := deps.Git.FindUntrackedEnvFiles(originalDir)
 	if err != nil {
 		return fmt.Errorf("failed to find env files: %w", err)
@@ -128,9 +139,9 @@ func handleEnvFiles(deps *Dependencies, cfg *config.Config, copyEnvsFlag bool, o
 		// Priority 1: Flag is set, always copy
 		shouldCopy = true
 		needsPrompt = false
-	} else if cfg != nil && cfg.CopyEnvs != nil {
+	} else if deps.Config.CopyEnvs != nil {
 		// Priority 2: Config is set, use config value
-		shouldCopy = *cfg.CopyEnvs
+		shouldCopy = *deps.Config.CopyEnvs
 		needsPrompt = false
 	} else {
 		// Priority 3: Neither flag nor config is set, prompt user

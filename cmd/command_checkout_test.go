@@ -155,11 +155,13 @@ func TestCheckoutCommand_Execute(t *testing.T) {
 				Git:    mockGit,
 				UI:     mockUI,
 				Detect: mockDetect,
+				Config: config.New(),
 				Stdout: stdout,
 				Stderr: stderr,
 			}
 
-			cmd := NewCheckoutCommandWithConfig(deps, tt.copyEnvs, true, &config.Config{})
+			deps.Config = &config.Config{}
+			cmd := NewCheckoutCommand(deps, tt.copyEnvs, true)
 			err = cmd.Execute(tt.branch)
 
 			// Check error
@@ -206,11 +208,13 @@ func TestCheckoutCommand_Execute_GetRepositoryNameError(t *testing.T) {
 		Git:    mockGitInstance,
 		UI:     &mockUI{},
 		Detect: &mockDetect{},
+		Config: config.New(),
 		Stdout: stdout,
 		Stderr: stderr,
 	}
 
-	cmd := NewCheckoutCommandWithConfig(deps, false, true, &config.Config{})
+	deps.Config = &config.Config{}
+	cmd := NewCheckoutCommand(deps, false, true)
 	err = cmd.Execute(testBranchFeature)
 
 	if err == nil {
@@ -245,11 +249,13 @@ func TestCheckoutCommand_Execute_BranchExistsError(t *testing.T) {
 		Git:    mockGitInstance,
 		UI:     &mockUI{},
 		Detect: &mockDetect{},
+		Config: config.New(),
 		Stdout: stdout,
 		Stderr: stderr,
 	}
 
-	cmd := NewCheckoutCommandWithConfig(deps, false, true, &config.Config{})
+	deps.Config = &config.Config{}
+	cmd := NewCheckoutCommand(deps, false, true)
 	err = cmd.Execute(testBranchFeature)
 
 	if err == nil {
@@ -287,11 +293,13 @@ func TestCheckoutCommand_Execute_CreateWorktreeFromBranchError(t *testing.T) {
 		Git:    mockGitInstance,
 		UI:     &mockUI{},
 		Detect: &mockDetect{},
+		Config: config.New(),
 		Stdout: stdout,
 		Stderr: stderr,
 	}
 
-	cmd := NewCheckoutCommandWithConfig(deps, false, true, &config.Config{})
+	deps.Config = &config.Config{}
+	cmd := NewCheckoutCommand(deps, false, true)
 	err = cmd.Execute(testBranchFeature)
 
 	if err == nil {
@@ -345,11 +353,13 @@ func TestCheckoutCommand_Execute_WorktreePathAnchoredToRepoRoot(t *testing.T) {
 		Git:    mockGitInstance,
 		UI:     &mockUI{},
 		Detect: &mockDetect{},
+		Config: config.New(),
 		Stdout: stdout,
 		Stderr: stderr,
 	}
 
-	cmd := NewCheckoutCommandWithConfig(deps, false, true, &config.Config{})
+	deps.Config = &config.Config{}
+	cmd := NewCheckoutCommand(deps, false, true)
 	if err := cmd.Execute(testBranchFeature); err != nil {
 		t.Fatalf("Unexpected error: %v", err)
 	}
@@ -406,11 +416,13 @@ func TestCheckoutCommand_Execute_FromInsideWorktreeUsesOriginalRepoName(t *testi
 		Git:    mockGitInstance,
 		UI:     &mockUI{},
 		Detect: &mockDetect{},
+		Config: config.New(),
 		Stdout: stdout,
 		Stderr: stderr,
 	}
 
-	cmd := NewCheckoutCommandWithConfig(deps, false, true, &config.Config{})
+	deps.Config = &config.Config{}
+	cmd := NewCheckoutCommand(deps, false, true)
 	if err := cmd.Execute(testBranchFeature); err != nil {
 		t.Fatalf("Unexpected error: %v", err)
 	}
@@ -454,11 +466,13 @@ func TestCheckoutCommand_Execute_OriginPrefixStripped(t *testing.T) {
 		Git:    mockGitInstance,
 		UI:     &mockUI{},
 		Detect: &mockDetect{},
+		Config: config.New(),
 		Stdout: stdout,
 		Stderr: stderr,
 	}
 
-	cmd := NewCheckoutCommandWithConfig(deps, false, true, &config.Config{})
+	deps.Config = &config.Config{}
+	cmd := NewCheckoutCommand(deps, false, true)
 	err = cmd.Execute("origin/feature/test")
 
 	if err != nil {
@@ -495,11 +509,13 @@ func TestCheckoutCommand_Execute_SetupFailureWarnsButDoesNotFail(t *testing.T) {
 		Git:    mockGitInstance,
 		UI:     &mockUI{},
 		Detect: &mockDetect{setupError: fmt.Errorf("yarn install failed")},
+		Config: config.New(),
 		Stdout: stdout,
 		Stderr: stderr,
 	}
 
-	cmd := NewCheckoutCommandWithConfig(deps, false, true, &config.Config{})
+	deps.Config = &config.Config{}
+	cmd := NewCheckoutCommand(deps, false, true)
 	err = cmd.Execute(testBranchFeature)
 
 	if err != nil {
@@ -544,12 +560,14 @@ func TestCheckoutCommand_Execute_FetchBeforeCommand(t *testing.T) {
 		Git:    mockGitInstance,
 		UI:     &mockUI{},
 		Detect: &mockDetect{},
+		Config: config.New(),
 		Stdout: stdout,
 		Stderr: stderr,
 	}
 
 	// noFetch=false with FetchBeforeCommand=true should call fetch
-	cmd := NewCheckoutCommandWithConfig(deps, false, false, &config.Config{FetchBeforeCommand: true})
+	deps.Config = &config.Config{FetchBeforeCommand: true}
+	cmd := NewCheckoutCommand(deps, false, false)
 	err = cmd.Execute(testBranchFeature)
 
 	if err != nil {
@@ -588,11 +606,13 @@ func TestCheckoutCommand_Execute_FetchErrorWarnsButDoesNotFail(t *testing.T) {
 		Git:    mockGitInstance,
 		UI:     &mockUI{},
 		Detect: &mockDetect{},
+		Config: config.New(),
 		Stdout: stdout,
 		Stderr: stderr,
 	}
 
-	cmd := NewCheckoutCommandWithConfig(deps, false, false, &config.Config{FetchBeforeCommand: true})
+	deps.Config = &config.Config{FetchBeforeCommand: true}
+	cmd := NewCheckoutCommand(deps, false, false)
 	err = cmd.Execute(testBranchFeature)
 
 	if err != nil {
@@ -617,11 +637,13 @@ func TestCheckoutCommand_SelectBranch_ListAllBranchesError(t *testing.T) {
 		Git:    mockGitInstance,
 		UI:     &mockUI{},
 		Detect: &mockDetect{},
+		Config: config.New(),
 		Stdout: stdout,
 		Stderr: stderr,
 	}
 
-	cmd := NewCheckoutCommandWithConfig(deps, false, true, &config.Config{})
+	deps.Config = &config.Config{}
+	cmd := NewCheckoutCommand(deps, false, true)
 	err := cmd.Execute("") // empty branch triggers selectBranch
 
 	if err == nil {
@@ -646,11 +668,13 @@ func TestCheckoutCommand_SelectBranch_NoBranches(t *testing.T) {
 		Git:    mockGitInstance,
 		UI:     &mockUI{},
 		Detect: &mockDetect{},
+		Config: config.New(),
 		Stdout: stdout,
 		Stderr: stderr,
 	}
 
-	cmd := NewCheckoutCommandWithConfig(deps, false, true, &config.Config{})
+	deps.Config = &config.Config{}
+	cmd := NewCheckoutCommand(deps, false, true)
 	err := cmd.Execute("")
 
 	if err == nil {
@@ -678,11 +702,13 @@ func TestCheckoutCommand_SelectBranch_GetCurrentBranchError(t *testing.T) {
 		Git:    mockGitInstance,
 		UI:     &mockUI{},
 		Detect: &mockDetect{},
+		Config: config.New(),
 		Stdout: stdout,
 		Stderr: stderr,
 	}
 
-	cmd := NewCheckoutCommandWithConfig(deps, false, true, &config.Config{})
+	deps.Config = &config.Config{}
+	cmd := NewCheckoutCommand(deps, false, true)
 	err := cmd.Execute("")
 
 	if err == nil {
@@ -711,11 +737,13 @@ func TestCheckoutCommand_SelectBranch_AllBranchesFiltered(t *testing.T) {
 		Git:    mockGitInstance,
 		UI:     &mockUI{},
 		Detect: &mockDetect{},
+		Config: config.New(),
 		Stdout: stdout,
 		Stderr: stderr,
 	}
 
-	cmd := NewCheckoutCommandWithConfig(deps, false, true, &config.Config{})
+	deps.Config = &config.Config{}
+	cmd := NewCheckoutCommand(deps, false, true)
 	err := cmd.Execute("")
 
 	if err == nil {
@@ -749,11 +777,13 @@ func TestCheckoutCommand_SelectBranch_ShowSelectorError(t *testing.T) {
 		Git:    mockGitInstance,
 		UI:     mockUIInstance,
 		Detect: &mockDetect{},
+		Config: config.New(),
 		Stdout: stdout,
 		Stderr: stderr,
 	}
 
-	cmd := NewCheckoutCommandWithConfig(deps, false, true, &config.Config{})
+	deps.Config = &config.Config{}
+	cmd := NewCheckoutCommand(deps, false, true)
 	err := cmd.Execute("")
 
 	if err == nil {
@@ -797,11 +827,13 @@ func TestCheckoutCommand_SelectBranch_FiltersCorrectly(t *testing.T) {
 		Git:    mockGitInstance,
 		UI:     mockUIInstance,
 		Detect: &mockDetect{},
+		Config: config.New(),
 		Stdout: stdout,
 		Stderr: stderr,
 	}
 
-	cmd := NewCheckoutCommandWithConfig(deps, false, true, &config.Config{})
+	deps.Config = &config.Config{}
+	cmd := NewCheckoutCommand(deps, false, true)
 	_ = cmd.Execute("")
 
 	// Should only have "bugfix/b" and "origin/feature/c" (feature/a is current, main/master/origin/main/origin/master are filtered)
@@ -850,12 +882,14 @@ func TestCheckoutCommand_Execute_EnvFilesWithUserConfirm(t *testing.T) {
 		Git:    mockGitInstance,
 		UI:     mockUIInstance,
 		Detect: &mockDetect{},
+		Config: config.New(),
 		Stdout: stdout,
 		Stderr: stderr,
 	}
 
 	// copyEnvs=false and CopyEnvs=nil should prompt user
-	cmd := NewCheckoutCommandWithConfig(deps, false, true, &config.Config{})
+	deps.Config = &config.Config{}
+	cmd := NewCheckoutCommand(deps, false, true)
 	err = cmd.Execute(testBranchFeature)
 
 	if err != nil {
@@ -911,11 +945,13 @@ func TestCheckoutCommand_Execute_EnvSourceAnchoredToRepoRoot(t *testing.T) {
 		Git:    mockGitInstance,
 		UI:     &mockUI{},
 		Detect: &mockDetect{},
+		Config: config.New(),
 		Stdout: stdout,
 		Stderr: stderr,
 	}
 
-	cmd := NewCheckoutCommandWithConfig(deps, true, true, &config.Config{})
+	deps.Config = &config.Config{}
+	cmd := NewCheckoutCommand(deps, true, true)
 	if err := cmd.Execute(testBranchFeature); err != nil {
 		t.Fatalf("Unexpected error: %v", err)
 	}
@@ -955,13 +991,15 @@ func TestCheckoutCommand_Execute_PostHook(t *testing.T) {
 		Git:    mockGitInstance,
 		UI:     &mockUI{},
 		Detect: &mockDetect{},
+		Config: config.New(),
 		Stdout: stdout,
 		Stderr: stderr,
 	}
 
-	cmd := NewCheckoutCommandWithConfig(deps, false, true, &config.Config{
+	deps.Config = &config.Config{
 		PostCheckoutHook: `echo "HOOK_OUTPUT:$GW_WORKTREE_PATH:$GW_BRANCH_NAME:$GW_COMMAND"`,
-	})
+	}
+	cmd := NewCheckoutCommand(deps, false, true)
 	err = cmd.Execute("feature/test")
 
 	if err != nil {
@@ -1007,13 +1045,15 @@ func TestCheckoutCommand_Execute_PostHookFailure(t *testing.T) {
 		Git:    mockGitInstance,
 		UI:     &mockUI{},
 		Detect: &mockDetect{},
+		Config: config.New(),
 		Stdout: stdout,
 		Stderr: stderr,
 	}
 
-	cmd := NewCheckoutCommandWithConfig(deps, false, true, &config.Config{
+	deps.Config = &config.Config{
 		PostCheckoutHook: "exit 1",
-	})
+	}
+	cmd := NewCheckoutCommand(deps, false, true)
 	err = cmd.Execute("feature/test")
 
 	if err != nil {

@@ -6,7 +6,6 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/sotarok/gw/internal/config"
 	"github.com/sotarok/gw/internal/hook"
 	"github.com/sotarok/gw/internal/iterm2"
 	"github.com/sotarok/gw/internal/spinner"
@@ -18,28 +17,14 @@ type CheckoutCommand struct {
 	deps     *Dependencies
 	copyEnvs bool
 	noFetch  bool
-	config   *config.Config
 }
 
 // NewCheckoutCommand creates a new checkout command handler
 func NewCheckoutCommand(deps *Dependencies, copyEnvs, noFetch bool) *CheckoutCommand {
-	// Load config
-	cfg, _ := config.Load(config.GetConfigPath())
 	return &CheckoutCommand{
 		deps:     deps,
 		copyEnvs: copyEnvs,
 		noFetch:  noFetch,
-		config:   cfg,
-	}
-}
-
-// NewCheckoutCommandWithConfig creates a new checkout command handler with explicit config
-func NewCheckoutCommandWithConfig(deps *Dependencies, copyEnvs, noFetch bool, cfg *config.Config) *CheckoutCommand {
-	return &CheckoutCommand{
-		deps:     deps,
-		copyEnvs: copyEnvs,
-		noFetch:  noFetch,
-		config:   cfg,
 	}
 }
 
@@ -55,7 +40,7 @@ func (c *CheckoutCommand) Execute(branch string) error {
 	}
 
 	// Fetch from remotes if configured
-	fetchIfConfigured(c.deps, c.config, c.noFetch)
+	fetchIfConfigured(c.deps, c.noFetch)
 
 	// Get the original repository name (not the worktree directory name) so that
 	// running checkout from inside a worktree still names the new worktree after
@@ -66,7 +51,7 @@ func (c *CheckoutCommand) Execute(branch string) error {
 	}
 
 	// Update iTerm2 tab if configured
-	if c.config != nil && iterm2.ShouldUpdateTab(c.config.UpdateITerm2Tab) {
+	if iterm2.ShouldUpdateTab(c.deps.Config.UpdateITerm2Tab) {
 		identifier := iterm2.GetIdentifierFromBranch(branch)
 		_ = iterm2.UpdateTabName(c.deps.Stdout, repoName, identifier)
 	}
@@ -117,7 +102,7 @@ func (c *CheckoutCommand) Execute(branch string) error {
 
 	// Change to the new worktree directory for setup operations
 	// Note: This only affects the current process, not the parent shell
-	if c.config != nil && c.config.AutoCD {
+	if c.deps.Config.AutoCD {
 		if err := os.Chdir(worktreePath); err != nil {
 			// Don't fail the command, just log the error
 			if c.deps.Stderr != nil {
@@ -139,14 +124,14 @@ func (c *CheckoutCommand) Execute(branch string) error {
 	}
 
 	// Execute post-checkout hook if configured
-	if c.config != nil && c.config.PostCheckoutHook != "" {
+	if c.deps.Config.PostCheckoutHook != "" {
 		hookEnv := hook.Env{
 			WorktreePath: absolutePath,
 			BranchName:   branchName,
 			RepoName:     repoName,
 			Command:      "checkout",
 		}
-		if err := hook.Execute(c.config.PostCheckoutHook, hookEnv, c.deps.Stdout, c.deps.Stderr); err != nil {
+		if err := hook.Execute(c.deps.Config.PostCheckoutHook, hookEnv, c.deps.Stdout, c.deps.Stderr); err != nil {
 			fmt.Fprintf(c.deps.Stderr, "%s Post-checkout hook failed: %v\n", coloredWarning(), err)
 		}
 	}
@@ -154,7 +139,7 @@ func (c *CheckoutCommand) Execute(branch string) error {
 	// Show completion message
 	if c.deps.Stdout != nil {
 		fmt.Fprintf(c.deps.Stdout, "\n✨ Worktree ready at:\n   %s\n", absolutePath)
-		if c.config != nil && c.config.AutoCD {
+		if c.deps.Config.AutoCD {
 			fmt.Fprintf(c.deps.Stdout, "\n💡 Shell integration will change to this directory after the command completes.\n")
 		}
 	}
@@ -163,7 +148,7 @@ func (c *CheckoutCommand) Execute(branch string) error {
 }
 
 func (c *CheckoutCommand) handleEnvFiles(originalDir, worktreePath string) error {
-	return handleEnvFiles(c.deps, c.config, c.copyEnvs, originalDir, worktreePath)
+	return handleEnvFiles(c.deps, c.copyEnvs, originalDir, worktreePath)
 }
 
 func (c *CheckoutCommand) selectBranch() (string, error) {

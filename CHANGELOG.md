@@ -9,9 +9,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 - `gw end` now writes its safety-check warning block (the "Safety check warnings:" header and the per-check bullet list) to stderr instead of stdout, matching the project's stdout/stderr policy (results and interactive prompts on stdout; warnings and errors on stderr). The confirmation prompt itself remains on stdout. This only affects output redirection (e.g. `gw end 123 1>out 2>err`); interactive behavior is unchanged.
+- Loading `~/.gwrc` now warns on stderr when the file cannot be parsed, instead of silently falling back to defaults. Previously a malformed config was swallowed without any indication; the command still proceeds with built-in defaults, but a `⚠ Could not load ~/.gwrc, using defaults: …` line is now emitted so the misconfiguration is visible.
 
 ### Internal
 - Refactored the `internal/git` package (Phase 3-A): git subprocess execution is now centralized in a single `runner`, and the former package-level git functions are methods on a `*git.Client`. The 38 pass-through delegation methods and the `DefaultClient` struct were removed in favor of `git.NewClient()`. No user-facing behavior change.
+- Refactored the `cmd` layer (Phase 4-A): configuration is now loaded once in `DefaultDependencies` and injected via `Dependencies.Config` (guaranteed non-nil) rather than re-loaded per command. The eight `NewXCommandWithConfig` constructors and the scattered `config != nil` guards were removed, and `gw shell-integration --print-path` now uses the injected git client. No user-facing behavior change beyond the config-load warning noted above.
 
 ## [0.9.0] - 2026-06-11
 

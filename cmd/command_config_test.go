@@ -85,12 +85,14 @@ func TestStartCommand_WithConfig(t *testing.T) {
 				Git:    mockGitInstance,
 				UI:     &mockUI{},
 				Detect: &mockDetect{},
+				Config: config.New(),
 				Stdout: stdout,
 				Stderr: stderr,
 			}
 
 			// Create command with config
-			cmd := NewStartCommandWithConfig(deps, false, true, tt.config)
+			deps.Config = tt.config
+			cmd := NewStartCommand(deps, false, true)
 			err = cmd.Execute("123", "main")
 
 			if err != nil {
@@ -195,12 +197,14 @@ func TestCheckoutCommand_WithConfig(t *testing.T) {
 				Git:    mockGitInstance,
 				UI:     &mockUI{},
 				Detect: &mockDetect{},
+				Config: config.New(),
 				Stdout: stdout,
 				Stderr: stderr,
 			}
 
 			// Create command with config
-			cmd := NewCheckoutCommandWithConfig(deps, false, true, tt.config)
+			deps.Config = tt.config
+			cmd := NewCheckoutCommand(deps, false, true)
 			err = cmd.Execute("feature/test")
 
 			if err != nil {

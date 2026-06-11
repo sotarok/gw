@@ -257,6 +257,7 @@ func TestStartCommand_Execute(t *testing.T) {
 				Git:    mockGit,
 				UI:     mockUI,
 				Detect: mockDetect,
+				Config: config.New(),
 				Stdout: stdout,
 				Stderr: stderr,
 			}
@@ -266,7 +267,8 @@ func TestStartCommand_Execute(t *testing.T) {
 				AutoCD:          false,
 				UpdateITerm2Tab: tt.updateITerm2Tab,
 			}
-			cmd := NewStartCommandWithConfig(deps, tt.copyEnvs, true, cfg)
+			deps.Config = cfg
+			cmd := NewStartCommand(deps, tt.copyEnvs, true)
 			err = cmd.Execute(tt.issueNumber, tt.baseBranch)
 
 			// Check error
@@ -316,12 +318,14 @@ func TestStartCommand_Execute_FetchBeforeCommand(t *testing.T) {
 		Git:    mockGitInstance,
 		UI:     &mockUI{},
 		Detect: &mockDetect{},
+		Config: config.New(),
 		Stdout: stdout,
 		Stderr: stderr,
 	}
 
 	// noFetch=false with FetchBeforeCommand=true should call fetch
-	cmd := NewStartCommandWithConfig(deps, false, false, &config.Config{FetchBeforeCommand: true})
+	deps.Config = &config.Config{FetchBeforeCommand: true}
+	cmd := NewStartCommand(deps, false, false)
 	err = cmd.Execute("123", "main")
 
 	if err != nil {
@@ -360,11 +364,13 @@ func TestStartCommand_Execute_FetchErrorWarnsButDoesNotFail(t *testing.T) {
 		Git:    mockGitInstance,
 		UI:     &mockUI{},
 		Detect: &mockDetect{},
+		Config: config.New(),
 		Stdout: stdout,
 		Stderr: stderr,
 	}
 
-	cmd := NewStartCommandWithConfig(deps, false, false, &config.Config{FetchBeforeCommand: true})
+	deps.Config = &config.Config{FetchBeforeCommand: true}
+	cmd := NewStartCommand(deps, false, false)
 	err = cmd.Execute("123", "main")
 
 	if err != nil {
@@ -408,12 +414,14 @@ func TestStartCommand_Execute_NoFetchSkipsFetch(t *testing.T) {
 		Git:    mockGitInstance,
 		UI:     &mockUI{},
 		Detect: &mockDetect{},
+		Config: config.New(),
 		Stdout: stdout,
 		Stderr: stderr,
 	}
 
 	// noFetch=true should skip fetch even with FetchBeforeCommand=true
-	cmd := NewStartCommandWithConfig(deps, false, true, &config.Config{FetchBeforeCommand: true})
+	deps.Config = &config.Config{FetchBeforeCommand: true}
+	cmd := NewStartCommand(deps, false, true)
 	err = cmd.Execute("123", "main")
 
 	if err != nil {
@@ -449,11 +457,13 @@ func TestStartCommand_Execute_AutoCDEnabled(t *testing.T) {
 		Git:    mockGitInstance,
 		UI:     &mockUI{},
 		Detect: &mockDetect{},
+		Config: config.New(),
 		Stdout: stdout,
 		Stderr: stderr,
 	}
 
-	cmd := NewStartCommandWithConfig(deps, false, true, &config.Config{AutoCD: true})
+	deps.Config = &config.Config{AutoCD: true}
+	cmd := NewStartCommand(deps, false, true)
 	err = cmd.Execute("123", "main")
 
 	if err != nil {
@@ -489,11 +499,13 @@ func TestStartCommand_Execute_ITerm2Tab(t *testing.T) {
 		Git:    mockGitInstance,
 		UI:     &mockUI{},
 		Detect: &mockDetect{},
+		Config: config.New(),
 		Stdout: stdout,
 		Stderr: stderr,
 	}
 
-	cmd := NewStartCommandWithConfig(deps, false, true, &config.Config{UpdateITerm2Tab: true})
+	deps.Config = &config.Config{UpdateITerm2Tab: true}
+	cmd := NewStartCommand(deps, false, true)
 	err = cmd.Execute("456", "main")
 
 	if err != nil {
@@ -540,11 +552,13 @@ func TestStartCommand_Execute_EnvFilesUserDeclines(t *testing.T) {
 		Git:    mockGitInstance,
 		UI:     mockUIInstance,
 		Detect: &mockDetect{},
+		Config: config.New(),
 		Stdout: stdout,
 		Stderr: stderr,
 	}
 
-	cmd := NewStartCommandWithConfig(deps, false, true, &config.Config{})
+	deps.Config = &config.Config{}
+	cmd := NewStartCommand(deps, false, true)
 	err = cmd.Execute("123", "main")
 
 	if err != nil {
@@ -593,12 +607,14 @@ func TestStartCommand_Execute_ConfigCopyEnvsTrue(t *testing.T) {
 		Git:    mockGitInstance,
 		UI:     mockUIInstance,
 		Detect: &mockDetect{},
+		Config: config.New(),
 		Stdout: stdout,
 		Stderr: stderr,
 	}
 
 	// copyEnvs flag=false but config.CopyEnvs=true should copy without prompting
-	cmd := NewStartCommandWithConfig(deps, false, true, &config.Config{CopyEnvs: boolPtr(true)})
+	deps.Config = &config.Config{CopyEnvs: boolPtr(true)}
+	cmd := NewStartCommand(deps, false, true)
 	err = cmd.Execute("123", "main")
 
 	if err != nil {
@@ -657,11 +673,13 @@ func TestStartCommand_Execute_EnvSourceAnchoredToRepoRoot(t *testing.T) {
 		Git:    mockGitInstance,
 		UI:     &mockUI{},
 		Detect: &mockDetect{},
+		Config: config.New(),
 		Stdout: stdout,
 		Stderr: stderr,
 	}
 
-	cmd := NewStartCommandWithConfig(deps, true, true, &config.Config{})
+	deps.Config = &config.Config{}
+	cmd := NewStartCommand(deps, true, true)
 	if err := cmd.Execute("123", "main"); err != nil {
 		t.Fatalf("Unexpected error: %v", err)
 	}
@@ -696,13 +714,15 @@ func TestStartCommand_Execute_PostHook(t *testing.T) {
 		Git:    mockGitInstance,
 		UI:     &mockUI{},
 		Detect: &mockDetect{},
+		Config: config.New(),
 		Stdout: stdout,
 		Stderr: stderr,
 	}
 
-	cmd := NewStartCommandWithConfig(deps, false, true, &config.Config{
+	deps.Config = &config.Config{
 		PostStartHook: `echo "HOOK_OUTPUT:$GW_WORKTREE_PATH:$GW_COMMAND"`,
-	})
+	}
+	cmd := NewStartCommand(deps, false, true)
 	err = cmd.Execute("123", "main")
 
 	if err != nil {
@@ -740,13 +760,15 @@ func TestStartCommand_Execute_PostHookFailure(t *testing.T) {
 		Git:    mockGitInstance,
 		UI:     &mockUI{},
 		Detect: &mockDetect{},
+		Config: config.New(),
 		Stdout: stdout,
 		Stderr: stderr,
 	}
 
-	cmd := NewStartCommandWithConfig(deps, false, true, &config.Config{
+	deps.Config = &config.Config{
 		PostStartHook: "exit 1",
-	})
+	}
+	cmd := NewStartCommand(deps, false, true)
 	err = cmd.Execute("123", "main")
 
 	// Command should succeed even if hook fails

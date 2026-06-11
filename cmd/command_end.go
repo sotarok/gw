@@ -5,7 +5,6 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/sotarok/gw/internal/config"
 	"github.com/sotarok/gw/internal/iterm2"
 	"github.com/sotarok/gw/internal/spinner"
 )
@@ -15,28 +14,14 @@ type EndCommand struct {
 	deps    *Dependencies
 	force   bool
 	noFetch bool
-	config  *config.Config
 }
 
 // NewEndCommand creates a new end command handler
 func NewEndCommand(deps *Dependencies, force, noFetch bool) *EndCommand {
-	// Load config
-	cfg, _ := config.Load(config.GetConfigPath())
 	return &EndCommand{
 		deps:    deps,
 		force:   force,
 		noFetch: noFetch,
-		config:  cfg,
-	}
-}
-
-// NewEndCommandWithConfig creates a new end command handler with explicit config
-func NewEndCommandWithConfig(deps *Dependencies, force, noFetch bool, cfg *config.Config) *EndCommand {
-	return &EndCommand{
-		deps:    deps,
-		force:   force,
-		noFetch: noFetch,
-		config:  cfg,
 	}
 }
 
@@ -76,13 +61,13 @@ func (c *EndCommand) Execute(issueNumber string) error {
 	}
 
 	// Fetch from remotes if configured
-	fetchIfConfigured(c.deps, c.config, c.noFetch)
+	fetchIfConfigured(c.deps, c.noFetch)
 
 	// Capture repo name from the current working directory, before any chdir
 	// happens, since GetRepositoryName returns the worktree directory name when
 	// called from inside a worktree (the hook expects the original repo name).
 	var hookRepoName string
-	if c.config != nil && c.config.PreEndHook != "" {
+	if c.deps.Config.PreEndHook != "" {
 		hookRepoName, _ = c.deps.Git.GetRepositoryName()
 	}
 
@@ -115,8 +100,8 @@ func (c *EndCommand) Execute(issueNumber string) error {
 
 	// Execute pre-end hook with cwd set to the worktree so the hook can operate
 	// on files that are about to disappear (e.g. docker compose).
-	if c.config != nil && c.config.PreEndHook != "" {
-		runPreEndHook(c.deps, c.config.PreEndHook, worktreePath, branchName, hookRepoName, "end")
+	if c.deps.Config.PreEndHook != "" {
+		runPreEndHook(c.deps, c.deps.Config.PreEndHook, worktreePath, branchName, hookRepoName, "end")
 	}
 
 	// Remove the worktree with spinner
@@ -135,7 +120,7 @@ func (c *EndCommand) Execute(issueNumber string) error {
 	fmt.Fprintf(c.deps.Stdout, "%s Successfully removed worktree for issue #%s\n", coloredSuccess(), issueNumber)
 
 	// Delete the branch if auto-remove is enabled
-	if c.config != nil && c.config.AutoRemoveBranch && branchName != "" {
+	if c.deps.Config.AutoRemoveBranch && branchName != "" {
 		fmt.Fprintf(c.deps.Stdout, "Deleting branch %s...\n", branchName)
 		if err := c.deps.Git.DeleteBranch(branchName); err != nil {
 			// Don't fail the command, just warn
@@ -146,7 +131,7 @@ func (c *EndCommand) Execute(issueNumber string) error {
 	}
 
 	// Reset iTerm2 tab if configured
-	if c.config != nil && iterm2.ShouldUpdateTab(c.config.UpdateITerm2Tab) {
+	if iterm2.ShouldUpdateTab(c.deps.Config.UpdateITerm2Tab) {
 		_ = iterm2.ResetTabName(c.deps.Stdout)
 	}
 
