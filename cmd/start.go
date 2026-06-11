@@ -36,8 +36,6 @@ func init() {
 	rootCmd.AddCommand(startCmd)
 }
 
-const defaultBaseBranch = "main"
-
 func runStart(cmd *cobra.Command, args []string) error {
 	issueNumber := args[0]
 	baseBranch := defaultBaseBranch

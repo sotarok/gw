@@ -15,6 +15,29 @@ import (
 // so the effective fd ceiling is ~3× this value.
 const cleanCheckConcurrency = 8
 
+// protectedBranches are the integration branches that `gw clean` never treats
+// as removable candidates.
+var protectedBranches = []string{defaultBaseBranch, "master"}
+
+// isProtectedBranch reports whether branch is one of the protected integration
+// branches that clean must skip.
+func isProtectedBranch(branch string) bool {
+	for _, b := range protectedBranches {
+		if branch == b {
+			return true
+		}
+	}
+	return false
+}
+
+// cleanGit is the subset of git operations CleanCommand actually uses.
+type cleanGit interface {
+	git.RepositoryReader // GetRepositoryName, FetchAll
+	git.WorktreeManager  // ListWorktrees, RemoveWorktreeByPath
+	git.BranchManager    // DeleteBranch
+	git.StatusChecker
+}
+
 // WorktreeStatus holds the status of a worktree for the clean command
 type WorktreeStatus struct {
 	Info      *git.WorktreeInfo
@@ -40,44 +63,18 @@ func NewCleanCommand(deps *Dependencies, force, dryRun, noFetch bool) *CleanComm
 	}
 }
 
+// git returns the command's git dependency narrowed to the operations it uses.
+func (c *CleanCommand) git() cleanGit { return c.deps.Git }
+
 // Execute runs the clean command
 func (c *CleanCommand) Execute() error {
 	// Fetch from remotes if configured
 	fetchIfConfigured(c.deps, c.noFetch)
 
-	// Get all worktrees
-	worktrees, err := c.deps.Git.ListWorktrees()
+	statuses, err := c.checkWorktrees()
 	if err != nil {
-		return fmt.Errorf("failed to list worktrees: %w", err)
+		return err
 	}
-
-	candidates := make([]git.WorktreeInfo, 0, len(worktrees))
-	for _, wt := range worktrees {
-		if wt.Branch == "" || wt.Branch == defaultBaseBranch || wt.Branch == "master" {
-			continue
-		}
-		candidates = append(candidates, wt)
-	}
-
-	statuses := make([]*WorktreeStatus, len(candidates))
-	sp := spinner.New("Checking worktrees...", c.deps.Stdout)
-	sp.Start()
-	// Bound concurrency: each check forks three `git` subprocesses, so
-	// unbounded fan-out over a large worktree count could exhaust file
-	// descriptors and saturate the disk.
-	sem := make(chan struct{}, cleanCheckConcurrency)
-	var wg sync.WaitGroup
-	wg.Add(len(candidates))
-	for i := range candidates {
-		go func(idx int) {
-			defer wg.Done()
-			sem <- struct{}{}
-			defer func() { <-sem }()
-			statuses[idx] = c.checkWorktree(&candidates[idx])
-		}(i)
-	}
-	wg.Wait()
-	sp.Stop()
 
 	// Display results
 	c.displayResults(statuses)
@@ -125,6 +122,46 @@ func (c *CleanCommand) Execute() error {
 	return c.removeWorktrees(statuses)
 }
 
+// checkWorktrees lists worktrees, filters out protected/branchless ones, and
+// runs the safety checks for each remaining candidate in parallel.
+func (c *CleanCommand) checkWorktrees() ([]*WorktreeStatus, error) {
+	// Get all worktrees
+	worktrees, err := c.git().ListWorktrees()
+	if err != nil {
+		return nil, fmt.Errorf("failed to list worktrees: %w", err)
+	}
+
+	candidates := make([]git.WorktreeInfo, 0, len(worktrees))
+	for _, wt := range worktrees {
+		if wt.Branch == "" || isProtectedBranch(wt.Branch) {
+			continue
+		}
+		candidates = append(candidates, wt)
+	}
+
+	statuses := make([]*WorktreeStatus, len(candidates))
+	sp := spinner.New("Checking worktrees...", c.deps.Stdout)
+	sp.Start()
+	// Bound concurrency: each check forks three `git` subprocesses, so
+	// unbounded fan-out over a large worktree count could exhaust file
+	// descriptors and saturate the disk.
+	sem := make(chan struct{}, cleanCheckConcurrency)
+	var wg sync.WaitGroup
+	wg.Add(len(candidates))
+	for i := range candidates {
+		go func(idx int) {
+			defer wg.Done()
+			sem <- struct{}{}
+			defer func() { <-sem }()
+			statuses[idx] = c.checkWorktree(&candidates[idx])
+		}(i)
+	}
+	wg.Wait()
+	sp.Stop()
+
+	return statuses, nil
+}
+
 // checkWorktree checks if a worktree can be safely removed.
 func (c *CleanCommand) checkWorktree(info *git.WorktreeInfo) *WorktreeStatus {
 	status := &WorktreeStatus{
@@ -133,7 +170,7 @@ func (c *CleanCommand) checkWorktree(info *git.WorktreeInfo) *WorktreeStatus {
 		Warnings:  []string{},
 	}
 
-	res := runSafetyChecks(c.deps.Git, info.Path, info.Branch, defaultBaseBranch)
+	res := runSafetyChecks(c.git(), info.Path, info.Branch, defaultBaseBranch)
 
 	// A broken or missing worktree (git exit 128) — surface a single clear
 	// reason instead of three meaningless ones.
@@ -216,7 +253,7 @@ func (c *CleanCommand) removeWorktrees(statuses []*WorktreeStatus) error {
 
 	var repoName string
 	if c.deps.Config.PreEndHook != "" {
-		repoName, _ = c.deps.Git.GetRepositoryName()
+		repoName, _ = c.git().GetRepositoryName()
 	}
 
 	for _, status := range statuses {
@@ -234,7 +271,7 @@ func (c *CleanCommand) removeWorktrees(statuses []*WorktreeStatus) error {
 		// Remove the worktree with spinner
 		sp := spinner.New(fmt.Sprintf("Removing %s...", dirName), c.deps.Stdout)
 		sp.Start()
-		removeErr := c.deps.Git.RemoveWorktreeByPath(status.Info.Path)
+		removeErr := c.git().RemoveWorktreeByPath(status.Info.Path)
 		sp.Stop()
 		if removeErr != nil {
 			fmt.Fprintf(c.deps.Stderr, "%s Failed to remove %s: %v\n", coloredError(), dirName, removeErr)
@@ -248,7 +285,7 @@ func (c *CleanCommand) removeWorktrees(statuses []*WorktreeStatus) error {
 		// Delete the branch if auto-remove is enabled
 		if c.deps.Config.AutoRemoveBranch && status.Info.Branch != "" {
 			fmt.Fprintf(c.deps.Stdout, "Deleting branch %s...\n", status.Info.Branch)
-			if err := c.deps.Git.DeleteBranch(status.Info.Branch); err != nil {
+			if err := c.git().DeleteBranch(status.Info.Branch); err != nil {
 				// Don't fail the command, just warn
 				fmt.Fprintf(c.deps.Stderr, "%s Failed to delete branch %s: %v\n", coloredWarning(), status.Info.Branch, err)
 			} else {

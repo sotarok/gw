@@ -171,7 +171,7 @@ func TestCheckoutCommand_WithConfig(t *testing.T) {
 
 			// Create worktree directory
 			// Checkout command creates worktree with sanitized branch name
-			worktreeDir := filepath.Join(tempDir, "..", "test-repo-feature_test")
+			worktreeDir := filepath.Join(tempDir, "..", "test-repo-feature-test")
 			if err := os.MkdirAll(worktreeDir, 0755); err != nil {
 				t.Fatalf("Failed to create worktree dir: %v", err)
 			}

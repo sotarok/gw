@@ -339,7 +339,7 @@ func findWorktreePath(gitClient git.Interface, identifier string) (string, error
 	}
 
 	// If not found as issue, try as branch name (for checkout command)
-	sanitizedBranchName := gitClient.SanitizeBranchNameForDirectory(identifier)
+	sanitizedBranchName := git.SanitizeBranchNameForDirectory(identifier)
 	if sanitizedBranchName != identifier {
 		expectedPath = git.ResolveWorktreePath(repoRoot, repoName, sanitizedBranchName)
 		if info, err := os.Stat(expectedPath); err == nil && info.IsDir() {

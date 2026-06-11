@@ -13,6 +13,14 @@ import (
 	"github.com/sotarok/gw/internal/ui"
 )
 
+// checkoutGit is the subset of git operations CheckoutCommand actually uses.
+type checkoutGit interface {
+	git.RepositoryReader // GetOriginalRepositoryName, GetRepositoryRoot, GetCurrentBranch, FetchAll
+	git.WorktreeManager  // CreateWorktreeFromBranch
+	git.BranchManager    // BranchExists, ListAllBranches
+	git.EnvFileHandler   // FindUntrackedEnvFiles, CopyEnvFiles (via handleEnvFiles)
+}
+
 // CheckoutCommand handles the checkout command logic
 type CheckoutCommand struct {
 	deps     *Dependencies
@@ -29,26 +37,57 @@ func NewCheckoutCommand(deps *Dependencies, copyEnvs, noFetch bool) *CheckoutCom
 	}
 }
 
+// git returns the command's git dependency narrowed to the operations it uses.
+func (c *CheckoutCommand) git() checkoutGit { return c.deps.Git }
+
 // Execute runs the checkout command
 func (c *CheckoutCommand) Execute(branch string) error {
-	// If no branch specified, use interactive mode
+	branch, err := c.resolveBranch(branch)
+	if err != nil {
+		return err
+	}
+
+	repoName, branchName, worktreePath, repoRoot, err := c.prepareWorktree(branch)
+	if err != nil {
+		return err
+	}
+
+	absolutePath, err := c.createWorktree(branch, branchName, worktreePath)
+	if err != nil {
+		return err
+	}
+
+	c.postCreate(repoName, branchName, worktreePath, absolutePath, repoRoot)
+	return nil
+}
+
+// resolveBranch returns the branch to check out, falling back to the interactive
+// selector when none was supplied.
+func (c *CheckoutCommand) resolveBranch(branch string) (string, error) {
 	if branch == "" {
 		selectedBranch, err := c.selectBranch()
 		if err != nil {
-			return err
+			return "", err
 		}
 		branch = selectedBranch
 	}
 
 	// Fetch from remotes if configured
 	fetchIfConfigured(c.deps, c.noFetch)
+	return branch, nil
+}
+
+// prepareWorktree resolves the repository name/root, updates the iTerm2 tab, and
+// derives the target branch name and worktree path for the given branch.
+func (c *CheckoutCommand) prepareWorktree(branch string) (repoName, branchName, worktreePath, repoRoot string, err error) {
+	g := c.git()
 
 	// Get the original repository name (not the worktree directory name) so that
 	// running checkout from inside a worktree still names the new worktree after
 	// the repo, e.g. `<repo>-<branch>` rather than `<worktree-dir>-<branch>`.
-	repoName, err := c.deps.Git.GetOriginalRepositoryName()
+	repoName, err = g.GetOriginalRepositoryName()
 	if err != nil {
-		return fmt.Errorf("failed to get repository name: %w", err)
+		return "", "", "", "", fmt.Errorf("failed to get repository name: %w", err)
 	}
 
 	// Update iTerm2 tab if configured
@@ -58,48 +97,60 @@ func (c *CheckoutCommand) Execute(branch string) error {
 	}
 
 	// Extract branch name without remote prefix
-	branchName := branch
+	branchName = branch
 	if strings.HasPrefix(branch, "origin/") {
 		branchName = strings.TrimPrefix(branch, "origin/")
 	}
 
 	// Create worktree directory name
-	sanitizedBranchName := c.deps.Git.SanitizeBranchNameForDirectory(branchName)
+	sanitizedBranchName := git.SanitizeBranchNameForDirectory(branchName)
 
 	// Anchor the worktree path and env file scan to the repository root so
 	// that running checkout from a sub directory still creates the worktree as
 	// a sibling of the repo (rather than a sibling of the current sub
 	// directory) and scans the whole repo for env files.
-	repoRoot, err := c.deps.Git.GetRepositoryRoot()
+	repoRoot, err = g.GetRepositoryRoot()
 	if err != nil {
-		return fmt.Errorf("failed to get repository root: %w", err)
+		return "", "", "", "", fmt.Errorf("failed to get repository root: %w", err)
 	}
-	worktreePath := git.ResolveWorktreePath(repoRoot, repoName, sanitizedBranchName)
+	worktreePath = git.ResolveWorktreePath(repoRoot, repoName, sanitizedBranchName)
+
+	return repoName, branchName, worktreePath, repoRoot, nil
+}
+
+// createWorktree verifies the branch exists, creates the worktree, and returns
+// the absolute path to it.
+func (c *CheckoutCommand) createWorktree(branch, branchName, worktreePath string) (string, error) {
+	g := c.git()
 
 	// Check if branch exists
-	exists, err := c.deps.Git.BranchExists(branch)
+	exists, err := g.BranchExists(branch)
 	if err != nil {
-		return fmt.Errorf("failed to check branch existence: %w", err)
+		return "", fmt.Errorf("failed to check branch existence: %w", err)
 	}
 	if !exists {
-		return fmt.Errorf("branch '%s' does not exist in the repository\nUse 'git branch -a' to see all available branches", branch)
+		return "", fmt.Errorf("branch '%s' does not exist in the repository\nUse 'git branch -a' to see all available branches", branch)
 	}
 
 	// Create worktree with spinner
 	sp := spinner.New(fmt.Sprintf("Creating worktree for branch '%s'...", branch), c.deps.Stdout)
 	sp.Start()
-	createErr := c.deps.Git.CreateWorktreeFromBranch(worktreePath, branch, branchName)
+	createErr := g.CreateWorktreeFromBranch(worktreePath, branch, branchName)
 	sp.Stop()
 	if createErr != nil {
-		return fmt.Errorf("failed to create worktree: %w", createErr)
+		return "", fmt.Errorf("failed to create worktree: %w", createErr)
 	}
 
-	// Change to the new worktree directory if auto-cd is enabled
 	absolutePath, err := filepath.Abs(worktreePath)
 	if err != nil {
-		return fmt.Errorf("failed to get absolute path: %w", err)
+		return "", fmt.Errorf("failed to get absolute path: %w", err)
 	}
+	return absolutePath, nil
+}
 
+// postCreate performs the post-creation steps: optional auto-cd, env file copy,
+// package manager setup, the post-checkout hook, and the completion message.
+func (c *CheckoutCommand) postCreate(repoName, branchName, worktreePath, absolutePath, repoRoot string) {
 	// Change to the new worktree directory for setup operations
 	// Note: This only affects the current process, not the parent shell
 	if c.deps.Config.AutoCD {
@@ -143,8 +194,6 @@ func (c *CheckoutCommand) Execute(branch string) error {
 			fmt.Fprintf(c.deps.Stdout, "\n💡 Shell integration will change to this directory after the command completes.\n")
 		}
 	}
-
-	return nil
 }
 
 func (c *CheckoutCommand) handleEnvFiles(originalDir, worktreePath string) error {
@@ -152,10 +201,12 @@ func (c *CheckoutCommand) handleEnvFiles(originalDir, worktreePath string) error
 }
 
 func (c *CheckoutCommand) selectBranch() (string, error) {
+	g := c.git()
+
 	// Get all branches (local and remote) with spinner
 	sp := spinner.New("Fetching branches...", c.deps.Stdout)
 	sp.Start()
-	branches, err := c.deps.Git.ListAllBranches()
+	branches, err := g.ListAllBranches()
 	sp.Stop()
 	if err != nil {
 		return "", fmt.Errorf("failed to list branches: %w", err)
@@ -166,7 +217,7 @@ func (c *CheckoutCommand) selectBranch() (string, error) {
 	}
 
 	// Filter out current branch and main/master
-	currentBranch, err := c.deps.Git.GetCurrentBranch()
+	currentBranch, err := g.GetCurrentBranch()
 	if err != nil {
 		return "", fmt.Errorf("failed to get current branch: %w", err)
 	}

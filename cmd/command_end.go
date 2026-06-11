@@ -4,9 +4,18 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/sotarok/gw/internal/git"
 	"github.com/sotarok/gw/internal/iterm2"
 	"github.com/sotarok/gw/internal/spinner"
 )
+
+// endGit is the subset of git operations EndCommand actually uses.
+type endGit interface {
+	git.RepositoryReader // GetRepositoryName, FetchAll
+	git.WorktreeManager  // GetWorktreeForIssue, RemoveWorktreeByPath
+	git.BranchManager    // DeleteBranch
+	git.StatusChecker
+}
 
 // EndCommand handles the end command logic
 type EndCommand struct {
@@ -24,18 +33,49 @@ func NewEndCommand(deps *Dependencies, force, noFetch bool) *EndCommand {
 	}
 }
 
+// git returns the command's git dependency narrowed to the operations it uses.
+func (c *EndCommand) git() endGit { return c.deps.Git }
+
 // Execute runs the end command
 func (c *EndCommand) Execute(issueNumber string) error {
-	var worktreePath string
-	var branchName string
+	issueNumber, worktreePath, branchName, err := c.resolveWorktree(issueNumber)
+	if err != nil {
+		return err
+	}
 
+	// Fetch from remotes if configured
+	fetchIfConfigured(c.deps, c.noFetch)
+
+	// Capture repo name from the current working directory, before any chdir
+	// happens, since GetRepositoryName returns the worktree directory name when
+	// called from inside a worktree (the hook expects the original repo name).
+	var hookRepoName string
+	if c.deps.Config.PreEndHook != "" {
+		hookRepoName, _ = c.git().GetRepositoryName()
+	}
+
+	proceed, err := c.confirmRemoval(issueNumber, worktreePath, branchName)
+	if err != nil {
+		return err
+	}
+	if !proceed {
+		return nil
+	}
+
+	return c.remove(issueNumber, worktreePath, branchName, hookRepoName)
+}
+
+// resolveWorktree determines the worktree to remove, either via interactive
+// selection (when issueNumber is empty) or by looking it up from the issue
+// number. It returns the resolved issue number, worktree path, and branch name.
+func (c *EndCommand) resolveWorktree(issueNumber string) (resolvedIssue, worktreePath, branchName string, err error) {
 	if issueNumber == "" {
 		// Interactive mode
 		fmt.Fprintf(c.deps.Stdout, "No issue number provided, entering interactive mode...\n")
 
-		selected, err := c.deps.UI.SelectWorktree()
-		if err != nil {
-			return err
+		selected, selErr := c.deps.UI.SelectWorktree()
+		if selErr != nil {
+			return "", "", "", selErr
 		}
 
 		// Extract issue number from the path or branch
@@ -47,56 +87,59 @@ func (c *EndCommand) Execute(issueNumber string) error {
 		branchName = selected.Branch
 	} else {
 		// Find the worktree for this issue
-		wt, err := c.deps.Git.GetWorktreeForIssue(issueNumber)
-		if err != nil {
-			return err
+		wt, lookupErr := c.git().GetWorktreeForIssue(issueNumber)
+		if lookupErr != nil {
+			return "", "", "", lookupErr
 		}
 		worktreePath = wt.Path
 		branchName = wt.Branch
 	}
 
 	if issueNumber == "" {
-		return fmt.Errorf("could not determine issue number")
+		return "", "", "", fmt.Errorf("could not determine issue number")
 	}
 
-	// Fetch from remotes if configured
-	fetchIfConfigured(c.deps, c.noFetch)
+	return issueNumber, worktreePath, branchName, nil
+}
 
-	// Capture repo name from the current working directory, before any chdir
-	// happens, since GetRepositoryName returns the worktree directory name when
-	// called from inside a worktree (the hook expects the original repo name).
-	var hookRepoName string
-	if c.deps.Config.PreEndHook != "" {
-		hookRepoName, _ = c.deps.Git.GetRepositoryName()
+// confirmRemoval runs the safety checks (unless forced) and, when they raise
+// warnings, prompts the user to continue. It returns whether the removal should
+// proceed.
+func (c *EndCommand) confirmRemoval(issueNumber, worktreePath, branchName string) (bool, error) {
+	if c.force {
+		return true, nil
 	}
 
-	// Perform safety checks unless forced.
-	if !c.force {
-		sp := spinner.New(fmt.Sprintf("Checking worktree for issue #%s...", issueNumber), c.deps.Stdout)
-		sp.Start()
-		warnings := c.performSafetyChecks(worktreePath, branchName)
-		sp.Stop()
+	sp := spinner.New(fmt.Sprintf("Checking worktree for issue #%s...", issueNumber), c.deps.Stdout)
+	sp.Start()
+	warnings := c.performSafetyChecks(worktreePath, branchName)
+	sp.Stop()
 
-		// If there are warnings, ask for confirmation
-		if len(warnings) > 0 {
-			fmt.Fprintf(c.deps.Stderr, "\n%s Safety check warnings:\n", coloredWarning())
-			for _, warning := range warnings {
-				fmt.Fprintf(c.deps.Stderr, "  • %s\n", warning)
-			}
+	// If there are warnings, ask for confirmation
+	if len(warnings) > 0 {
+		fmt.Fprintf(c.deps.Stderr, "\n%s Safety check warnings:\n", coloredWarning())
+		for _, warning := range warnings {
+			fmt.Fprintf(c.deps.Stderr, "  • %s\n", warning)
+		}
 
-			fmt.Fprintf(c.deps.Stdout, "\nDo you want to continue?")
-			confirmed, err := c.deps.UI.ConfirmPrompt(" (y/N): ")
-			if err != nil {
-				return fmt.Errorf("failed to read response: %w", err)
-			}
+		fmt.Fprintf(c.deps.Stdout, "\nDo you want to continue?")
+		confirmed, err := c.deps.UI.ConfirmPrompt(" (y/N): ")
+		if err != nil {
+			return false, fmt.Errorf("failed to read response: %w", err)
+		}
 
-			if !confirmed {
-				fmt.Fprintf(c.deps.Stdout, "Aborted.\n")
-				return nil
-			}
+		if !confirmed {
+			fmt.Fprintf(c.deps.Stdout, "Aborted.\n")
+			return false, nil
 		}
 	}
 
+	return true, nil
+}
+
+// remove runs the pre-end hook, removes the worktree, optionally deletes the
+// branch, and resets the iTerm2 tab.
+func (c *EndCommand) remove(issueNumber, worktreePath, branchName, hookRepoName string) error {
 	// Execute pre-end hook with cwd set to the worktree so the hook can operate
 	// on files that are about to disappear (e.g. docker compose).
 	if c.deps.Config.PreEndHook != "" {
@@ -110,7 +153,7 @@ func (c *EndCommand) Execute(issueNumber string) error {
 	// looked up from the issue number / branch name, worktreePath already points
 	// at the actual worktree, so this works regardless of how the input maps to a
 	// directory suffix (e.g. "527" vs "527/impl").
-	removeErr := c.deps.Git.RemoveWorktreeByPath(worktreePath)
+	removeErr := c.git().RemoveWorktreeByPath(worktreePath)
 	sp.Stop()
 	if removeErr != nil {
 		return removeErr
@@ -121,7 +164,7 @@ func (c *EndCommand) Execute(issueNumber string) error {
 	// Delete the branch if auto-remove is enabled
 	if c.deps.Config.AutoRemoveBranch && branchName != "" {
 		fmt.Fprintf(c.deps.Stdout, "Deleting branch %s...\n", branchName)
-		if err := c.deps.Git.DeleteBranch(branchName); err != nil {
+		if err := c.git().DeleteBranch(branchName); err != nil {
 			// Don't fail the command, just warn
 			fmt.Fprintf(c.deps.Stderr, "%s Failed to delete branch %s: %v\n", coloredWarning(), branchName, err)
 		} else {
@@ -141,7 +184,7 @@ func (c *EndCommand) Execute(issueNumber string) error {
 // worktreePath in parallel and formats them into end's warning wording.
 // Check failures are reported on stderr; only tripped checks become warnings.
 func (c *EndCommand) performSafetyChecks(worktreePath, branchName string) []string {
-	res := runSafetyChecks(c.deps.Git, worktreePath, branchName, defaultBaseBranch)
+	res := runSafetyChecks(c.git(), worktreePath, branchName, defaultBaseBranch)
 
 	checks := []struct {
 		check    safetyCheck

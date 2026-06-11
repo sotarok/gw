@@ -15,6 +15,11 @@ import (
 	"github.com/sotarok/gw/internal/ui"
 )
 
+// defaultBaseBranch is the base branch used when none is supplied (start) and
+// the branch treated as the integration target by the safety checks and the
+// clean command's protection list.
+const defaultBaseBranch = "main"
+
 // Symbol constants for consistent output formatting across commands
 const (
 	symbolSuccess = "✓"

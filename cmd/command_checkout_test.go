@@ -364,7 +364,7 @@ func TestCheckoutCommand_Execute_WorktreePathAnchoredToRepoRoot(t *testing.T) {
 		t.Fatalf("Unexpected error: %v", err)
 	}
 
-	expected := filepath.Join(tempDir, "repo-feature_test")
+	expected := filepath.Join(tempDir, "repo-feature-test")
 	if filepath.Clean(capturedWorktreePath) != expected {
 		t.Errorf("worktree path not anchored to repo root.\n  got:  %s\n  want: %s", capturedWorktreePath, expected)
 	}
@@ -427,7 +427,7 @@ func TestCheckoutCommand_Execute_FromInsideWorktreeUsesOriginalRepoName(t *testi
 		t.Fatalf("Unexpected error: %v", err)
 	}
 
-	expected := filepath.Join(tempDir, "repo-feature_test")
+	expected := filepath.Join(tempDir, "repo-feature-test")
 	if filepath.Clean(capturedWorktreePath) != expected {
 		t.Errorf("worktree path should use the original repo name, not the worktree dir name.\n  got:  %s\n  want: %s",
 			capturedWorktreePath, expected)

@@ -5,10 +5,18 @@ import (
 	"os"
 	"path/filepath"
 
+	"github.com/sotarok/gw/internal/git"
 	"github.com/sotarok/gw/internal/hook"
 	"github.com/sotarok/gw/internal/iterm2"
 	"github.com/sotarok/gw/internal/spinner"
 )
+
+// startGit is the subset of git operations StartCommand actually uses.
+type startGit interface {
+	git.RepositoryReader // IsGitRepository, GetOriginalRepositoryName, GetRepositoryRoot, FetchAll
+	git.WorktreeManager  // GetWorktreeForIssue, CreateWorktree
+	git.EnvFileHandler   // FindUntrackedEnvFiles, CopyEnvFiles (via handleEnvFiles)
+}
 
 // StartCommand handles the start command logic
 type StartCommand struct {
@@ -26,24 +34,47 @@ func NewStartCommand(deps *Dependencies, copyEnvs, noFetch bool) *StartCommand {
 	}
 }
 
+// git returns the command's git dependency narrowed to the operations it uses.
+func (c *StartCommand) git() startGit { return c.deps.Git }
+
 // Execute runs the start command
 func (c *StartCommand) Execute(issueNumber, baseBranch string) error {
+	repoName, envSourceRoot, err := c.resolveTarget(issueNumber)
+	if err != nil {
+		return err
+	}
+
+	worktreePath, err := c.createWorktree(issueNumber, baseBranch)
+	if err != nil {
+		return err
+	}
+
+	c.postCreate(issueNumber, worktreePath, repoName, envSourceRoot)
+	return nil
+}
+
+// resolveTarget validates the repository, ensures no worktree already exists for
+// the issue, updates the iTerm2 tab, and resolves the repository root used as the
+// env-file source. It returns the original repository name and that env source root.
+func (c *StartCommand) resolveTarget(issueNumber string) (repoName, envSourceRoot string, err error) {
+	g := c.git()
+
 	// Check if we're in a git repository
-	if !c.deps.Git.IsGitRepository() {
-		return fmt.Errorf("not in a git repository")
+	if !g.IsGitRepository() {
+		return "", "", fmt.Errorf("not in a git repository")
 	}
 
 	// Fetch from remotes if configured
 	fetchIfConfigured(c.deps, c.noFetch)
 
 	// Check if worktree already exists
-	if wt, _ := c.deps.Git.GetWorktreeForIssue(issueNumber); wt != nil {
-		return fmt.Errorf("worktree for issue %s already exists at %s", issueNumber, wt.Path)
+	if wt, _ := g.GetWorktreeForIssue(issueNumber); wt != nil {
+		return "", "", fmt.Errorf("worktree for issue %s already exists at %s", issueNumber, wt.Path)
 	}
 
 	// Get the original repository name for the iTerm2 tab so that, when run from
 	// inside a worktree, the tab shows the repo name rather than the worktree dir.
-	repoName, _ := c.deps.Git.GetOriginalRepositoryName()
+	repoName, _ = g.GetOriginalRepositoryName()
 
 	// Update iTerm2 tab if configured
 	if iterm2.ShouldUpdateTab(c.deps.Config.UpdateITerm2Tab) {
@@ -53,24 +84,33 @@ func (c *StartCommand) Execute(issueNumber, baseBranch string) error {
 	// Anchor env file lookup/copy to the repository root so that running start
 	// from a sub directory still scans the whole repo (rather than just the
 	// sub directory) and preserves the relative paths of copied files.
-	envSourceRoot, err := c.deps.Git.GetRepositoryRoot()
+	envSourceRoot, err = g.GetRepositoryRoot()
 	if err != nil {
-		return fmt.Errorf("failed to get repository root: %w", err)
+		return "", "", fmt.Errorf("failed to get repository root: %w", err)
 	}
 
-	// Create the worktree with spinner
+	return repoName, envSourceRoot, nil
+}
+
+// createWorktree creates the worktree for the issue and reports the resulting path.
+func (c *StartCommand) createWorktree(issueNumber, baseBranch string) (string, error) {
 	sp := spinner.New(fmt.Sprintf("Creating worktree for issue #%s based on %s...", issueNumber, baseBranch), c.deps.Stdout)
 	sp.Start()
-	worktreePath, err := c.deps.Git.CreateWorktree(issueNumber, baseBranch)
+	worktreePath, err := c.git().CreateWorktree(issueNumber, baseBranch)
 	sp.Stop()
 	if err != nil {
-		return err
+		return "", err
 	}
 
 	if c.deps.Stdout != nil {
 		fmt.Fprintf(c.deps.Stdout, "%s Created worktree at %s\n", coloredSuccess(), worktreePath)
 	}
+	return worktreePath, nil
+}
 
+// postCreate performs the post-creation steps: optional auto-cd, env file copy,
+// package manager setup, the post-start hook, and the completion message.
+func (c *StartCommand) postCreate(issueNumber, worktreePath, repoName, envSourceRoot string) {
 	// Change to the new worktree directory for setup operations
 	// Note: This only affects the current process, not the parent shell
 	if c.deps.Config.AutoCD {
@@ -119,7 +159,6 @@ func (c *StartCommand) Execute(issueNumber, baseBranch string) error {
 			fmt.Fprintf(c.deps.Stdout, "\n💡 Shell integration will change to this directory after the command completes.\n")
 		}
 	}
-	return nil
 }
 
 func (c *StartCommand) handleEnvFiles(originalDir, worktreePath string) error {
