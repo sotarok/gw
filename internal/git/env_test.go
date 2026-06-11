@@ -2,41 +2,9 @@ package git
 
 import (
 	"os"
-	"os/exec"
 	"path/filepath"
-	"strings"
 	"testing"
 )
-
-// Helper function to run git commands in tests
-func runGitCommand(t *testing.T, dir string, args ...string) {
-	cmd := exec.Command("git", args...)
-	cmd.Dir = dir
-	if err := cmd.Run(); err != nil {
-		t.Fatalf("Failed to run git %v: %v", args, err)
-	}
-}
-
-const (
-	defaultMainBranch   = "main"
-	defaultMasterBranch = "master"
-)
-
-// Helper function to get the default branch name (main or master)
-func getDefaultBranchName(_ *testing.T, dir string) string {
-	cmd := exec.Command("git", "symbolic-ref", "--short", "HEAD")
-	cmd.Dir = dir
-	output, err := cmd.Output()
-	if err != nil {
-		// If we can't get the branch name, assume main
-		return defaultMainBranch
-	}
-	branch := strings.TrimSpace(string(output))
-	if branch == "" {
-		return defaultMainBranch
-	}
-	return branch
-}
 
 func TestFindUntrackedEnvFiles(t *testing.T) {
 	// Create temporary directory

@@ -12,37 +12,6 @@ const (
 	masterBranch = "master"
 )
 
-// Helper function to create a temporary git repository for testing
-func createTestRepo(t *testing.T) (string, func()) {
-	tempDir, err := os.MkdirTemp("", "test-git-repo")
-	if err != nil {
-		t.Fatalf("failed to create temp dir: %v", err)
-	}
-
-	// Initialize git repo
-	cmd := exec.Command("git", "init")
-	cmd.Dir = tempDir
-	if err := cmd.Run(); err != nil {
-		os.RemoveAll(tempDir)
-		t.Fatalf("failed to init git repo: %v", err)
-	}
-
-	// Configure git user for commits
-	cmd = exec.Command("git", "config", "user.email", "test@example.com")
-	cmd.Dir = tempDir
-	_ = cmd.Run()
-
-	cmd = exec.Command("git", "config", "user.name", "Test User")
-	cmd.Dir = tempDir
-	_ = cmd.Run()
-
-	cleanup := func() {
-		os.RemoveAll(tempDir)
-	}
-
-	return tempDir, cleanup
-}
-
 func TestHasUncommittedChanges(t *testing.T) {
 	t.Run("returns false for clean repository", func(t *testing.T) {
 		tempDir, cleanup := createTestRepo(t)
