@@ -1,36 +1,54 @@
 package git
 
-// Interface defines the git operations used by the application
-type Interface interface {
-	// Repository operations
+// RepositoryReader exposes read-only repository introspection and remote sync.
+type RepositoryReader interface {
 	IsGitRepository() bool
 	GetRepositoryName() (string, error)
 	GetOriginalRepositoryName() (string, error)
 	GetRepositoryRoot() (string, error)
 	GetCurrentBranch() (string, error)
 	FetchAll() error
+}
 
-	// Worktree operations
+// WorktreeManager exposes worktree lifecycle operations.
+type WorktreeManager interface {
 	CreateWorktree(issueNumber, baseBranch string) (string, error)
 	CreateWorktreeFromBranch(worktreePath, sourceBranch, targetBranch string) error
 	RemoveWorktree(issueNumber string) error
 	RemoveWorktreeByPath(worktreePath string) error
 	ListWorktrees() ([]WorktreeInfo, error)
 	GetWorktreeForIssue(issueNumber string) (*WorktreeInfo, error)
+}
 
-	// Branch operations
+// BranchManager exposes branch inspection and deletion.
+type BranchManager interface {
 	BranchExists(branch string) (bool, error)
 	ListAllBranches() ([]string, error)
 	DeleteBranch(branch string) error
+}
 
-	// Status operations
+// StatusChecker exposes the safety checks performed before destructive ops.
+type StatusChecker interface {
 	HasUncommittedChanges(worktreePath string) (bool, error)
 	HasUnpushedCommits(worktreePath, currentBranch string) (bool, error)
 	IsMergedToBaseBranch(worktreePath, currentBranch, targetBranch string) (bool, error)
+}
 
-	// Environment file operations
+// EnvFileHandler exposes untracked env file discovery and copying.
+type EnvFileHandler interface {
 	FindUntrackedEnvFiles(repoPath string) ([]EnvFile, error)
 	CopyEnvFiles(envFiles []EnvFile, sourceRoot, destRoot string) error
+}
+
+// Interface is the composed surface used by cmd.Dependencies. It aggregates the
+// role interfaces above plus the remaining utility operations. Phase 4 will move
+// individual commands onto the narrower role interfaces.
+type Interface interface {
+	RepositoryReader
+	WorktreeManager
+	BranchManager
+	StatusChecker
+	EnvFileHandler
 
 	// Utility operations
 	RunCommand(command string) error
