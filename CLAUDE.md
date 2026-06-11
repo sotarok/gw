@@ -95,22 +95,73 @@ The application uses a layered architecture where commands flow through:
 
 ### Key Design Decisions
 
-**Git Operations via CLI Commands**
-- All git operations use `exec.Command()` to run git CLI commands rather than the go-git library
-- This ensures compatibility with user's git configuration and SSH keys
-- Trade-off: Less programmatic control but more reliable
+**Git Operations via runner + Client**
+
+All git operations go through `internal/git.Client`, which holds a `runner` interface.
+The `runner` abstracts subprocess execution (four methods: `run`, `runCombined`,
+`runStreaming`, `runShell`) so that tests can substitute a fake without forking real
+git processes. The production implementation (`execRunner`) calls `exec.Command("git", ...)`
+and uses `-C <dir>` to set the working directory inside the git invocation (rather than
+`cmd.Dir`) so that missing directories produce an exit-128 error with a clear message
+instead of a silent `fs.PathError`.
+
+There is no go-git dependency; all git I/O goes through the CLI. This ensures
+compatibility with the user's git configuration and SSH keys.
+
+**Role-split git interfaces**
+
+`internal/git/interface.go` exposes five narrow interfaces instead of one 38-method
+god-interface:
+
+| Interface | Responsibility |
+|---|---|
+| `RepositoryReader` | Read-only repository introspection and remote sync |
+| `WorktreeManager` | Worktree lifecycle (create / remove / list) |
+| `BranchManager` | Branch inspection and deletion |
+| `StatusChecker` | Safety checks before destructive ops (uncommitted / unpushed / merged) |
+| `EnvFileHandler` | Untracked env file discovery and copying |
+
+`git.Interface` composes all five (plus two utility methods) and is still used by
+`cmd.Dependencies.Git`. Each command struct declares its own narrower alias (e.g.
+`endGit`, `startGit`, `checkoutGit`, `cleanGit`) that lists only the role interfaces
+it actually needs, so the compiler enforces the minimal dependency boundary.
+
+`git.Client` implements `git.Interface` and is the only concrete type. The mechanical
+delegation layer that existed before phases 3-4 has been removed.
+
+**Config dependency-injected via Dependencies (non-nil guaranteed)**
+
+`cmd.Dependencies` is the single struct passed to every command constructor. It holds:
+- `Git git.Interface`
+- `UI ui.Interface`
+- `Detect detect.Interface`
+- `Config *config.Config` — **always non-nil**
+- `Stdout io.Writer`, `Stderr io.Writer`
+
+`DefaultDependencies()` loads `~/.gwrc` once. On load failure it prints a warning to
+stderr and falls back to `config.New()`, so callers never need a nil guard and the old
+two-constructor pattern (with/without config) has been removed.
 
 **Worktree Naming Convention**
 - Worktrees are created as `../{repository-name}-{issue-number}`
 - Branches follow pattern `{issue-number}/impl`
 - This keeps worktrees organized in sibling directories
 
-**Safety-First Design**
-- The `end` command performs three safety checks before removal:
+**Safety-First Design — single implementation in cmd/safety.go**
+
+Both `end` and `clean` previously had separate copies of the three pre-removal checks.
+They now both call `runSafetyChecks` in `cmd/safety.go`, which runs the three checks
+in parallel goroutines via a shared `sync.WaitGroup`:
   1. Uncommitted changes check
   2. Unpushed commits check (assumes unpushed if no upstream)
   3. Merge status with origin/main (fetches latest first)
-- Users can bypass with `--force` flag
+
+`runSafetyChecks` takes a `git.StatusChecker` and returns a `safetyResult` value. Each
+command then formats the raw result into its own wording. The `--force` flag on `end`
+and `--force` / `--dry-run` flags on `clean` bypass the checks as before.
+
+A git exit-128 on the uncommitted check (broken/missing worktree) sets `InvalidRepo` on
+the result so callers can emit a single clear reason instead of three misleading ones.
 
 **Package Manager Detection**
 - Checks for Node.js projects first (looks for package.json)
@@ -137,6 +188,7 @@ Notes:
 - `gw clean` treats the removable / non-removable listing as the command's result, so
   the table (including per-worktree reasons) goes to stdout; actual removal/deletion
   failures go to stderr.
+- Config load failure warning goes to stderr; the command continues with defaults.
 
 ### Important Implementation Details
 
@@ -146,19 +198,18 @@ Notes:
 - Filters out the main repository worktree
 
 **Directory Changes**
-- `start` command changes to the new worktree directory after creation
-- `end` command temporarily changes directory to check git status
-- Original directory is restored if operations fail
+- `start` command optionally changes to the new worktree directory after creation (controlled by `auto_cd` config)
+- `end` command runs the pre-end hook with cwd set to the worktree, then restores the original directory
 
 **Error Handling Pattern**
 - Errors bubble up through return values, not panics
 - User-friendly error messages with context
-- Non-critical failures (like package setup) show warnings but continue
+- Non-critical failures (like package setup or hook failures) show warnings on stderr but continue
 
 ### Known Limitations and TODOs
 
 1. **No input validation** - Issue numbers are not validated to be numeric
-2. **Hardcoded base branch** - Base branch defaults to `"main"` (cmd/start.go) and can only be overridden per-invocation as a positional argument; `internal/config` has no base-branch option
+2. **Hardcoded base branch** - Base branch defaults to `"main"` (`defaultBaseBranch` in `cmd/command.go`) and can only be overridden per-invocation as a positional argument to `gw start`; `internal/config` has no base-branch option
 
 ### Security Considerations
 - Issue numbers are used directly in shell commands without sanitization
