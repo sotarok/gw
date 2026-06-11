@@ -36,8 +36,8 @@ clean: ## Clean build artifacts
 
 lint: ## Run linter
 	@if ! which golangci-lint > /dev/null; then \
-		echo "Installing golangci-lint..."; \
-		go install github.com/golangci/golangci-lint/cmd/golangci-lint@latest; \
+		echo "golangci-lint not found. Install v1.x from https://golangci-lint.run/usage/install/"; \
+		exit 1; \
 	fi
 	golangci-lint run
 
@@ -67,7 +67,7 @@ release-dry: ## Dry run of goreleaser
 		echo "Installing goreleaser..."; \
 		go install github.com/goreleaser/goreleaser@latest; \
 	fi
-	goreleaser release --snapshot --clean --skip-publish
+	goreleaser release --snapshot --clean --skip=publish
 
 release: ## Create a new release (requires tag)
 	@if ! which goreleaser > /dev/null; then \

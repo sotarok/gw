@@ -7,7 +7,7 @@ on:
     branches: [ main ]
 
 env:
-  GO_VERSION: '1.21'
+  GO_VERSION: '1.24'
 
 jobs:
   test:
@@ -16,7 +16,7 @@ jobs:
     strategy:
       matrix:
         os: [ubuntu-latest, macos-latest]
-        go: ['1.21', '1.22']
+        go: ['1.23', '1.24']
     steps:
     - name: Check out code
       uses: actions/checkout@v4
@@ -27,7 +27,7 @@ jobs:
         go-version: ${{ matrix.go }}
 
     - name: Cache Go modules
-      uses: actions/cache@v3
+      uses: actions/cache@v4
       with:
         path: ~/go/pkg/mod
         key: ${{ runner.os }}-go-${{ hashFiles('**/go.sum') }}
@@ -41,7 +41,7 @@ jobs:
       run: go test -v -race -coverprofile=coverage.txt -covermode=atomic ./...
 
     - name: Upload coverage to Codecov
-      if: matrix.os == 'ubuntu-latest' && matrix.go == '1.21'
+      if: matrix.os == 'ubuntu-latest' && matrix.go == '1.24'
       uses: codecov/codecov-action@v4
       with:
         token: ${{ secrets.CODECOV_TOKEN }}
@@ -61,7 +61,7 @@ jobs:
         go-version: ${{ env.GO_VERSION }}
 
     - name: Run golangci-lint
-      uses: golangci/golangci-lint-action@v3
+      uses: golangci/golangci-lint-action@v6
       with:
         version: latest
         args: --timeout=5m

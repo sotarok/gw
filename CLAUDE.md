@@ -137,11 +137,8 @@ The application uses a layered architecture where commands flow through:
 
 ### Known Limitations and TODOs
 
-1. **Configuration not implemented** - The `internal/config` package exists but is empty
-2. **Go version issue** - go.mod specifies Go 1.24.5 which doesn't exist (likely meant 1.21.5)
-3. **Unused dependencies** - go-git is included but not used, could be removed
-4. **No input validation** - Issue numbers aren't validated to be numeric
-5. **Hardcoded defaults** - Base branch defaults to "main" with no config option
+1. **No input validation** - Issue numbers are not validated to be numeric
+2. **Hardcoded base branch** - Base branch defaults to `"main"` (cmd/start.go) and can only be overridden per-invocation as a positional argument; `internal/config` has no base-branch option
 
 ### Security Considerations
 - Issue numbers are used directly in shell commands without sanitization

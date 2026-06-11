@@ -1460,6 +1460,10 @@ func TestCheckoutCommand_SelectBranch_FiltersCorrectly(t *testing.T) {
 	mockGitInstance.BranchExistsFn = func(branch string) (bool, error) {
 		return true, nil
 	}
+	mockGitInstance.CreateWorktreeFromBranchFn = func(worktreePath, sourceBranch, targetBranch string) error {
+		// Do not create real directories; this test only cares about selector filtering.
+		return nil
+	}
 
 	var selectorItems []ui.SelectorItem
 	mockUIInstance := &mockUI{

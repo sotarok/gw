@@ -42,3 +42,6 @@ Thumbs.db
 .claude/settings.local.json
 
 *.md.bak
+
+# Manual test worktree remnants
+test-repo-*/
