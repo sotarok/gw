@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.0.0] - 2026-07-06
+
 ### Changed
 - Warning messages from all commands (safety-check warnings, errors, and diagnostic output) are now written to stderr rather than stdout, consistent with the project's output policy: results and interactive prompts go to stdout; warnings and errors go to stderr. The confirmation prompt in `gw end` remains on stdout. This only affects output redirection (e.g. `gw end 123 1>out 2>err`); interactive behavior is unchanged.
 - Loading `~/.gwrc` now emits a warning on stderr when the file cannot be parsed, instead of silently falling back to built-in defaults. A `⚠ Could not load ~/.gwrc, using defaults: …` line is shown so the misconfiguration is visible; the command still continues with defaults.
