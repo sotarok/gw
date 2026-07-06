@@ -239,9 +239,16 @@ type mockUI struct {
 	confirmError  error
 	confirmCalled bool
 
+	trustPromptResult bool
+	trustPromptError  error
+	trustPromptCalled bool
+	trustPromptPath   string
+	trustPromptLines  []string
+
 	// Override functions for custom behavior
 	ShowSelectorFn   func(string, []ui.SelectorItem) (*ui.SelectorItem, error)
 	SelectWorktreeFn func() (*git.WorktreeInfo, error)
+	TrustPromptFn    func(string, []string) (bool, error)
 }
 
 func (m *mockUI) SelectWorktree() (*git.WorktreeInfo, error) {
@@ -261,6 +268,16 @@ func (m *mockUI) ShowSelector(title string, items []ui.SelectorItem) (*ui.Select
 func (m *mockUI) ConfirmPrompt(message string) (bool, error) {
 	m.confirmCalled = true
 	return m.confirmResult, m.confirmError
+}
+
+func (m *mockUI) TrustPrompt(projectPath string, hookLines []string) (bool, error) {
+	m.trustPromptCalled = true
+	m.trustPromptPath = projectPath
+	m.trustPromptLines = hookLines
+	if m.TrustPromptFn != nil {
+		return m.TrustPromptFn(projectPath, hookLines)
+	}
+	return m.trustPromptResult, m.trustPromptError
 }
 
 func (m *mockUI) ShowEnvFilesList(files []string) {

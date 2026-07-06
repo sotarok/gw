@@ -92,7 +92,7 @@ func TestStartCommand_WithConfig(t *testing.T) {
 
 			// Create command with config
 			deps.Config = tt.config
-			cmd := NewStartCommand(deps, false, true)
+			cmd := NewStartCommand(deps, false, true, false)
 			err = cmd.Execute("123", "main")
 
 			if err != nil {
@@ -204,7 +204,7 @@ func TestCheckoutCommand_WithConfig(t *testing.T) {
 
 			// Create command with config
 			deps.Config = tt.config
-			cmd := NewCheckoutCommand(deps, false, true)
+			cmd := NewCheckoutCommand(deps, false, true, false)
 			err = cmd.Execute("feature/test")
 
 			if err != nil {

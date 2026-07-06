@@ -5,8 +5,9 @@ import (
 )
 
 var (
-	startCopyEnvs bool
-	startNoFetch  bool
+	startCopyEnvs       bool
+	startNoFetch        bool
+	startNoProjectHooks bool
 )
 
 var startCmd = &cobra.Command{
@@ -33,6 +34,7 @@ Examples:
 func init() {
 	startCmd.Flags().BoolVar(&startCopyEnvs, "copy-envs", false, "Copy untracked .env files to the new worktree")
 	startCmd.Flags().BoolVar(&startNoFetch, "no-fetch", false, "Skip git fetch before running the command")
+	startCmd.Flags().BoolVar(&startNoProjectHooks, "no-project-hooks", false, "Skip project-local .gwrc hook overrides for this run")
 	rootCmd.AddCommand(startCmd)
 }
 
@@ -46,6 +48,6 @@ func runStart(cmd *cobra.Command, args []string) error {
 
 	// Use the new command structure
 	deps := DefaultDependencies()
-	startCmd := NewStartCommand(deps, startCopyEnvs, startNoFetch)
+	startCmd := NewStartCommand(deps, startCopyEnvs, startNoFetch, startNoProjectHooks)
 	return startCmd.Execute(issueNumber, baseBranch)
 }

@@ -103,7 +103,7 @@ func TestEndCommand_PerformSafetyChecks(t *testing.T) {
 				Stderr: stderr,
 			}
 
-			cmd := NewEndCommand(deps, false, true)
+			cmd := NewEndCommand(deps, false, true, false)
 			warnings := cmd.performSafetyChecks("/test/worktree", "feature/test")
 
 			// Check warnings count
@@ -315,7 +315,7 @@ func TestEndCommand_Execute(t *testing.T) {
 				Stderr: stderr,
 			}
 
-			cmd := NewEndCommand(deps, tt.force, true)
+			cmd := NewEndCommand(deps, tt.force, true, false)
 			err = cmd.Execute(tt.issueNumber)
 
 			// Check error
@@ -525,7 +525,7 @@ func TestEndCommand_BranchDeletion(t *testing.T) {
 			}
 
 			deps.Config = cfg
-			cmd := NewEndCommand(deps, tt.force, true)
+			cmd := NewEndCommand(deps, tt.force, true, false)
 			err = cmd.Execute(tt.issueNumber)
 
 			// Check error
@@ -567,7 +567,7 @@ func TestEndCommand_Execute_InteractiveSelectError(t *testing.T) {
 		Stderr: stderr,
 	}
 
-	cmd := NewEndCommand(deps, false, true)
+	cmd := NewEndCommand(deps, false, true, false)
 	err := cmd.Execute("") // empty issue = interactive mode
 
 	if err == nil || !strings.Contains(err.Error(), "user canceled selection") {
@@ -603,7 +603,7 @@ func TestEndCommand_Execute_EmptyIssueFromBranch(t *testing.T) {
 		Stderr: stderr,
 	}
 
-	cmd := NewEndCommand(deps, false, true)
+	cmd := NewEndCommand(deps, false, true, false)
 	err := cmd.Execute("")
 
 	if err == nil || !strings.Contains(err.Error(), "could not determine issue number") {
@@ -641,7 +641,7 @@ func TestEndCommand_Execute_ConfirmPromptError(t *testing.T) {
 		Stderr: stderr,
 	}
 
-	cmd := NewEndCommand(deps, false, true)
+	cmd := NewEndCommand(deps, false, true, false)
 	err := cmd.Execute("123")
 
 	if err == nil || !strings.Contains(err.Error(), "failed to read response") {
@@ -682,8 +682,8 @@ func TestEndCommand_Execute_RemoveWorktreeByPathError(t *testing.T) {
 		Stderr: stderr,
 	}
 
-	cmd := NewEndCommand(deps, true, true) // force to skip safety checks
-	err := cmd.Execute("")                 // interactive mode
+	cmd := NewEndCommand(deps, true, true, false) // force to skip safety checks
+	err := cmd.Execute("")                        // interactive mode
 
 	if err == nil || !strings.Contains(err.Error(), "removal failed") {
 		t.Errorf("Expected removal error, got: %v", err)
@@ -706,7 +706,7 @@ func TestEndCommand_PerformSafetyChecks_MergeStatusError(t *testing.T) {
 		Stderr: stderr,
 	}
 
-	cmd := NewEndCommand(deps, false, true)
+	cmd := NewEndCommand(deps, false, true, false)
 	warnings := cmd.performSafetyChecks("/test/worktree", "feature/test")
 
 	if len(warnings) != 0 {
@@ -750,7 +750,7 @@ func TestEndCommand_Execute_PreEndHook(t *testing.T) {
 
 	cfg := &config.Config{PreEndHook: hookCmd}
 	deps.Config = cfg
-	cmd := NewEndCommand(deps, true, true)
+	cmd := NewEndCommand(deps, true, true, false)
 
 	if err := cmd.Execute("123"); err != nil {
 		t.Fatalf("Execute failed: %v", err)
@@ -831,7 +831,7 @@ func TestEndCommand_Execute_PreEndHookRunsBeforeRemoval(t *testing.T) {
 	}
 
 	deps.Config = cfg
-	cmd := NewEndCommand(deps, true, true)
+	cmd := NewEndCommand(deps, true, true, false)
 	if err := cmd.Execute(""); err != nil {
 		t.Fatalf("Execute failed: %v", err)
 	}
@@ -871,7 +871,7 @@ func TestEndCommand_Execute_PreEndHookFailure(t *testing.T) {
 
 	cfg := &config.Config{PreEndHook: "exit 1"}
 	deps.Config = cfg
-	cmd := NewEndCommand(deps, true, true)
+	cmd := NewEndCommand(deps, true, true, false)
 
 	if err := cmd.Execute("123"); err != nil {
 		t.Fatalf("Expected no error even when hook fails, got: %v", err)

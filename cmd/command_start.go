@@ -20,17 +20,19 @@ type startGit interface {
 
 // StartCommand handles the start command logic
 type StartCommand struct {
-	deps     *Dependencies
-	copyEnvs bool
-	noFetch  bool
+	deps           *Dependencies
+	copyEnvs       bool
+	noFetch        bool
+	noProjectHooks bool
 }
 
 // NewStartCommand creates a new start command handler
-func NewStartCommand(deps *Dependencies, copyEnvs, noFetch bool) *StartCommand {
+func NewStartCommand(deps *Dependencies, copyEnvs, noFetch, noProjectHooks bool) *StartCommand {
 	return &StartCommand{
-		deps:     deps,
-		copyEnvs: copyEnvs,
-		noFetch:  noFetch,
+		deps:           deps,
+		copyEnvs:       copyEnvs,
+		noFetch:        noFetch,
+		noProjectHooks: noProjectHooks,
 	}
 }
 
@@ -39,6 +41,10 @@ func (c *StartCommand) git() startGit { return c.deps.Git }
 
 // Execute runs the start command
 func (c *StartCommand) Execute(issueNumber, baseBranch string) error {
+	if err := ResolveProjectConfig(c.deps, c.noProjectHooks); err != nil {
+		return err
+	}
+
 	repoName, envSourceRoot, err := c.resolveTarget(issueNumber)
 	if err != nil {
 		return err

@@ -23,17 +23,19 @@ type checkoutGit interface {
 
 // CheckoutCommand handles the checkout command logic
 type CheckoutCommand struct {
-	deps     *Dependencies
-	copyEnvs bool
-	noFetch  bool
+	deps           *Dependencies
+	copyEnvs       bool
+	noFetch        bool
+	noProjectHooks bool
 }
 
 // NewCheckoutCommand creates a new checkout command handler
-func NewCheckoutCommand(deps *Dependencies, copyEnvs, noFetch bool) *CheckoutCommand {
+func NewCheckoutCommand(deps *Dependencies, copyEnvs, noFetch, noProjectHooks bool) *CheckoutCommand {
 	return &CheckoutCommand{
-		deps:     deps,
-		copyEnvs: copyEnvs,
-		noFetch:  noFetch,
+		deps:           deps,
+		copyEnvs:       copyEnvs,
+		noFetch:        noFetch,
+		noProjectHooks: noProjectHooks,
 	}
 }
 
@@ -42,6 +44,10 @@ func (c *CheckoutCommand) git() checkoutGit { return c.deps.Git }
 
 // Execute runs the checkout command
 func (c *CheckoutCommand) Execute(branch string) error {
+	if err := ResolveProjectConfig(c.deps, c.noProjectHooks); err != nil {
+		return err
+	}
+
 	branch, err := c.resolveBranch(branch)
 	if err != nil {
 		return err
