@@ -24,6 +24,7 @@ func IsGitRepository() bool                      { return testClient.IsGitReposi
 func GetRepositoryName() (string, error)         { return testClient.GetRepositoryName() }
 func GetOriginalRepositoryName() (string, error) { return testClient.GetOriginalRepositoryName() }
 func GetRepositoryRoot() (string, error)         { return testClient.GetRepositoryRoot() }
+func GetMainRepositoryRoot() (string, error)     { return testClient.GetMainRepositoryRoot() }
 func GetCurrentBranch() (string, error)          { return testClient.GetCurrentBranch() }
 func FetchAll() error                            { return testClient.FetchAll() }
 func ListAllBranches() ([]string, error)         { return testClient.ListAllBranches() }

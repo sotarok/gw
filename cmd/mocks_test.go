@@ -47,6 +47,7 @@ type mockGit struct {
 	GetRepositoryNameFn         func() (string, error)
 	GetOriginalRepositoryNameFn func() (string, error)
 	GetRepositoryRootFn         func() (string, error)
+	GetMainRepositoryRootFn     func() (string, error)
 	CreateWorktreeFromBranchFn  func(string, string, string) error
 	FindUntrackedEnvFilesFn     func(string) ([]git.EnvFile, error)
 	SanitizeBranchNameForDirFn  func(string) string
@@ -81,6 +82,15 @@ func (m *mockGit) GetRepositoryRoot() (string, error) {
 	// behavior keep working — they typically chdir into a temp dir first.
 	cwd, _ := os.Getwd()
 	return cwd, nil
+}
+
+func (m *mockGit) GetMainRepositoryRoot() (string, error) {
+	if m.GetMainRepositoryRootFn != nil {
+		return m.GetMainRepositoryRootFn()
+	}
+	// Default to the same value as GetRepositoryRoot: tests that don't care
+	// about linked-worktree distinctions keep working unchanged.
+	return m.GetRepositoryRoot()
 }
 
 func (m *mockGit) FetchAll() error {

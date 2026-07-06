@@ -41,6 +41,27 @@ func (c *Client) GetRepositoryRoot() (string, error) {
 // In a worktree, this returns the name of the main repository, not the worktree directory.
 // This is useful for creating new worktrees with consistent naming.
 func (c *Client) GetOriginalRepositoryName() (string, error) {
+	root, err := c.GetMainRepositoryRoot()
+	if err != nil {
+		return "", err
+	}
+	return filepath.Base(root), nil
+}
+
+// GetMainRepositoryRoot returns the absolute path of the main worktree root —
+// the directory that contains the repository's original .git directory, and
+// where a project-local .gwrc would live. It resolves
+// `git rev-parse --git-common-dir` to an absolute path and returns its
+// parent, so linked worktrees resolve to the same main root as the original
+// repository.
+//
+// Known limitation: with external git-dir layouts (--separate-git-dir) or
+// standard git submodules, --git-common-dir's parent does not point at the
+// main worktree root (the same limitation GetOriginalRepositoryName has
+// always had, since it is built on this same resolution). Callers should
+// treat a mismatched/unusable result as "no project config found" and fall
+// back to global-only configuration rather than erroring out.
+func (c *Client) GetMainRepositoryRoot() (string, error) {
 	// Get the git common directory (points to original .git in worktrees)
 	out, err := c.r.run("", "rev-parse", "--git-common-dir")
 	if err != nil {
@@ -49,15 +70,15 @@ func (c *Client) GetOriginalRepositoryName() (string, error) {
 
 	// The output may be cwd-relative (".git", "../.git", "../../.git", ...)
 	// when called from the main repo or its sub directories, or absolute when
-	// called from inside a worktree. Resolve to absolute before extracting the
-	// repository directory name — otherwise sub-directory invocations yield
-	// "..", "..-{branch}", etc.
+	// called from inside a worktree. Resolve to absolute before taking the
+	// parent directory — otherwise sub-directory invocations yield "..",
+	// "..-{branch}", etc.
 	absGitCommonDir, err := filepath.Abs(out)
 	if err != nil {
 		return "", fmt.Errorf("failed to resolve git common dir: %w", err)
 	}
 
-	return filepath.Base(filepath.Dir(absGitCommonDir)), nil
+	return filepath.Dir(absGitCommonDir), nil
 }
 
 // IsGitRepository checks if the current directory is inside a git repository
