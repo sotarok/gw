@@ -30,6 +30,45 @@ var isTerminalStdin = func() bool {
 	return term.IsTerminal(int(os.Stdin.Fd()))
 }
 
+// projectOverlay is a successfully-located and parsed project-local .gwrc.
+// It is the shared unit between ResolveProjectConfig (which additionally
+// prompts/approves and mutates deps.Config) and `gw config --list`'s
+// dedicated read-only display path.
+type projectOverlay struct {
+	path        string
+	cfg         *config.Config
+	content     []byte
+	presentKeys map[string]bool
+}
+
+// locateProjectOverlay resolves and loads the project-local .gwrc, if any.
+// ok is false with a nil error when there's simply nothing to apply (not a
+// git repo, no main root, or no project file) — every one of those is a
+// normal "fall back to global only" case, not a failure. A non-nil error
+// means a project file was found but could not be read or parsed.
+func locateProjectOverlay(g projectConfigGit) (overlay projectOverlay, ok bool, err error) {
+	if !g.IsGitRepository() {
+		return projectOverlay{}, false, nil
+	}
+
+	mainRoot, err := g.GetMainRepositoryRoot()
+	if err != nil {
+		return projectOverlay{}, false, err
+	}
+
+	path := filepath.Join(mainRoot, projectConfigFileName)
+	if _, statErr := os.Stat(path); statErr != nil {
+		return projectOverlay{}, false, nil
+	}
+
+	cfg, content, presentKeys, loadErr := config.LoadWithPresence(path)
+	if loadErr != nil {
+		return projectOverlay{}, false, loadErr
+	}
+
+	return projectOverlay{path: path, cfg: cfg, content: content, presentKeys: presentKeys}, true, nil
+}
+
 // ResolveProjectConfig resolves a project-local .gwrc (if any), evaluates
 // trust for any non-empty hook overrides it declares, and — once approved —
 // replaces deps.Config's three hook keys with the project's values.
@@ -46,37 +85,29 @@ var isTerminalStdin = func() bool {
 // used for the global config load in DefaultDependencies.
 func ResolveProjectConfig(deps *Dependencies, noProjectHooks bool) error {
 	g, ok := deps.Git.(projectConfigGit)
-	if !ok || !g.IsGitRepository() {
+	if !ok {
 		return nil
 	}
 
-	mainRoot, err := g.GetMainRepositoryRoot()
+	overlay, found, err := locateProjectOverlay(g)
 	if err != nil {
-		fmt.Fprintf(deps.Stderr, "%s Could not resolve main repository root for project config;"+
-			" using global configuration: %v\n", coloredWarning(), err)
+		fmt.Fprintf(deps.Stderr, "%s Could not resolve project configuration; using global configuration: %v\n",
+			coloredWarning(), err)
+		return nil
+	}
+	if !found {
 		return nil
 	}
 
-	projectPath := filepath.Join(mainRoot, projectConfigFileName)
-	if _, statErr := os.Stat(projectPath); statErr != nil {
-		return nil
-	}
-
-	projectCfg, content, presentKeys, err := config.LoadWithPresence(projectPath)
-	if err != nil {
-		fmt.Fprintf(deps.Stderr, "%s Could not load project .gwrc; using global configuration: %v\n", coloredWarning(), err)
-		return nil
-	}
-
-	warnIgnoredNonHookKeys(deps, presentKeys)
+	warnIgnoredNonHookKeys(deps, overlay.presentKeys)
 
 	if noProjectHooks {
 		return nil
 	}
 
-	trusted := resolveTrust(deps, projectPath, content, projectCfg, presentKeys)
+	trusted := resolveTrust(deps, overlay.path, overlay.content, overlay.cfg, overlay.presentKeys)
 
-	statuses := config.ResolveHookKeyStatuses(deps.Config, projectCfg, presentKeys, trusted)
+	statuses := config.ResolveHookKeyStatuses(deps.Config, overlay.cfg, overlay.presentKeys, trusted)
 	for _, status := range statuses {
 		_ = deps.Config.SetHookValue(status.Key, status.EffectiveValue)
 	}

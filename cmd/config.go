@@ -10,6 +10,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/sotarok/gw/internal/config"
+	"github.com/sotarok/gw/internal/git"
 	"github.com/spf13/cobra"
 )
 
@@ -61,6 +62,11 @@ func runConfig(cmd *cobra.Command, args []string) error {
 				status = statusTrue
 			}
 			fmt.Printf("%-20s: %-5s  # %s (default: %v)\n", item.Key, status, item.Description, item.Default)
+		}
+
+		fmt.Println()
+		for _, hookStatus := range resolveHookStatusesForDisplay(cfg, git.NewClient()) {
+			fmt.Println(formatHookStatusLine(hookStatus))
 		}
 		return nil
 	}
