@@ -189,6 +189,10 @@ Notes:
   the table (including per-worktree reasons) goes to stdout; actual removal/deletion
   failures go to stderr.
 - Config load failure warning goes to stderr; the command continues with defaults.
+- **Exception**: the project-local `.gwrc` trust prompt (`ui.TrustPrompt`) is an interactive
+  prompt but is deliberately written to stderr / the controlling TTY, not stdout. `gw start` /
+  `gw checkout` stdout is consumed mechanically by shell integration, and a prompt on stdout
+  would corrupt that output.
 
 ### Important Implementation Details
 

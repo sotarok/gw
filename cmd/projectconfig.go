@@ -83,6 +83,12 @@ func locateProjectOverlay(g projectConfigGit) (overlay projectOverlay, ok bool, 
 // trust errors are reported as warnings on stderr and the global
 // configuration is kept (warn-and-continue), matching the policy already
 // used for the global config load in DefaultDependencies.
+//
+// deps.Config is mutated in place and must be the freshly-loaded global
+// config for this process — call this at most once per Dependencies (each
+// command's Execute() does exactly that). Calling it a second time against
+// a Dependencies it has already mutated would treat the previous result as
+// the "global" baseline instead of the true global value.
 func ResolveProjectConfig(deps *Dependencies, noProjectHooks bool) error {
 	g, ok := deps.Git.(projectConfigGit)
 	if !ok {

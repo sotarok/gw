@@ -277,6 +277,62 @@ When `update_iterm2_tab` is enabled and you're using iTerm2:
 - Tab name is reset when removing worktrees
 - Only works when running in iTerm2 terminal (automatically detected)
 
+### Project-Local Configuration
+
+For repository-specific hook commands (e.g. a `post_start_hook` that only makes sense for one project), place a `.gwrc` at the **main worktree root** — the same directory as the repository's `.git` — using the same `key = value` format as `~/.gwrc`.
+
+```
+# <repo>/.gwrc
+post_start_hook = pnpm dev
+```
+
+**Scope (v1.1): hooks only.** Only the three hook keys — `post_start_hook`, `post_checkout_hook`, `pre_end_hook` — can be overridden per project. Any other key (`auto_cd`, `update_iterm2_tab`, `auto_remove_branch`, `copy_envs`, `fetch_before_command`) is parsed but never applied from a project `.gwrc`; `gw` prints a one-line note to stderr (`note: project .gwrc key 'auto_cd' is ignored in v1.1 (hooks-only)`) and keeps using the global value.
+
+**Merge rule.** The global `~/.gwrc` is the base. Only the hook keys the project file actually writes are overridden — a hook key the project file doesn't mention keeps its global value. Writing a hook key with an empty value (`post_start_hook =`) disables that global hook for the project, without needing trust approval (an empty value can't execute code).
+
+**Where the project file is found.** `gw` resolves `git rev-parse --git-common-dir`'s parent directory as the main worktree root and reads `.gwrc` there — so a linked worktree (created by `gw start`/`gw checkout`) reads the *same* project `.gwrc` as the main repository; a `.gwrc` accidentally checked out inside a linked worktree itself is never read. This resolution does not support `--separate-git-dir` layouts or standard git submodules (where `--git-common-dir`'s parent isn't the worktree root); in those layouts `gw` silently falls back to the global config only.
+
+#### Trust
+
+Because a project `.gwrc` ships with the repository, its hook values could run arbitrary code as soon as someone runs a `gw` command in a clone they don't fully trust. `gw` uses a direnv-style trust model:
+
+- The first time a project `.gwrc` declares a **non-empty** hook value, `gw` prompts (default: **No**) before running it, showing the file path and the hook value(s) awaiting approval.
+- Approval is keyed by a hash of the file's absolute path *and* content. Editing the file — even by one character — invalidates the old approval and re-prompts. A different clone (different absolute path) of the same content also re-prompts.
+- Approval is stored in `~/.gw/trust/<hash>` and applies repo-wide: once one worktree approves a project `.gwrc`, every other worktree of that same repository (which all read the same main-root file) uses it without re-prompting, as long as the content hasn't changed.
+- The prompt appears on stderr / your terminal, never on stdout — `gw start`/`gw checkout`'s stdout is consumed by shell integration and must stay machine-parseable.
+- If stdin isn't a terminal (e.g. running in CI or a script), or the prompt is declined, or the trust store can't be written, `gw` **fails closed**: the untrusted project value is not used, the command falls back to the global value for that key, and a warning is printed to stderr. The command itself still completes.
+- `gw shell-integration` and `gw config --list` never trigger this prompt: the former's stdout must stay clean, and the latter only reads the existing trust state to display it.
+
+Use `--no-project-hooks` to skip project hook overrides entirely for one invocation (no prompt, global values used):
+
+```bash
+gw start 123 --no-project-hooks
+```
+
+`gw end --force` and `gw clean --force`/`--dry-run` also skip project hooks automatically (no prompt) — these are typically scripted/non-interactive invocations where blocking on a prompt would be unwelcome. Note that under any of these skip paths, even an *empty*-value override (which normally needs no trust) does not apply — global values are used unconditionally.
+
+Check what's currently in effect, including origin and trust state, with:
+
+```bash
+gw config --list
+```
+
+```
+post_start_hook     : pnpm dev  [project] [trusted]
+post_checkout_hook  : (not set) [default]
+pre_end_hook        : (not set) [global]
+```
+
+An untrusted project override is shown with the effective (global) value plus a note, e.g. `[project, untrusted — global value used]`, rather than being hidden.
+
+#### Accepted limitations
+
+- **Trust covers the `.gwrc` file only**, not any script it references. `post_start_hook = ./scripts/setup.sh` is approved by the content of `.gwrc`, not the content of `setup.sh` — if `setup.sh` changes later, no re-approval is triggered (the same boundary direnv draws around `.envrc` and the files it sources).
+- **Relative-path hook values are resolved against the worktree's cwd at hook-execution time**, not the main root where `.gwrc` was approved. Since `gw` changes into the new/target worktree before running `post_start_hook`/`post_checkout_hook` (and into the worktree being removed for `pre_end_hook`), a relative path actually runs whatever file exists at that path *on the checked-out branch* — which can differ from what you approved if you check out a different branch afterward. **Prefer absolute paths** for hook scripts (`post_start_hook = /abs/path/to/scripts/setup.sh`) to avoid this entirely.
+- **Hook values must fit on one physical line** — the config parser does not support line continuations. Wrap multi-command hooks in a script file and reference it by path.
+
+See `examples/hooks/README.md` for a worked example.
+
 ### Shell Integration
 
 To enable automatic directory changing after creating worktrees, you need to set up shell integration:

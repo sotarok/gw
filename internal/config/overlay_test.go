@@ -94,6 +94,33 @@ func TestLoadWithPresence_UnreadableFile(t *testing.T) {
 	}
 }
 
+func TestLoadWithPresence_BackslashContinuationIsNotSupported(t *testing.T) {
+	// The parser reads one physical line as one value; a trailing backslash
+	// is not a line continuation. This is an accepted limitation (documented
+	// in README) rather than a bug — multi-command hooks must be wrapped in
+	// a script file.
+	tempDir := t.TempDir()
+	configPath := filepath.Join(tempDir, ".gwrc")
+	fileContent := "post_start_hook = echo one \\\npost_checkout_hook = echo two\n"
+	if err := os.WriteFile(configPath, []byte(fileContent), 0644); err != nil {
+		t.Fatalf("failed to write test config: %v", err)
+	}
+
+	cfg, _, presentKeys, err := LoadWithPresence(configPath)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if cfg.PostStartHook != `echo one \` {
+		t.Errorf(`expected the trailing backslash to be taken literally (no continuation), got %q`, cfg.PostStartHook)
+	}
+	if cfg.PostCheckoutHook != "echo two" {
+		t.Errorf("expected the following line to parse as its own independent key, got %q", cfg.PostCheckoutHook)
+	}
+	if !presentKeys["post_start_hook"] || !presentKeys["post_checkout_hook"] {
+		t.Errorf("expected both lines to be parsed as separate present keys, got %v", presentKeys)
+	}
+}
+
 func TestMergeHooks_NoProjectConfig(t *testing.T) {
 	base := New()
 	base.PostStartHook = "global-start"
