@@ -82,5 +82,19 @@ func Approve(hash string) error {
 		}
 		return fmt.Errorf("failed to create trust marker: %w", err)
 	}
-	return file.Close()
+
+	return closeAndCleanupOnFailure(file, path)
+}
+
+// closeAndCleanupOnFailure closes file. If closing fails, the marker file at
+// path is removed before returning the error: O_CREATE already created it on
+// disk, so leaving it in place after a reported failure would let a later
+// IsApproved() (a stat-only check) treat this as a successful approval that
+// never actually completed.
+func closeAndCleanupOnFailure(file *os.File, path string) error {
+	if err := file.Close(); err != nil {
+		_ = os.Remove(path)
+		return fmt.Errorf("failed to finalize trust marker: %w", err)
+	}
+	return nil
 }

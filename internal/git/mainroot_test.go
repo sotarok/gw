@@ -141,3 +141,57 @@ func TestGetMainRepositoryRoot(t *testing.T) {
 		}
 	})
 }
+
+func TestGetMainRepositoryRoot_SeparateGitDir(t *testing.T) {
+	// Regression: for a --separate-git-dir checkout, --git-common-dir's
+	// parent is the external git-dir's own parent directory, not the
+	// worktree root. GetMainRepositoryRoot must resolve to the actual
+	// checkout root (via --show-toplevel) instead of silently reading a
+	// .gwrc from that unrelated external location.
+	tempDir, err := os.MkdirTemp("", "test-separate-git-dir")
+	if err != nil {
+		t.Fatalf("failed to create temp dir: %v", err)
+	}
+	defer os.RemoveAll(tempDir)
+
+	originalDir, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("failed to get current dir: %v", err)
+	}
+	defer func() { _ = os.Chdir(originalDir) }()
+
+	externalGitDir := filepath.Join(tempDir, "gitstore", "repo.git")
+	worktreePath := filepath.Join(tempDir, "wt")
+	if err := os.MkdirAll(filepath.Dir(externalGitDir), 0755); err != nil {
+		t.Fatalf("failed to create external git-dir parent: %v", err)
+	}
+	if err := os.MkdirAll(worktreePath, 0755); err != nil {
+		t.Fatalf("failed to create worktree dir: %v", err)
+	}
+
+	if err := RunCommand("git init --separate-git-dir=" + externalGitDir + " " + worktreePath); err != nil {
+		t.Fatalf("failed to init separate-git-dir repo: %v", err)
+	}
+
+	if err := os.Chdir(worktreePath); err != nil {
+		t.Fatalf("failed to change to worktree dir: %v", err)
+	}
+
+	root, err := GetMainRepositoryRoot()
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	resolvedWorktreePath, err := filepath.EvalSymlinks(worktreePath)
+	if err != nil {
+		t.Fatalf("failed to resolve symlinks for comparison: %v", err)
+	}
+	resolvedRoot, err := filepath.EvalSymlinks(root)
+	if err != nil {
+		t.Fatalf("failed to resolve symlinks for root: %v", err)
+	}
+	if resolvedRoot != resolvedWorktreePath {
+		t.Errorf("expected root to be the actual checkout root %q, got %q (external git-dir parent would be %q)",
+			resolvedWorktreePath, resolvedRoot, filepath.Dir(externalGitDir))
+	}
+}

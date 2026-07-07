@@ -123,3 +123,28 @@ func TestDifferentContentRequiresReapproval(t *testing.T) {
 		t.Error("expected a changed file's new hash to not be approved even though the old hash was")
 	}
 }
+
+func TestCloseAndCleanupOnFailure_RemovesMarkerOnCloseError(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "marker")
+
+	file, err := os.OpenFile(path, os.O_CREATE|os.O_EXCL|os.O_WRONLY, permTrustFile)
+	if err != nil {
+		t.Fatalf("failed to create test marker file: %v", err)
+	}
+	// Close it once successfully so the marker exists on disk (mirroring
+	// what O_CREATE does before Approve's own Close call), then hand the
+	// same *os.File to the helper — a second Close on an already-closed
+	// os.File deterministically returns an error on every platform.
+	if err := file.Close(); err != nil {
+		t.Fatalf("unexpected error on first close: %v", err)
+	}
+
+	err = closeAndCleanupOnFailure(file, path)
+	if err == nil {
+		t.Fatal("expected an error from closing an already-closed file")
+	}
+	if _, statErr := os.Stat(path); !os.IsNotExist(statErr) {
+		t.Errorf("expected the marker file to be removed after a close failure, stat error: %v", statErr)
+	}
+}

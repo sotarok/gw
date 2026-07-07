@@ -290,7 +290,7 @@ post_start_hook = pnpm dev
 
 **Merge rule.** The global `~/.gwrc` is the base. Only the hook keys the project file actually writes are overridden — a hook key the project file doesn't mention keeps its global value. Writing a hook key with an empty value (`post_start_hook =`) disables that global hook for the project, without needing trust approval (an empty value can't execute code).
 
-**Where the project file is found.** `gw` resolves `git rev-parse --git-common-dir`'s parent directory as the main worktree root and reads `.gwrc` there — so a linked worktree (created by `gw start`/`gw checkout`) reads the *same* project `.gwrc` as the main repository; a `.gwrc` accidentally checked out inside a linked worktree itself is never read. This resolution does not support `--separate-git-dir` layouts or standard git submodules (where `--git-common-dir`'s parent isn't the worktree root); in those layouts `gw` silently falls back to the global config only.
+**Where the project file is found.** For a linked worktree (created by `gw start`/`gw checkout`), `gw` resolves `git rev-parse --git-common-dir`'s parent directory as the main worktree root and reads `.gwrc` there, so every linked worktree reads the *same* project `.gwrc` as the main repository; a `.gwrc` accidentally checked out inside a linked worktree itself is never read. For every other layout — including a `--separate-git-dir` checkout or a git submodule, where `--git-common-dir`'s parent is not the worktree root — `gw` instead resolves the root via `git rev-parse --show-toplevel`.
 
 #### Trust
 
