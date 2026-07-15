@@ -146,7 +146,10 @@ func (c *StartCommand) postCreate(issueNumber, worktreePath, repoName, envSource
 
 	// Execute post-start hook if configured
 	if c.deps.Config.PostStartHook != "" {
-		branchName := issueNumber + "/impl"
+		// Derive the branch name via the same helper CreateWorktree uses, so an
+		// argument that already carries a "/impl" suffix (or any "/") is not
+		// doubled (e.g. "foo/impl" must stay "foo/impl", not "foo/impl/impl").
+		branchName, _ := git.DetermineWorktreeNames(issueNumber)
 		absWorktreePath, _ := filepath.Abs(worktreePath)
 		hookEnv := hook.Env{
 			WorktreePath: absWorktreePath,

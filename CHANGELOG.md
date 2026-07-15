@@ -10,6 +10,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 - Project-local `.gwrc` hook overrides: a `.gwrc` at a repository's main worktree root can now override `post_start_hook` / `post_checkout_hook` / `pre_end_hook` for that repository only (all other keys are parsed but ignored, with a stderr note). Non-empty overrides require one-time, re-promptable trust approval (direnv-style, content-hash based, default-No, fail-closed); an empty override (disabling a global hook) applies without a prompt. New `--no-project-hooks` flag on `gw start` / `gw checkout` / `gw end` / `gw clean` skips project hooks for one invocation; `gw end --force` and `gw clean --force`/`--dry-run` skip them automatically. `gw config --list` shows each hook key's effective value, origin (`[default]`/`[global]`/`[project]`), and trust state.
 
+### Fixed
+- `gw start`'s `post_start_hook` no longer receives a doubled `/impl` suffix in `GW_BRANCH_NAME` when the argument already contains a `/` (e.g. `gw start foo/impl`). The hook branch name is now derived from the same `DetermineWorktreeNames` helper that creates the actual branch, so it matches the real worktree branch (`foo/impl`, not `foo/impl/impl`). The git branch/worktree were already correct; only the hook env and things derived from it (e.g. tmux window names) were affected.
+
 ## [1.0.0] - 2026-07-06
 
 ### Changed

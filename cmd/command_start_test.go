@@ -783,3 +783,55 @@ func TestStartCommand_Execute_PostHookFailure(t *testing.T) {
 		t.Error("Expected success message even when hook fails")
 	}
 }
+
+// TestStartCommand_Execute_PostHook_BranchNameNoDoubleSuffix is a regression test:
+// passing an argument that already contains "/impl" (e.g. from shell completion or
+// stacked-worktree kickoff) must not double the suffix in GW_BRANCH_NAME. The hook's
+// branch name must come from DetermineWorktreeNames — the same source that creates the
+// actual branch — not a raw `issueNumber + "/impl"` concatenation.
+func TestStartCommand_Execute_PostHook_BranchNameNoDoubleSuffix(t *testing.T) {
+	originalDir, _ := os.Getwd()
+	defer os.Chdir(originalDir)
+
+	tempDir, err := os.MkdirTemp("", "gw-test-*")
+	if err != nil {
+		t.Fatalf("Failed to create temp dir: %v", err)
+	}
+	defer os.RemoveAll(tempDir)
+	os.Chdir(tempDir)
+
+	worktreeDir, _ := os.MkdirTemp("", "gw-worktree-*")
+	defer os.RemoveAll(worktreeDir)
+
+	mockGitInstance := &mockGit{
+		isGitRepo:    true,
+		worktreePath: worktreeDir,
+	}
+
+	stdout := &bytes.Buffer{}
+	stderr := &bytes.Buffer{}
+	deps := &Dependencies{
+		Git:    mockGitInstance,
+		UI:     &mockUI{},
+		Detect: &mockDetect{},
+		Config: &config.Config{
+			PostStartHook: `echo "BRANCH:$GW_BRANCH_NAME"`,
+		},
+		Stdout: stdout,
+		Stderr: stderr,
+	}
+
+	cmd := NewStartCommand(deps, false, true, false)
+	// Argument already carries the "/impl" suffix (as `gw` completion suggests).
+	if err := cmd.Execute("foo/impl", "main"); err != nil {
+		t.Fatalf("Unexpected error: %v", err)
+	}
+
+	output := stdout.String()
+	if !contains(output, "BRANCH:foo/impl\n") {
+		t.Errorf("Expected GW_BRANCH_NAME=foo/impl, got:\n%s", output)
+	}
+	if contains(output, "foo/impl/impl") {
+		t.Errorf("GW_BRANCH_NAME has a doubled /impl suffix, got:\n%s", output)
+	}
+}
