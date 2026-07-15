@@ -268,7 +268,7 @@ func TestStartCommand_Execute(t *testing.T) {
 				UpdateITerm2Tab: tt.updateITerm2Tab,
 			}
 			deps.Config = cfg
-			cmd := NewStartCommand(deps, tt.copyEnvs, true)
+			cmd := NewStartCommand(deps, tt.copyEnvs, true, false)
 			err = cmd.Execute(tt.issueNumber, tt.baseBranch)
 
 			// Check error
@@ -325,7 +325,7 @@ func TestStartCommand_Execute_FetchBeforeCommand(t *testing.T) {
 
 	// noFetch=false with FetchBeforeCommand=true should call fetch
 	deps.Config = &config.Config{FetchBeforeCommand: true}
-	cmd := NewStartCommand(deps, false, false)
+	cmd := NewStartCommand(deps, false, false, false)
 	err = cmd.Execute("123", "main")
 
 	if err != nil {
@@ -370,7 +370,7 @@ func TestStartCommand_Execute_FetchErrorWarnsButDoesNotFail(t *testing.T) {
 	}
 
 	deps.Config = &config.Config{FetchBeforeCommand: true}
-	cmd := NewStartCommand(deps, false, false)
+	cmd := NewStartCommand(deps, false, false, false)
 	err = cmd.Execute("123", "main")
 
 	if err != nil {
@@ -421,7 +421,7 @@ func TestStartCommand_Execute_NoFetchSkipsFetch(t *testing.T) {
 
 	// noFetch=true should skip fetch even with FetchBeforeCommand=true
 	deps.Config = &config.Config{FetchBeforeCommand: true}
-	cmd := NewStartCommand(deps, false, true)
+	cmd := NewStartCommand(deps, false, true, false)
 	err = cmd.Execute("123", "main")
 
 	if err != nil {
@@ -463,7 +463,7 @@ func TestStartCommand_Execute_AutoCDEnabled(t *testing.T) {
 	}
 
 	deps.Config = &config.Config{AutoCD: true}
-	cmd := NewStartCommand(deps, false, true)
+	cmd := NewStartCommand(deps, false, true, false)
 	err = cmd.Execute("123", "main")
 
 	if err != nil {
@@ -505,7 +505,7 @@ func TestStartCommand_Execute_ITerm2Tab(t *testing.T) {
 	}
 
 	deps.Config = &config.Config{UpdateITerm2Tab: true}
-	cmd := NewStartCommand(deps, false, true)
+	cmd := NewStartCommand(deps, false, true, false)
 	err = cmd.Execute("456", "main")
 
 	if err != nil {
@@ -558,7 +558,7 @@ func TestStartCommand_Execute_EnvFilesUserDeclines(t *testing.T) {
 	}
 
 	deps.Config = &config.Config{}
-	cmd := NewStartCommand(deps, false, true)
+	cmd := NewStartCommand(deps, false, true, false)
 	err = cmd.Execute("123", "main")
 
 	if err != nil {
@@ -614,7 +614,7 @@ func TestStartCommand_Execute_ConfigCopyEnvsTrue(t *testing.T) {
 
 	// copyEnvs flag=false but config.CopyEnvs=true should copy without prompting
 	deps.Config = &config.Config{CopyEnvs: boolPtr(true)}
-	cmd := NewStartCommand(deps, false, true)
+	cmd := NewStartCommand(deps, false, true, false)
 	err = cmd.Execute("123", "main")
 
 	if err != nil {
@@ -679,7 +679,7 @@ func TestStartCommand_Execute_EnvSourceAnchoredToRepoRoot(t *testing.T) {
 	}
 
 	deps.Config = &config.Config{}
-	cmd := NewStartCommand(deps, true, true)
+	cmd := NewStartCommand(deps, true, true, false)
 	if err := cmd.Execute("123", "main"); err != nil {
 		t.Fatalf("Unexpected error: %v", err)
 	}
@@ -722,7 +722,7 @@ func TestStartCommand_Execute_PostHook(t *testing.T) {
 	deps.Config = &config.Config{
 		PostStartHook: `echo "HOOK_OUTPUT:$GW_WORKTREE_PATH:$GW_COMMAND"`,
 	}
-	cmd := NewStartCommand(deps, false, true)
+	cmd := NewStartCommand(deps, false, true, false)
 	err = cmd.Execute("123", "main")
 
 	if err != nil {
@@ -768,7 +768,7 @@ func TestStartCommand_Execute_PostHookFailure(t *testing.T) {
 	deps.Config = &config.Config{
 		PostStartHook: "exit 1",
 	}
-	cmd := NewStartCommand(deps, false, true)
+	cmd := NewStartCommand(deps, false, true, false)
 	err = cmd.Execute("123", "main")
 
 	// Command should succeed even if hook fails

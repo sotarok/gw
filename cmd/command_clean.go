@@ -47,19 +47,21 @@ type WorktreeStatus struct {
 
 // CleanCommand handles the clean command logic
 type CleanCommand struct {
-	deps    *Dependencies
-	force   bool
-	dryRun  bool
-	noFetch bool
+	deps           *Dependencies
+	force          bool
+	dryRun         bool
+	noFetch        bool
+	noProjectHooks bool
 }
 
 // NewCleanCommand creates a new clean command handler
-func NewCleanCommand(deps *Dependencies, force, dryRun, noFetch bool) *CleanCommand {
+func NewCleanCommand(deps *Dependencies, force, dryRun, noFetch, noProjectHooks bool) *CleanCommand {
 	return &CleanCommand{
-		deps:    deps,
-		force:   force,
-		dryRun:  dryRun,
-		noFetch: noFetch,
+		deps:           deps,
+		force:          force,
+		dryRun:         dryRun,
+		noFetch:        noFetch,
+		noProjectHooks: noProjectHooks,
 	}
 }
 
@@ -68,6 +70,13 @@ func (c *CleanCommand) git() cleanGit { return c.deps.Git }
 
 // Execute runs the clean command
 func (c *CleanCommand) Execute() error {
+	// --force and --dry-run also skip project hooks: --force signals a
+	// non-interactive removal, and --dry-run must never mutate trust state or
+	// prompt for a run that won't actually happen.
+	if err := ResolveProjectConfig(c.deps, c.noProjectHooks || c.force || c.dryRun); err != nil {
+		return err
+	}
+
 	// Fetch from remotes if configured
 	fetchIfConfigured(c.deps, c.noFetch)
 

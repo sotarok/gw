@@ -37,7 +37,7 @@ func TestCleanCommand_Execute_NoWorktrees(t *testing.T) {
 	}
 
 	deps.Config = &config.Config{}
-	cmd := NewCleanCommand(deps, false, false, true)
+	cmd := NewCleanCommand(deps, false, false, true, false)
 	err := cmd.Execute()
 
 	if err != nil {
@@ -98,7 +98,7 @@ func TestCleanCommand_Execute_AllRemovable(t *testing.T) {
 	}
 
 	deps.Config = &config.Config{}
-	cmd := NewCleanCommand(deps, false, false, true)
+	cmd := NewCleanCommand(deps, false, false, true, false)
 
 	// Save and restore current directory
 	originalDir, _ := os.Getwd()
@@ -181,7 +181,7 @@ func TestCleanCommand_Execute_MixedRemovability(t *testing.T) {
 	}
 
 	deps.Config = &config.Config{}
-	cmd := NewCleanCommand(deps, false, false, true)
+	cmd := NewCleanCommand(deps, false, false, true, false)
 
 	originalDir, _ := os.Getwd()
 	defer os.Chdir(originalDir)
@@ -261,7 +261,7 @@ func TestCleanCommand_Execute_DryRun(t *testing.T) {
 	}
 
 	deps.Config = &config.Config{}
-	cmd := NewCleanCommand(deps, false, true, true)
+	cmd := NewCleanCommand(deps, false, true, true, false)
 
 	originalDir, _ := os.Getwd()
 	defer os.Chdir(originalDir)
@@ -327,7 +327,7 @@ func TestCleanCommand_Execute_UserDeclines(t *testing.T) {
 	}
 
 	deps.Config = &config.Config{}
-	cmd := NewCleanCommand(deps, false, false, true)
+	cmd := NewCleanCommand(deps, false, false, true, false)
 
 	originalDir, _ := os.Getwd()
 	defer os.Chdir(originalDir)
@@ -393,7 +393,7 @@ func TestCleanCommand_Execute_Force(t *testing.T) {
 	}
 
 	deps.Config = &config.Config{}
-	cmd := NewCleanCommand(deps, true, false, true) // force = true
+	cmd := NewCleanCommand(deps, true, false, true, false) // force = true
 
 	originalDir, _ := os.Getwd()
 	defer os.Chdir(originalDir)
@@ -468,7 +468,7 @@ func TestCleanCommand_Execute_WithBranchDeletion(t *testing.T) {
 	}
 
 	deps.Config = cfg
-	cmd := NewCleanCommand(deps, false, false, true)
+	cmd := NewCleanCommand(deps, false, false, true, false)
 
 	originalDir, _ := os.Getwd()
 	defer os.Chdir(originalDir)
@@ -541,7 +541,7 @@ func TestCleanCommand_Execute_RemovalError(t *testing.T) {
 	}
 
 	deps.Config = &config.Config{}
-	cmd := NewCleanCommand(deps, false, false, true)
+	cmd := NewCleanCommand(deps, false, false, true, false)
 
 	originalDir, _ := os.Getwd()
 	defer os.Chdir(originalDir)
@@ -603,7 +603,7 @@ func TestCleanCommand_Execute_BrokenWorktree(t *testing.T) {
 	}
 
 	deps.Config = &config.Config{}
-	cmd := NewCleanCommand(deps, false, false, true)
+	cmd := NewCleanCommand(deps, false, false, true, false)
 
 	originalDir, _ := os.Getwd()
 	defer os.Chdir(originalDir)
@@ -673,7 +673,7 @@ func TestCleanCommand_checkWorktree_DeletedWorktreeDir_Integration(t *testing.T)
 		Stderr: &bytes.Buffer{},
 	}
 	deps.Config = &config.Config{}
-	cmd := NewCleanCommand(deps, false, true, true)
+	cmd := NewCleanCommand(deps, false, true, true, false)
 
 	status := cmd.checkWorktree(&git.WorktreeInfo{Path: wtPath, Branch: "feature/impl"})
 
@@ -709,7 +709,7 @@ func TestCleanCommand_Execute_ListWorktreesError(t *testing.T) {
 	}
 
 	deps.Config = &config.Config{}
-	cmd := NewCleanCommand(deps, false, false, true)
+	cmd := NewCleanCommand(deps, false, false, true, false)
 	err := cmd.Execute()
 
 	if err == nil || !strings.Contains(err.Error(), "failed to list worktrees") {
@@ -753,7 +753,7 @@ func TestCleanCommand_Execute_ConfirmPromptError(t *testing.T) {
 	}
 
 	deps.Config = &config.Config{}
-	cmd := NewCleanCommand(deps, false, false, true)
+	cmd := NewCleanCommand(deps, false, false, true, false)
 	err := cmd.Execute()
 
 	if err == nil || !strings.Contains(err.Error(), "failed to read response") {
@@ -786,7 +786,7 @@ func TestCleanCommand_CheckWorktree_UnpushedCommitsError(t *testing.T) {
 	}
 
 	deps.Config = &config.Config{}
-	cmd := NewCleanCommand(deps, false, false, true)
+	cmd := NewCleanCommand(deps, false, false, true, false)
 
 	info := &git.WorktreeInfo{Path: wt1, Branch: "test/impl"}
 	status := cmd.checkWorktree(info)
@@ -830,7 +830,7 @@ func TestCleanCommand_CheckWorktree_MergeStatusError(t *testing.T) {
 	}
 
 	deps.Config = &config.Config{}
-	cmd := NewCleanCommand(deps, false, false, true)
+	cmd := NewCleanCommand(deps, false, false, true, false)
 
 	info := &git.WorktreeInfo{Path: wt1, Branch: "test/impl"}
 	status := cmd.checkWorktree(info)
@@ -874,7 +874,7 @@ func TestCleanCommand_CheckWorktree_UncommittedChangesNon128Error(t *testing.T) 
 	}
 
 	deps.Config = &config.Config{}
-	cmd := NewCleanCommand(deps, false, false, true)
+	cmd := NewCleanCommand(deps, false, false, true, false)
 
 	info := &git.WorktreeInfo{Path: wt1, Branch: "test/impl"}
 	status := cmd.checkWorktree(info)
@@ -916,7 +916,7 @@ func TestCleanCommand_CheckWorktree_UnpushedCommitsTrue(t *testing.T) {
 	}
 
 	deps.Config = &config.Config{}
-	cmd := NewCleanCommand(deps, false, false, true)
+	cmd := NewCleanCommand(deps, false, false, true, false)
 
 	info := &git.WorktreeInfo{Path: wt1, Branch: "test/impl"}
 	status := cmd.checkWorktree(info)
@@ -958,7 +958,7 @@ func TestCleanCommand_CheckWorktree_NotMerged(t *testing.T) {
 	}
 
 	deps.Config = &config.Config{}
-	cmd := NewCleanCommand(deps, false, false, true)
+	cmd := NewCleanCommand(deps, false, false, true, false)
 
 	info := &git.WorktreeInfo{Path: wt1, Branch: "test/impl"}
 	status := cmd.checkWorktree(info)
@@ -1016,7 +1016,7 @@ func TestCleanCommand_RemoveWorktrees_BranchDeletionError(t *testing.T) {
 
 	cfg := &config.Config{AutoRemoveBranch: true}
 	deps.Config = cfg
-	cmd := NewCleanCommand(deps, false, false, true)
+	cmd := NewCleanCommand(deps, false, false, true, false)
 	err := cmd.Execute()
 
 	if err != nil {
@@ -1052,7 +1052,7 @@ func TestCleanCommand_Execute_SkipsMasterAndEmptyBranch(t *testing.T) {
 	}
 
 	deps.Config = &config.Config{}
-	cmd := NewCleanCommand(deps, false, false, true)
+	cmd := NewCleanCommand(deps, false, false, true, false)
 	err := cmd.Execute()
 
 	if err != nil {
@@ -1074,7 +1074,7 @@ func TestNewCleanCommand(t *testing.T) {
 		Stderr: &bytes.Buffer{},
 	}
 
-	cmd := NewCleanCommand(deps, true, false, true)
+	cmd := NewCleanCommand(deps, true, false, true, false)
 	if cmd == nil {
 		t.Fatal("Expected non-nil command")
 	}
@@ -1137,7 +1137,7 @@ func TestCleanCommand_Execute_PreEndHook(t *testing.T) {
 	cfg := &config.Config{PreEndHook: hookCmd}
 
 	deps.Config = cfg
-	cmd := NewCleanCommand(deps, false, false, true)
+	cmd := NewCleanCommand(deps, false, false, true, false)
 	if err := cmd.Execute(); err != nil {
 		t.Fatalf("Execute failed: %v", err)
 	}
@@ -1208,7 +1208,7 @@ func TestCleanCommand_Execute_PreEndHookFailure(t *testing.T) {
 
 	cfg := &config.Config{PreEndHook: "exit 1"}
 	deps.Config = cfg
-	cmd := NewCleanCommand(deps, false, false, true)
+	cmd := NewCleanCommand(deps, false, false, true, false)
 
 	if err := cmd.Execute(); err != nil {
 		t.Fatalf("Unexpected error: %v", err)

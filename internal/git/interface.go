@@ -6,6 +6,7 @@ type RepositoryReader interface {
 	GetRepositoryName() (string, error)
 	GetOriginalRepositoryName() (string, error)
 	GetRepositoryRoot() (string, error)
+	GetMainRepositoryRoot() (string, error)
 	GetCurrentBranch() (string, error)
 	FetchAll() error
 }

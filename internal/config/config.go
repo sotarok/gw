@@ -1,11 +1,9 @@
 package config
 
 import (
-	"bufio"
 	"fmt"
 	"os"
 	"path/filepath"
-	"strings"
 )
 
 const (
@@ -55,6 +53,11 @@ type fieldSpec struct {
 	// getBool reads the effective bool value (kindBool / kindOptionalBool) for
 	// GetConfigItems.
 	getBool func(c *Config) bool
+	// getString / setString read and write a kindString (hook) field. Only set
+	// for kindString entries; used by MergeHooks to walk the hook keys without
+	// repeating the field list.
+	getString func(c *Config) string
+	setString func(c *Config, value string)
 }
 
 // fieldSpecs is the ordered single source of truth for all configuration keys.
@@ -108,19 +111,25 @@ var fieldSpecs = []fieldSpec{
 		getBool:     func(c *Config) bool { return c.FetchBeforeCommand },
 	},
 	{
-		key:  postStartHookKey,
-		kind: kindString,
-		load: func(c *Config, v string) { c.PostStartHook = v },
+		key:       postStartHookKey,
+		kind:      kindString,
+		load:      func(c *Config, v string) { c.PostStartHook = v },
+		getString: func(c *Config) string { return c.PostStartHook },
+		setString: func(c *Config, v string) { c.PostStartHook = v },
 	},
 	{
-		key:  postCheckoutHookKey,
-		kind: kindString,
-		load: func(c *Config, v string) { c.PostCheckoutHook = v },
+		key:       postCheckoutHookKey,
+		kind:      kindString,
+		load:      func(c *Config, v string) { c.PostCheckoutHook = v },
+		getString: func(c *Config) string { return c.PostCheckoutHook },
+		setString: func(c *Config, v string) { c.PostCheckoutHook = v },
 	},
 	{
-		key:  preEndHookKey,
-		kind: kindString,
-		load: func(c *Config, v string) { c.PreEndHook = v },
+		key:       preEndHookKey,
+		kind:      kindString,
+		load:      func(c *Config, v string) { c.PreEndHook = v },
+		getString: func(c *Config) string { return c.PreEndHook },
+		setString: func(c *Config, v string) { c.PreEndHook = v },
 	},
 }
 
@@ -167,47 +176,8 @@ func New() *Config {
 
 // Load loads configuration from the specified file path
 func Load(path string) (*Config, error) {
-	config := New()
-
-	// If file doesn't exist, return default config
-	if _, err := os.Stat(path); os.IsNotExist(err) {
-		return config, nil
-	}
-
-	file, err := os.Open(path)
-	if err != nil {
-		return nil, fmt.Errorf("failed to open config file: %w", err)
-	}
-	defer file.Close()
-
-	scanner := bufio.NewScanner(file)
-	for scanner.Scan() {
-		line := strings.TrimSpace(scanner.Text())
-
-		// Skip empty lines and comments
-		if line == "" || strings.HasPrefix(line, "#") {
-			continue
-		}
-
-		// Parse key = value
-		parts := strings.SplitN(line, "=", kvParts)
-		if len(parts) != kvParts {
-			continue
-		}
-
-		key := strings.TrimSpace(parts[0])
-		value := strings.TrimSpace(parts[1])
-
-		if spec := fieldSpecByKey(key); spec != nil {
-			spec.load(config, value)
-		}
-	}
-
-	if err := scanner.Err(); err != nil {
-		return nil, fmt.Errorf("failed to read config file: %w", err)
-	}
-
-	return config, nil
+	cfg, _, _, err := LoadWithPresence(path)
+	return cfg, err
 }
 
 // Save saves the configuration to the specified file path

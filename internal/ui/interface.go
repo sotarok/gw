@@ -18,6 +18,11 @@ type Interface interface {
 	// Prompt operations
 	ConfirmPrompt(message string) (bool, error)
 
+	// TrustPrompt asks the user whether to trust and run the given project
+	// hook values. It defaults to "no" (fail closed) and must never write to
+	// stdout — see the DefaultUI implementation for why.
+	TrustPrompt(projectPath string, hookLines []string) (bool, error)
+
 	// Display operations
 	ShowEnvFilesList(files []string)
 }

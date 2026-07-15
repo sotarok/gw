@@ -19,17 +19,19 @@ type endGit interface {
 
 // EndCommand handles the end command logic
 type EndCommand struct {
-	deps    *Dependencies
-	force   bool
-	noFetch bool
+	deps           *Dependencies
+	force          bool
+	noFetch        bool
+	noProjectHooks bool
 }
 
 // NewEndCommand creates a new end command handler
-func NewEndCommand(deps *Dependencies, force, noFetch bool) *EndCommand {
+func NewEndCommand(deps *Dependencies, force, noFetch, noProjectHooks bool) *EndCommand {
 	return &EndCommand{
-		deps:    deps,
-		force:   force,
-		noFetch: noFetch,
+		deps:           deps,
+		force:          force,
+		noFetch:        noFetch,
+		noProjectHooks: noProjectHooks,
 	}
 }
 
@@ -38,6 +40,12 @@ func (c *EndCommand) git() endGit { return c.deps.Git }
 
 // Execute runs the end command
 func (c *EndCommand) Execute(issueNumber string) error {
+	// --force also skips project hooks: it signals a non-interactive/scripted
+	// removal that must not block on a trust prompt.
+	if err := ResolveProjectConfig(c.deps, c.noProjectHooks || c.force); err != nil {
+		return err
+	}
+
 	issueNumber, worktreePath, branchName, err := c.resolveWorktree(issueNumber)
 	if err != nil {
 		return err

@@ -45,3 +45,6 @@ Thumbs.db
 
 # Manual test worktree remnants
 test-repo-*/
+
+# dev-review / dev-orchestrate working state (Codex prompts, findings, reports)
+.reviews/

@@ -5,8 +5,9 @@ import (
 )
 
 var (
-	forceEnd   bool
-	endNoFetch bool
+	forceEnd          bool
+	endNoFetch        bool
+	endNoProjectHooks bool
 )
 
 var endCmd = &cobra.Command{
@@ -23,6 +24,7 @@ func init() {
 	rootCmd.AddCommand(endCmd)
 	endCmd.Flags().BoolVarP(&forceEnd, "force", "f", false, "Force removal without safety checks")
 	endCmd.Flags().BoolVar(&endNoFetch, "no-fetch", false, "Skip git fetch before running the command")
+	endCmd.Flags().BoolVar(&endNoProjectHooks, "no-project-hooks", false, "Skip project-local .gwrc hook overrides for this run")
 }
 
 func runEnd(cmd *cobra.Command, args []string) error {
@@ -33,6 +35,6 @@ func runEnd(cmd *cobra.Command, args []string) error {
 
 	// Use the new command structure
 	deps := DefaultDependencies()
-	endCmd := NewEndCommand(deps, forceEnd, endNoFetch)
+	endCmd := NewEndCommand(deps, forceEnd, endNoFetch, endNoProjectHooks)
 	return endCmd.Execute(issueNumber)
 }
