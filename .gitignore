@@ -48,3 +48,6 @@ test-repo-*/
 
 # dev-review / dev-orchestrate working state (Codex prompts, findings, reports)
 .reviews/
+
+# dev-design / dev-kickoff local spec + workflow state (specs, tasks, queue)
+.feature-state/
