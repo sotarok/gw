@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.1.0] - 2026-07-16
+
 ### Added
 - Project-local `.gwrc` hook overrides: a `.gwrc` at a repository's main worktree root can now override `post_start_hook` / `post_checkout_hook` / `pre_end_hook` for that repository only (all other keys are parsed but ignored, with a stderr note). Non-empty overrides require one-time, re-promptable trust approval (direnv-style, content-hash based, default-No, fail-closed); an empty override (disabling a global hook) applies without a prompt. New `--no-project-hooks` flag on `gw start` / `gw checkout` / `gw end` / `gw clean` skips project hooks for one invocation; `gw end --force` and `gw clean --force`/`--dry-run` skip them automatically. `gw config --list` shows each hook key's effective value, origin (`[default]`/`[global]`/`[project]`), and trust state.
 
