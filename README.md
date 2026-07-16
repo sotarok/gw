@@ -1,4 +1,4 @@
-# gw - Git Worktree CLI Tool
+# gw — Git Worktree CLI
 
 [![CI](https://github.com/sotarok/gw/actions/workflows/ci.yml/badge.svg)](https://github.com/sotarok/gw/actions/workflows/ci.yml)
 [![Release](https://github.com/sotarok/gw/actions/workflows/release.yml/badge.svg)](https://github.com/sotarok/gw/actions/workflows/release.yml)
@@ -6,19 +6,81 @@
 [![Go Report Card](https://goreportcard.com/badge/github.com/sotarok/gw)](https://goreportcard.com/report/github.com/sotarok/gw)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
-A convenient CLI tool for managing Git worktrees with automatic package manager setup.
+> Stop juggling `git worktree add ../repo-123 -b 123/impl && cd && npm install && cp .env`.
+> `gw start 123` does all of it — and `gw end 123` cleans up safely.
+
+```
+$ gw start 123
+✓ Created worktree at ../myrepo-123
+Detected npm, running setup...
+✓ npm setup completed
+
+✨ Worktree ready at:
+   ../myrepo-123
+
+💡 Shell integration will change to this directory after the command completes.
+
+$ gw end 123
+✓ Successfully removed worktree for issue #123
+```
+
+## Why gw?
+
+| plain git worktree | gw |
+|---|---|
+| `git worktree add ../repo-123 -b 123/impl && cd ../repo-123 && npm install && cp ../.env .` | `gw start 123` |
+| `git worktree remove` refuses on a dirty tree — or discards it with `--force` | `gw end` checks uncommitted changes, unpushed commits, and merge status, then asks before removing |
+| Worktrees pile up across old issues | `gw clean` bulk-removes every merged, clean worktree in one command |
+
+## Quick Start
+
+1. **Install**
+
+   ```bash
+   go install github.com/sotarok/gw@latest
+   ```
+
+2. **Set up shell integration** (required for auto-cd)
+
+   ```bash
+   # Add to ~/.zshrc
+   eval "$(gw shell-integration --show-script --shell=zsh)"
+   ```
+
+   Bash and Fish variants are in the [Shell Integration](#shell-integration) section.
+
+3. **Create a worktree**
+
+   ```bash
+   gw start 123
+   ```
+
+4. **Remove it when you're done**
+
+   ```bash
+   gw end 123
+   ```
+
+That's it. Everything below is reference.
 
 ## Features
 
-- Create worktrees with simple commands
-- Checkout existing branches as worktrees
-- Automatic detection and setup of package managers (npm, yarn, pnpm, cargo, go, pip, bundler, composer)
-- Copy untracked environment files (.env, .env.local, etc.) to new worktrees
-- Interactive worktree selection for removal
-- Interactive branch selection for checkout
-- Safety checks before removing worktrees (uncommitted changes, unpushed commits, merge status)
-- iTerm2 tab name integration - automatically update tab names when switching worktrees
-- Cross-platform support (macOS, Linux)
+**Core**
+- One command to create a worktree, check out a branch, install dependencies, and optionally copy `.env` files (`gw start` / `gw checkout`)
+- Automatic package-manager detection and setup: npm, yarn, pnpm, cargo, go, pip, bundler, composer
+- Auto-cd into the new worktree directory via shell integration
+- Interactive branch/worktree selection when no argument is given
+
+**Safety**
+- Three pre-removal checks run in parallel before `gw end` or `gw clean`: uncommitted changes, unpushed commits, and merge status against the base branch
+- `gw clean --dry-run` previews what would be removed before touching anything
+- direnv-style trust model for project-local hook files (`.gwrc`)
+
+**Integrations**
+- Lifecycle hooks: `post_start_hook`, `post_checkout_hook`, `pre_end_hook`
+- Project-local `.gwrc` at the repository root overrides hook keys per-repo (new in v1.1)
+- iTerm2 tab name updated automatically when creating, switching, or removing worktrees
+- Zsh completion via shell integration (`gw end` completes worktree branch names)
 
 ## Installation
 
@@ -32,7 +94,8 @@ go install github.com/sotarok/gw@latest
 
 Download the latest binary for your platform from the [Releases page](https://github.com/sotarok/gw/releases).
 
-#### Linux
+<details>
+<summary>Linux</summary>
 
 ```bash
 # AMD64
@@ -44,7 +107,10 @@ curl -L https://github.com/sotarok/gw/releases/latest/download/gw_Linux_arm64.ta
 sudo mv gw /usr/local/bin/
 ```
 
-#### macOS
+</details>
+
+<details>
+<summary>macOS</summary>
 
 ```bash
 # Intel Mac
@@ -56,8 +122,9 @@ curl -L https://github.com/sotarok/gw/releases/latest/download/gw_Darwin_arm64.t
 sudo mv gw /usr/local/bin/
 ```
 
+</details>
 
-### From source
+### From Source
 
 ```bash
 git clone https://github.com/sotarok/gw.git
@@ -65,130 +132,204 @@ cd gw
 make install
 ```
 
-## Usage
+## Commands
 
-### Initialize configuration
+### gw start
 
-```bash
-# Run interactive configuration setup
-gw init
-
-# View and edit configuration interactively
-gw config
-
-# List configuration values (non-interactive)
-gw config --list
-```
-
-The `gw init` command creates a `~/.gwrc` file with your preferences through an interactive setup.
-The `gw config` command allows you to view and modify your configuration at any time.
-
-### Create a new worktree
+Create a new worktree for an issue number or branch name.
 
 ```bash
-# Create worktree for issue #123 (creates branch "123/impl")
+# Create worktree for issue #123 — creates branch "123/impl"
 gw start 123
 
-# Create worktree with custom branch name
+# Branch name with "/" — used exactly as given
 gw start 476/impl-migration-script
 
-# Create worktree for feature branch
+# Named feature branch
 gw start feature/new-feature
 
-# Create worktree based on specific base branch
+# Different base branch
 gw start 456 develop
 
-# Create worktree and copy environment files
+# Also copy .env files from the main worktree
 gw start 789 --copy-envs
 ```
 
 This will:
 1. Create a new worktree at `../{repository-name}-{identifier}`
-2. Create a new branch (either `{issue-number}/impl` for numbers, or the exact branch name provided)
-3. Change to the new worktree directory
-4. Optionally copy untracked .env files from the original repository
-5. Automatically run package manager setup if detected
+2. Create a new branch (`{issue-number}/impl` for plain numbers, or the exact name provided)
+3. Optionally copy untracked `.env` files from the original repository
+4. Run package-manager setup if a package manager is detected
+5. Change to the new worktree directory (requires shell integration)
 
-### Checkout an existing branch
+| Flag | Description |
+|---|---|
+| `--copy-envs` | Copy untracked `.env` files to the new worktree |
+| `--no-fetch` | Skip `git fetch` before running the command |
+| `--no-project-hooks` | Skip project-local `.gwrc` hook overrides for this run |
+
+### gw checkout
+
+Checkout an existing branch as a new worktree. If no branch is given, an interactive selector is shown.
 
 ```bash
-# Checkout specific branch as worktree
+# Checkout a specific branch
 gw checkout feature/auth
 
-# Checkout remote branch
+# Checkout a remote branch
 gw checkout origin/feature/api
 
-# Interactive mode - select from list of branches
+# Interactive mode — select from list
 gw checkout
 
-# Checkout and copy environment files
+# Checkout and copy .env files
 gw checkout feature/auth --copy-envs
 ```
 
 This will:
 1. Create a new worktree at `../{repository-name}-{branch-name}`
-2. Checkout the specified branch (or create tracking branch for remote)
-3. Change to the new worktree directory
-4. Optionally copy untracked .env files from the original repository
-5. Automatically run package manager setup if detected
+2. Checkout the specified branch (or create a local tracking branch for a remote)
+3. Optionally copy untracked `.env` files from the original repository
+4. Run package-manager setup if a package manager is detected
+5. Change to the new worktree directory (requires shell integration)
 
-### Remove a worktree
+| Flag | Description |
+|---|---|
+| `--copy-envs` | Copy untracked `.env` files to the new worktree |
+| `--no-fetch` | Skip `git fetch` before running the command |
+| `--no-project-hooks` | Skip project-local `.gwrc` hook overrides for this run |
+
+### gw end
+
+Remove a worktree. If no issue number is given, an interactive selector is shown.
 
 ```bash
-# Remove specific worktree
+# Remove the worktree for issue #123
 gw end 123
 
-# Interactive mode - select from list
+# Interactive mode — select from list
 gw end
 
-# Force removal without safety checks
+# Skip safety checks and remove immediately
 gw end 123 --force
 ```
 
-Safety checks include:
-- Uncommitted changes
-- Unpushed commits
-- Merge status with origin/main
+Before removing, `gw end` runs three safety checks in parallel:
+- Uncommitted changes in the worktree
+- Unpushed commits on the branch
+- Whether the branch is merged into the base branch
 
-## Configuration
+If any check trips, `gw end` prints the warnings and prompts for confirmation. Use `--force` to skip all checks.
 
-The `gw` tool can be configured via `~/.gwrc` file. Use `gw init` for initial setup or `gw config` to modify settings at any time.
+| Flag | Short | Description |
+|---|---|---|
+| `--force` | `-f` | Force removal without safety checks |
+| `--no-fetch` | | Skip `git fetch` before running the command |
+| `--no-project-hooks` | | Skip project-local `.gwrc` hook overrides for this run |
 
-### Managing Configuration
+### gw clean
+
+Bulk-remove all worktrees that are safe to delete. Useful for clearing out merged work after a sprint.
 
 ```bash
-# Interactive configuration editor (TUI)
+# Preview what would be removed
+gw clean --dry-run
+
+# Confirm and remove all merged/clean worktrees
+gw clean
+
+# Remove without the confirmation prompt
+gw clean --force
+```
+
+`gw clean` evaluates each worktree against the same three safety checks as `gw end`, then displays a table showing which worktrees are removable and which are not (with per-worktree reasons). It asks for confirmation before removing anything, unless `--force` is given.
+
+`--dry-run` shows the table but skips the confirmation and removal entirely.
+
+The `pre_end_hook` runs for each worktree that is about to be removed, with cwd set to that worktree.
+
+| Flag | Short | Description |
+|---|---|---|
+| `--force` | `-f` | Remove without confirmation prompt |
+| `--dry-run` | | Show what would be removed without removing |
+| `--no-fetch` | | Skip `git fetch` before running the command |
+| `--no-project-hooks` | | Skip project-local `.gwrc` hook overrides for this run |
+
+### gw config
+
+View and edit configuration interactively, or list current values.
+
+```bash
+# Open the interactive TUI editor
 gw config
 
-# List current configuration
+# Print all configuration values (non-interactive)
 gw config --list
 ```
 
-The interactive config editor allows you to:
-- Navigate settings with arrow keys or j/k
-- Toggle boolean values with Enter or Space
-- Save changes with 's'
-- Quit with 'q'
-- View help with '?'
+The interactive editor supports:
+- Arrow keys or `j`/`k` to navigate
+- `Enter` or `Space` to toggle boolean values
+- `s` to save
+- `q` to quit
+- `?` to view help
 
-### Configuration Options
+### gw init
 
-- **auto_cd**: Automatically change to the new worktree directory after creation (default: true)
-- **update_iterm2_tab**: Update iTerm2 tab name when creating/switching/removing worktrees (default: false)
-- **post_start_hook**: Shell command to execute after a successful `gw start` (default: empty)
-- **post_checkout_hook**: Shell command to execute after a successful `gw checkout` (default: empty)
-- **pre_end_hook**: Shell command to execute before a worktree is removed by `gw end` or `gw clean`, with cwd set to the worktree (default: empty)
+Run an interactive setup to create `~/.gwrc` with your preferences.
 
-Example `~/.gwrc`:
+```bash
+gw init
+```
+
+### gw shell-integration
+
+Print the shell integration script. Normally consumed via `eval` in your shell config — see [Shell Integration](#shell-integration).
+
+```bash
+gw shell-integration --show-script --shell=zsh
+```
+
+## Configuration
+
+All configuration lives in `~/.gwrc`. Use `gw init` for first-time setup or `gw config` to edit at any time.
+
+### Key Reference
+
+| Key | Default | Description |
+|---|---|---|
+| `auto_cd` | `true` | Automatically change directory to the new worktree after creation (requires shell integration) |
+| `update_iterm2_tab` | `false` | Update iTerm2 tab title with worktree information (macOS only) |
+| `auto_remove_branch` | `false` | Automatically delete the local branch after successful worktree removal |
+| `copy_envs` | *(unset)* | Copy `.env` files to new worktrees. When unset (nil), `gw` prompts each time; set to `true` or `false` to fix the behavior |
+| `fetch_before_command` | `true` | Run `git fetch --all --prune` before commands to sync remote branch info |
+| `post_start_hook` | *(empty)* | Shell command to execute after a successful `gw start` |
+| `post_checkout_hook` | *(empty)* | Shell command to execute after a successful `gw checkout` |
+| `pre_end_hook` | *(empty)* | Shell command to execute before a worktree is removed by `gw end` or `gw clean`, with cwd set to the worktree |
+
+### Example `~/.gwrc`
+
 ```
 # gw configuration file
 auto_cd = true
 update_iterm2_tab = false
+auto_remove_branch = false
+# copy_envs = false  # Uncomment to set default behavior
+fetch_before_command = true
+
+# Hook commands executed after successful worktree operations
+# Available env vars: GW_WORKTREE_PATH, GW_BRANCH_NAME, GW_REPO_NAME, GW_COMMAND
+# post_start_hook =
+# post_checkout_hook =
+
+# Hook commands executed before a worktree is removed (from end/clean)
+# Runs with cwd set to the worktree. Same env vars as above; GW_COMMAND is "end" or "clean"
+# pre_end_hook =
 ```
 
-#### Hooks
+### Hooks
 
-You can configure shell commands to run automatically around worktree lifecycle events. Hook commands are executed via `sh -c` with the following environment variables:
+Hook commands are executed via `sh -c` with the following environment variables:
 
 | Variable | Description |
 |---|---|
@@ -199,15 +340,13 @@ You can configure shell commands to run automatically around worktree lifecycle 
 
 Hook failures are treated as warnings and do not block the overall command.
 
-Available hooks:
-
 | Hook | Fires |
 |---|---|
 | `post_start_hook` | After `gw start` successfully creates a worktree |
 | `post_checkout_hook` | After `gw checkout` successfully creates a worktree |
 | `pre_end_hook` | Before `gw end` removes a worktree, and before each worktree `gw clean` removes. Runs with cwd set to the worktree so it can operate on files that are about to disappear |
 
-##### Example: tmux integration
+#### Example: tmux integration
 
 Open a new tmux window for the worktree instead of changing directory in the current shell:
 
@@ -217,7 +356,7 @@ post_start_hook = tmux new-window -c "$GW_WORKTREE_PATH" -n "$GW_BRANCH_NAME"
 post_checkout_hook = tmux new-window -c "$GW_WORKTREE_PATH" -n "$GW_BRANCH_NAME"
 ```
 
-##### Example: iTerm2 new tab
+#### Example: iTerm2 new tab
 
 Open a new iTerm2 tab for the worktree on macOS. First, create a hook script:
 
@@ -248,7 +387,7 @@ post_start_hook = ~/.gw/hooks/iterm2-new-tab.sh
 post_checkout_hook = ~/.gw/hooks/iterm2-new-tab.sh
 ```
 
-##### Example: Custom notification
+#### Example: Custom notification
 
 Send a desktop notification after worktree creation:
 
@@ -256,7 +395,7 @@ Send a desktop notification after worktree creation:
 post_start_hook = osascript -e 'display notification "Worktree ready at '"$GW_WORKTREE_PATH"'" with title "gw"'
 ```
 
-##### Example: docker compose cleanup on worktree removal
+#### Example: docker compose cleanup on worktree removal
 
 If each worktree runs its own `docker compose` stack, tear it down before the worktree is deleted. `pre_end_hook` runs with the worktree as its working directory, so relative paths work naturally:
 
@@ -270,14 +409,14 @@ Or use the bundled example script (`examples/hooks/docker-compose-down.sh`) whic
 pre_end_hook = ~/.gw/hooks/docker-compose-down.sh
 ```
 
-#### iTerm2 Tab Integration
+### iTerm2 Tab Integration
 
 When `update_iterm2_tab` is enabled and you're using iTerm2:
-- Tab name is updated to "{repository-name} {issue-number/branch-name}" when creating or switching worktrees
+- Tab name is updated to `{repository-name} {issue-number/branch-name}` when creating or switching worktrees
 - Tab name is reset when removing worktrees
-- Only works when running in iTerm2 terminal (automatically detected)
+- Only activates when running inside iTerm2 (automatically detected)
 
-### Project-Local Configuration
+## Project-Local Configuration & Trust
 
 For repository-specific hook commands (e.g. a `post_start_hook` that only makes sense for one project), place a `.gwrc` at the **main worktree root** — the same directory as the repository's `.git` — using the same `key = value` format as `~/.gwrc`.
 
@@ -292,7 +431,7 @@ post_start_hook = pnpm dev
 
 **Where the project file is found.** For a linked worktree (created by `gw start`/`gw checkout`), `gw` resolves `git rev-parse --git-common-dir`'s parent directory as the main worktree root and reads `.gwrc` there, so every linked worktree reads the *same* project `.gwrc` as the main repository; a `.gwrc` accidentally checked out inside a linked worktree itself is never read. For every other layout — including a `--separate-git-dir` checkout or a git submodule, where `--git-common-dir`'s parent is not the worktree root — `gw` instead resolves the root via `git rev-parse --show-toplevel`.
 
-#### Trust
+### Trust
 
 Because a project `.gwrc` ships with the repository, its hook values could run arbitrary code as soon as someone runs a `gw` command in a clone they don't fully trust. `gw` uses a direnv-style trust model:
 
@@ -325,7 +464,7 @@ pre_end_hook        : (not set) [global]
 
 An untrusted project override is shown with the effective (global) value plus a note, e.g. `[project, untrusted — global value used]`, rather than being hidden.
 
-#### Accepted limitations
+### Accepted Limitations
 
 - **Trust covers the `.gwrc` file only**, not any script it references. `post_start_hook = ./scripts/setup.sh` is approved by the content of `.gwrc`, not the content of `setup.sh` — if `setup.sh` changes later, no re-approval is triggered (the same boundary direnv draws around `.envrc` and the files it sources).
 - **Relative-path hook values are resolved against the worktree's cwd at hook-execution time**, not the main root where `.gwrc` was approved. Since `gw` changes into the new/target worktree before running `post_start_hook`/`post_checkout_hook` (and into the worktree being removed for `pre_end_hook`), a relative path actually runs whatever file exists at that path *on the checked-out branch* — which can differ from what you approved if you check out a different branch afterward. **Prefer absolute paths** for hook scripts (`post_start_hook = /abs/path/to/scripts/setup.sh`) to avoid this entirely.
@@ -333,11 +472,9 @@ An untrusted project override is shown with the effective (global) value plus a 
 
 See `examples/hooks/README.md` for a worked example.
 
-### Shell Integration
+## Shell Integration
 
-To enable automatic directory changing after creating worktrees, you need to set up shell integration:
-
-#### Quick Setup
+Shell integration is what makes `auto_cd` work: after `gw start` or `gw checkout` prints the worktree path to stdout, the shell wrapper reads it and runs `cd` for you in the current shell process.
 
 Add one of these lines to your shell configuration file:
 
@@ -352,14 +489,25 @@ eval "$(gw shell-integration --show-script --shell=zsh)"
 gw shell-integration --show-script --shell=fish | source
 ```
 
-This method ensures you always have the latest shell integration code. See [SHELL_INTEGRATION.md](SHELL_INTEGRATION.md) for more details.
+This method ensures you always have the latest shell integration code. See [SHELL_INTEGRATION.md](SHELL_INTEGRATION.md) for full details.
 
-### Future Configuration Options
+## Troubleshooting / FAQ
 
-Future versions will support additional configuration:
-- Default base branch
-- Custom worktree location
-- Package manager preferences
+**`gw start` doesn't change my directory**
+
+Shell integration is not set up. Add the `eval` line for your shell to your shell config file and reload it — see [Shell Integration](#shell-integration) above.
+
+**`gw` asks me to trust a `.gwrc`**
+
+The repository you cloned ships a project-local hook file. `gw` shows the hook values before running them. Approve to run the hooks, decline to fall back to your global config, or pass `--no-project-hooks` to skip project hooks for that invocation without being prompted.
+
+**`gw end` refuses to remove my worktree**
+
+The safety checks found uncommitted changes, unpushed commits, or a branch not yet merged into the base branch. `gw end` prints the specific reason(s). Resolve them first, or use `gw end --force` to override all checks.
+
+**How do I skip the automatic fetch?**
+
+Pass `--no-fetch` to any command for a one-off skip, or set `fetch_before_command = false` in `~/.gwrc` to disable it permanently.
 
 ## Development
 
@@ -367,15 +515,17 @@ Future versions will support additional configuration:
 
 ```
 gw/
-├── cmd/               # Command implementations
-├── examples/hooks/    # Example hook scripts (tmux, iTerm2, etc.)
+├── cmd/               # Command implementations (start, checkout, end, clean, config, …)
+├── examples/hooks/    # Example hook scripts (tmux, iTerm2, docker-compose, etc.)
 ├── internal/
-│   ├── git/          # Git operations
-│   ├── detect/       # Package manager detection
-│   ├── ui/           # Interactive UI components
-│   ├── config/       # Configuration management
-│   ├── hook/         # Post-command hook execution
-│   └── iterm2/       # iTerm2 integration
+│   ├── config/       # Configuration loading, saving, and fieldSpecs table
+│   ├── detect/       # Package-manager detection and setup
+│   ├── git/          # Git operations via CLI subprocess (no go-git)
+│   ├── hook/         # Lifecycle hook execution
+│   ├── iterm2/       # iTerm2 tab-name integration
+│   ├── spinner/      # Terminal spinner for long-running operations
+│   ├── trust/        # Trust store for project-local hook approval
+│   └── ui/           # Interactive TUI components (worktree/branch selector)
 ├── main.go
 └── go.mod
 ```
@@ -389,7 +539,7 @@ go build -o gw
 ### Testing
 
 ```bash
-# Run tests
+# Run all tests
 go test ./...
 
 # Run tests with coverage
@@ -401,6 +551,8 @@ make coverage
 # View coverage in terminal
 make coverage-report
 ```
+
+Run `make fmt && make check` as the pre-commit gate — format first, then lint + tests.
 
 ## License
 
