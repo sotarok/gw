@@ -133,7 +133,7 @@ func TestHandleEnvFiles_ConfigPriority(t *testing.T) {
 			}
 
 			// Execute handleEnvFiles
-			err := handleEnvFiles(deps, tt.copyEnvsFlag, originalDir, worktreeDir)
+			err := handleEnvFiles(deps, tt.copyEnvsFlag, envSource{Root: originalDir}, worktreeDir)
 			if err != nil {
 				t.Fatalf("handleEnvFiles failed: %v", err)
 			}

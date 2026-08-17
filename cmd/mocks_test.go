@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -27,14 +28,15 @@ type mockGit struct {
 	copyEnvError        error
 
 	// Override functions for custom behavior
-	FetchAllFn              func() error
-	BranchExistsFn          func(string) (bool, error)
-	ListAllBranchesFn       func() ([]string, error)
-	GetCurrentBranchFn      func() (string, error)
-	GetWorktreeForIssueFn   func(string) (*git.WorktreeInfo, error)
-	HasUncommittedChangesFn func() (bool, error)
-	HasUnpushedCommitsFn    func() (bool, error)
-	IsMergedToBaseBranchFn  func(string) (bool, error)
+	FetchAllFn                 func() error
+	BranchExistsFn             func(string) (bool, error)
+	ListAllBranchesFn          func() ([]string, error)
+	GetCurrentBranchFn         func() (string, error)
+	GetWorktreeForIssueFn      func(string) (*git.WorktreeInfo, error)
+	GetWorktreeRootForBranchFn func(string) (string, error)
+	HasUncommittedChangesFn    func() (bool, error)
+	HasUnpushedCommitsFn       func() (bool, error)
+	IsMergedToBaseBranchFn     func(string) (bool, error)
 	// "*AtFn" callbacks receive the same args as the real Git interface
 	// methods. Use them when a test needs to vary results by worktree path or
 	// branch (the simpler Fn forms above still work for fixed return values).
@@ -150,6 +152,15 @@ func (m *mockGit) GetWorktreeForIssue(issueNumber string) (*git.WorktreeInfo, er
 		return &git.WorktreeInfo{Path: "/existing/path"}, nil
 	}
 	return nil, nil
+}
+
+func (m *mockGit) GetWorktreeRootForBranch(branch string) (string, error) {
+	if m.GetWorktreeRootForBranchFn != nil {
+		return m.GetWorktreeRootForBranchFn(branch)
+	}
+	// Default to "no worktree has this branch" so tests that don't configure it
+	// exercise the main-repo-root fallback.
+	return "", fmt.Errorf("no worktree has branch %s checked out", branch)
 }
 
 func (m *mockGit) BranchExists(branch string) (bool, error) {

@@ -151,14 +151,14 @@ gw start feature/new-feature
 # Different base branch
 gw start 456 develop
 
-# Also copy .env files from the main worktree
+# Also copy .env files from the base branch's worktree
 gw start 789 --copy-envs
 ```
 
 This will:
 1. Create a new worktree at `../{repository-name}-{identifier}`
 2. Create a new branch (`{issue-number}/impl` for plain numbers, or the exact name provided)
-3. Optionally copy untracked `.env` files from the original repository
+3. Optionally copy untracked `.env` files from the base branch's worktree
 4. Run package-manager setup if a package manager is detected
 5. Change to the new worktree directory (requires shell integration)
 
@@ -167,6 +167,21 @@ This will:
 | `--copy-envs` | Copy untracked `.env` files to the new worktree |
 | `--no-fetch` | Skip `git fetch` before running the command |
 | `--no-project-hooks` | Skip project-local `.gwrc` hook overrides for this run |
+
+#### Where `.env` files are copied from
+
+`gw start` copies from the worktree that currently has the **base branch** checked out. With the default base branch (`main`), that is normally the main repository — so the everyday case is unchanged.
+
+It matters for stacked branches. Given `main → A → B`, `gw start B A/impl` copies the `.env` files as they exist in A's worktree, so edits you made while working on A carry over to B.
+
+If no worktree has the base branch checked out — it is not checked out anywhere, the main repository is on a different branch, or you passed a remote ref like `origin/main` — `gw` falls back to the main repository root and prints a warning:
+
+```
+⚠ Base branch 'A/impl' has no worktree.
+   Copying env files from the main repository instead: /path/to/repo
+```
+
+The warning is only printed when there is at least one `.env` file to copy.
 
 ### gw checkout
 
@@ -189,7 +204,7 @@ gw checkout feature/auth --copy-envs
 This will:
 1. Create a new worktree at `../{repository-name}-{branch-name}`
 2. Checkout the specified branch (or create a local tracking branch for a remote)
-3. Optionally copy untracked `.env` files from the original repository
+3. Optionally copy untracked `.env` files from the main repository (`checkout` takes an existing branch, so the branch it was cut from is unknown)
 4. Run package-manager setup if a package manager is detected
 5. Change to the new worktree directory (requires shell integration)
 

@@ -19,6 +19,7 @@ type WorktreeManager interface {
 	RemoveWorktreeByPath(worktreePath string) error
 	ListWorktrees() ([]WorktreeInfo, error)
 	GetWorktreeForIssue(issueNumber string) (*WorktreeInfo, error)
+	GetWorktreeRootForBranch(branch string) (string, error)
 }
 
 // BranchManager exposes branch inspection and deletion.

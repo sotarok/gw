@@ -120,14 +120,21 @@ func fetchIfConfigured(deps *Dependencies, noFetch bool) {
 // 1. If --copy-envs flag is set, always copy
 // 2. If config.CopyEnvs is set (true/false), use that value (unless flag overrides)
 // 3. If neither is set, prompt user (interactive mode)
-func handleEnvFiles(deps *Dependencies, copyEnvsFlag bool, originalDir, worktreePath string) error {
-	envFiles, err := deps.Git.FindUntrackedEnvFiles(originalDir)
+func handleEnvFiles(deps *Dependencies, copyEnvsFlag bool, src envSource, worktreePath string) error {
+	envFiles, err := deps.Git.FindUntrackedEnvFiles(src.Root)
 	if err != nil {
 		return fmt.Errorf("failed to find env files: %w", err)
 	}
 
 	if len(envFiles) == 0 {
 		return nil
+	}
+
+	// Warn only once there is something to copy: with no env files the source
+	// root made no difference, and a warning would just be noise.
+	if src.FallbackFrom != "" {
+		fmt.Fprintf(deps.Stderr, "%s Base branch '%s' has no worktree.\n   Copying env files from the main repository instead: %s\n",
+			coloredWarning(), src.FallbackFrom, src.Root)
 	}
 
 	// Prepare file list
@@ -171,7 +178,7 @@ func handleEnvFiles(deps *Dependencies, copyEnvsFlag bool, originalDir, worktree
 
 	if shouldCopy {
 		// Copy files
-		if err := deps.Git.CopyEnvFiles(envFiles, originalDir, worktreePath); err != nil {
+		if err := deps.Git.CopyEnvFiles(envFiles, src.Root, worktreePath); err != nil {
 			return fmt.Errorf("failed to copy env files: %w", err)
 		}
 		fmt.Fprintf(deps.Stdout, "%s Environment files copied successfully\n", coloredSuccess())

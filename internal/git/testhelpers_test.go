@@ -44,6 +44,9 @@ func CreateWorktreeFromBranch(worktreePath, sourceBranch, targetBranch string) e
 func GetWorktreeForIssue(issueNumberOrBranch string) (*WorktreeInfo, error) {
 	return testClient.GetWorktreeForIssue(issueNumberOrBranch)
 }
+func GetWorktreeRootForBranch(branch string) (string, error) {
+	return testClient.GetWorktreeRootForBranch(branch)
+}
 func ResolveBaseBranch(baseBranch string) (string, bool) {
 	return testClient.ResolveBaseBranch(baseBranch)
 }

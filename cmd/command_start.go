@@ -13,8 +13,8 @@ import (
 
 // startGit is the subset of git operations StartCommand actually uses.
 type startGit interface {
-	git.RepositoryReader // IsGitRepository, GetOriginalRepositoryName, GetRepositoryRoot, FetchAll
-	git.WorktreeManager  // GetWorktreeForIssue, CreateWorktree
+	git.RepositoryReader // IsGitRepository, GetOriginalRepositoryName, GetMainRepositoryRoot, FetchAll
+	git.WorktreeManager  // GetWorktreeForIssue, GetWorktreeRootForBranch, CreateWorktree
 	git.EnvFileHandler   // FindUntrackedEnvFiles, CopyEnvFiles (via handleEnvFiles)
 }
 
@@ -45,7 +45,7 @@ func (c *StartCommand) Execute(issueNumber, baseBranch string) error {
 		return err
 	}
 
-	repoName, envSourceRoot, err := c.resolveTarget(issueNumber)
+	repoName, envSrc, err := c.resolveTarget(issueNumber, baseBranch)
 	if err != nil {
 		return err
 	}
@@ -55,19 +55,19 @@ func (c *StartCommand) Execute(issueNumber, baseBranch string) error {
 		return err
 	}
 
-	c.postCreate(issueNumber, worktreePath, repoName, envSourceRoot)
+	c.postCreate(issueNumber, worktreePath, repoName, envSrc)
 	return nil
 }
 
 // resolveTarget validates the repository, ensures no worktree already exists for
-// the issue, updates the iTerm2 tab, and resolves the repository root used as the
-// env-file source. It returns the original repository name and that env source root.
-func (c *StartCommand) resolveTarget(issueNumber string) (repoName, envSourceRoot string, err error) {
+// the issue, updates the iTerm2 tab, and resolves the env-file source. It returns
+// the original repository name and that env source.
+func (c *StartCommand) resolveTarget(issueNumber, baseBranch string) (repoName string, envSrc envSource, err error) {
 	g := c.git()
 
 	// Check if we're in a git repository
 	if !g.IsGitRepository() {
-		return "", "", fmt.Errorf("not in a git repository")
+		return "", envSource{}, fmt.Errorf("not in a git repository")
 	}
 
 	// Fetch from remotes if configured
@@ -75,7 +75,7 @@ func (c *StartCommand) resolveTarget(issueNumber string) (repoName, envSourceRoo
 
 	// Check if worktree already exists
 	if wt, _ := g.GetWorktreeForIssue(issueNumber); wt != nil {
-		return "", "", fmt.Errorf("worktree for issue %s already exists at %s", issueNumber, wt.Path)
+		return "", envSource{}, fmt.Errorf("worktree for issue %s already exists at %s", issueNumber, wt.Path)
 	}
 
 	// Get the original repository name for the iTerm2 tab so that, when run from
@@ -87,15 +87,12 @@ func (c *StartCommand) resolveTarget(issueNumber string) (repoName, envSourceRoo
 		_ = iterm2.UpdateTabName(c.deps.Stdout, repoName, issueNumber)
 	}
 
-	// Anchor env file lookup/copy to the repository root so that running start
-	// from a sub directory still scans the whole repo (rather than just the
-	// sub directory) and preserves the relative paths of copied files.
-	envSourceRoot, err = g.GetRepositoryRoot()
+	envSrc, err = resolveEnvSource(g, baseBranch)
 	if err != nil {
-		return "", "", fmt.Errorf("failed to get repository root: %w", err)
+		return "", envSource{}, err
 	}
 
-	return repoName, envSourceRoot, nil
+	return repoName, envSrc, nil
 }
 
 // createWorktree creates the worktree for the issue and reports the resulting path.
@@ -116,7 +113,7 @@ func (c *StartCommand) createWorktree(issueNumber, baseBranch string) (string, e
 
 // postCreate performs the post-creation steps: optional auto-cd, env file copy,
 // package manager setup, the post-start hook, and the completion message.
-func (c *StartCommand) postCreate(issueNumber, worktreePath, repoName, envSourceRoot string) {
+func (c *StartCommand) postCreate(issueNumber, worktreePath, repoName string, envSrc envSource) {
 	// Change to the new worktree directory for setup operations
 	// Note: This only affects the current process, not the parent shell
 	if c.deps.Config.AutoCD {
@@ -129,7 +126,7 @@ func (c *StartCommand) postCreate(issueNumber, worktreePath, repoName, envSource
 	}
 
 	// Handle environment files
-	if err := c.handleEnvFiles(envSourceRoot, worktreePath); err != nil {
+	if err := c.handleEnvFiles(envSrc, worktreePath); err != nil {
 		// Don't fail the command, just warn
 		if c.deps.Stderr != nil {
 			fmt.Fprintf(c.deps.Stderr, "%s Failed to handle env files: %v\n", coloredWarning(), err)
@@ -170,6 +167,6 @@ func (c *StartCommand) postCreate(issueNumber, worktreePath, repoName, envSource
 	}
 }
 
-func (c *StartCommand) handleEnvFiles(originalDir, worktreePath string) error {
-	return handleEnvFiles(c.deps, c.copyEnvs, originalDir, worktreePath)
+func (c *StartCommand) handleEnvFiles(envSrc envSource, worktreePath string) error {
+	return handleEnvFiles(c.deps, c.copyEnvs, envSrc, worktreePath)
 }

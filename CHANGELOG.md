@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+- `gw start --copy-envs` now copies untracked `.env` files from the worktree that has the **base branch** checked out, instead of from the current git root. With the default base branch (`main`) this resolves to the main repository, so the everyday case is unchanged; for stacked branches (`main → A → B`), `gw start B A/impl` now carries over the `.env` edits made while working on A. When no worktree has the base branch checked out — it is checked out nowhere, the main repository is on another branch, or a remote ref such as `origin/main` was passed — `gw` falls back to the main repository root and prints a warning naming the base branch and the directory it copied from. The warning is suppressed when there is nothing to copy.
+
+### Fixed
+- `gw start` / `gw checkout` no longer take env files from the current worktree when run from inside one. Previously the scan was anchored to `git rev-parse --show-toplevel`, which resolves to the linked worktree rather than the main repository: running either command from a worktree without `.env` files silently copied nothing (even with `--copy-envs`), and running it from a worktree that had them propagated that worktree's local edits instead of the main repository's files. `gw checkout` now always reads from the main repository root; `gw start` uses the base branch resolution described under Changed.
+
 ## [1.1.0] - 2026-07-16
 
 ### Added

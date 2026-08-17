@@ -230,6 +230,29 @@ func (c *Client) GetWorktreeForIssue(issueNumberOrBranch string) (*WorktreeInfo,
 	return nil, fmt.Errorf("worktree for %s not found", issueNumberOrBranch)
 }
 
+// GetWorktreeRootForBranch returns the root of the worktree that currently has
+// branch checked out. Only local branch names match: ListWorktrees strips
+// `refs/heads/`, so a remote-tracking ref ("origin/main") never resolves, and a
+// detached worktree carries an empty Branch — hence the empty-name guard.
+func (c *Client) GetWorktreeRootForBranch(branch string) (string, error) {
+	if branch == "" {
+		return "", fmt.Errorf("branch name is empty")
+	}
+
+	worktrees, err := c.ListWorktrees()
+	if err != nil {
+		return "", err
+	}
+
+	for _, wt := range worktrees {
+		if wt.Branch == branch {
+			return wt.Path, nil
+		}
+	}
+
+	return "", fmt.Errorf("no worktree has branch %s checked out", branch)
+}
+
 // CreateWorktreeFromBranch creates a new git worktree from an existing branch
 func (c *Client) CreateWorktreeFromBranch(worktreePath, sourceBranch, targetBranch string) error {
 	if !c.IsGitRepository() {

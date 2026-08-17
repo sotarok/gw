@@ -15,8 +15,8 @@ import (
 
 // checkoutGit is the subset of git operations CheckoutCommand actually uses.
 type checkoutGit interface {
-	git.RepositoryReader // GetOriginalRepositoryName, GetRepositoryRoot, GetCurrentBranch, FetchAll
-	git.WorktreeManager  // CreateWorktreeFromBranch
+	git.RepositoryReader // GetOriginalRepositoryName, GetMainRepositoryRoot, GetCurrentBranch, FetchAll
+	git.WorktreeManager  // CreateWorktreeFromBranch, GetWorktreeRootForBranch
 	git.BranchManager    // BranchExists, ListAllBranches
 	git.EnvFileHandler   // FindUntrackedEnvFiles, CopyEnvFiles (via handleEnvFiles)
 }
@@ -53,7 +53,7 @@ func (c *CheckoutCommand) Execute(branch string) error {
 		return err
 	}
 
-	repoName, branchName, worktreePath, repoRoot, err := c.prepareWorktree(branch)
+	repoName, branchName, worktreePath, envSrc, err := c.prepareWorktree(branch)
 	if err != nil {
 		return err
 	}
@@ -63,7 +63,7 @@ func (c *CheckoutCommand) Execute(branch string) error {
 		return err
 	}
 
-	c.postCreate(repoName, branchName, worktreePath, absolutePath, repoRoot)
+	c.postCreate(repoName, branchName, worktreePath, absolutePath, envSrc)
 	return nil
 }
 
@@ -85,7 +85,7 @@ func (c *CheckoutCommand) resolveBranch(branch string) (string, error) {
 
 // prepareWorktree resolves the repository name/root, updates the iTerm2 tab, and
 // derives the target branch name and worktree path for the given branch.
-func (c *CheckoutCommand) prepareWorktree(branch string) (repoName, branchName, worktreePath, repoRoot string, err error) {
+func (c *CheckoutCommand) prepareWorktree(branch string) (repoName, branchName, worktreePath string, envSrc envSource, err error) {
 	g := c.git()
 
 	// Get the original repository name (not the worktree directory name) so that
@@ -93,7 +93,7 @@ func (c *CheckoutCommand) prepareWorktree(branch string) (repoName, branchName, 
 	// the repo, e.g. `<repo>-<branch>` rather than `<worktree-dir>-<branch>`.
 	repoName, err = g.GetOriginalRepositoryName()
 	if err != nil {
-		return "", "", "", "", fmt.Errorf("failed to get repository name: %w", err)
+		return "", "", "", envSource{}, fmt.Errorf("failed to get repository name: %w", err)
 	}
 
 	// Update iTerm2 tab if configured
@@ -111,17 +111,17 @@ func (c *CheckoutCommand) prepareWorktree(branch string) (repoName, branchName, 
 	// Create worktree directory name
 	sanitizedBranchName := git.SanitizeBranchNameForDirectory(branchName)
 
-	// Anchor the worktree path and env file scan to the repository root so
-	// that running checkout from a sub directory still creates the worktree as
-	// a sibling of the repo (rather than a sibling of the current sub
-	// directory) and scans the whole repo for env files.
-	repoRoot, err = g.GetRepositoryRoot()
+	// checkout takes an existing branch, so the branch it was cut from is
+	// unknown: pass no base branch and let both the worktree path and the env
+	// file scan anchor to the main repository root. That keeps a sub directory
+	// or a linked worktree from becoming the anchor.
+	envSrc, err = resolveEnvSource(g, "")
 	if err != nil {
-		return "", "", "", "", fmt.Errorf("failed to get repository root: %w", err)
+		return "", "", "", envSource{}, err
 	}
-	worktreePath = git.ResolveWorktreePath(repoRoot, repoName, sanitizedBranchName)
+	worktreePath = git.ResolveWorktreePath(envSrc.Root, repoName, sanitizedBranchName)
 
-	return repoName, branchName, worktreePath, repoRoot, nil
+	return repoName, branchName, worktreePath, envSrc, nil
 }
 
 // createWorktree verifies the branch exists, creates the worktree, and returns
@@ -156,7 +156,7 @@ func (c *CheckoutCommand) createWorktree(branch, branchName, worktreePath string
 
 // postCreate performs the post-creation steps: optional auto-cd, env file copy,
 // package manager setup, the post-checkout hook, and the completion message.
-func (c *CheckoutCommand) postCreate(repoName, branchName, worktreePath, absolutePath, repoRoot string) {
+func (c *CheckoutCommand) postCreate(repoName, branchName, worktreePath, absolutePath string, envSrc envSource) {
 	// Change to the new worktree directory for setup operations
 	// Note: This only affects the current process, not the parent shell
 	if c.deps.Config.AutoCD {
@@ -169,7 +169,7 @@ func (c *CheckoutCommand) postCreate(repoName, branchName, worktreePath, absolut
 	}
 
 	// Handle environment files
-	if err := c.handleEnvFiles(repoRoot, absolutePath); err != nil {
+	if err := c.handleEnvFiles(envSrc, absolutePath); err != nil {
 		// Don't fail the command, just warn
 		fmt.Fprintf(c.deps.Stderr, "%s Failed to handle env files: %v\n", coloredWarning(), err)
 	}
@@ -202,8 +202,8 @@ func (c *CheckoutCommand) postCreate(repoName, branchName, worktreePath, absolut
 	}
 }
 
-func (c *CheckoutCommand) handleEnvFiles(originalDir, worktreePath string) error {
-	return handleEnvFiles(c.deps, c.copyEnvs, originalDir, worktreePath)
+func (c *CheckoutCommand) handleEnvFiles(envSrc envSource, worktreePath string) error {
+	return handleEnvFiles(c.deps, c.copyEnvs, envSrc, worktreePath)
 }
 
 func (c *CheckoutCommand) selectBranch() (string, error) {
