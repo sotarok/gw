@@ -32,8 +32,8 @@ func BranchExists(branch string) (bool, error)   { return testClient.BranchExist
 func DeleteBranch(branch string) error           { return testClient.DeleteBranch(branch) }
 func ListWorktrees() ([]WorktreeInfo, error)     { return testClient.ListWorktrees() }
 func RemoveWorktree(issueNumber string) error    { return testClient.RemoveWorktree(issueNumber) }
-func RemoveWorktreeByPath(worktreePath string) error {
-	return testClient.RemoveWorktreeByPath(worktreePath)
+func RemoveWorktreeByPath(worktreePath string, force bool) error {
+	return testClient.RemoveWorktreeByPath(worktreePath, force)
 }
 func CreateWorktree(issueNumberOrBranch, baseBranch string) (string, error) {
 	return testClient.CreateWorktree(issueNumberOrBranch, baseBranch)

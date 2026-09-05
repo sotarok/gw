@@ -413,7 +413,7 @@ func TestRemoveWorktreeByPath(t *testing.T) {
 		}
 
 		// Remove worktree by path
-		if err := RemoveWorktreeByPath(worktreePath); err != nil {
+		if err := RemoveWorktreeByPath(worktreePath, false); err != nil {
 			t.Fatalf("failed to remove worktree by path: %v", err)
 		}
 
@@ -473,7 +473,7 @@ func TestGetWorktreeForIssue(t *testing.T) {
 		if err != nil {
 			t.Fatalf("failed to create worktree: %v", err)
 		}
-		defer RemoveWorktreeByPath(worktreePath)
+		defer RemoveWorktreeByPath(worktreePath, false)
 
 		// Find worktree
 		wt, err := GetWorktreeForIssue("999")
@@ -1311,7 +1311,7 @@ func TestRemoveWorktreeByPath_NotInGitRepository(t *testing.T) {
 		t.Fatalf("failed to change dir: %v", err)
 	}
 
-	err = RemoveWorktreeByPath("/nonexistent/path")
+	err = RemoveWorktreeByPath("/nonexistent/path", false)
 	if err == nil {
 		t.Error("expected error when not in git repository")
 	}
@@ -1349,7 +1349,7 @@ func TestRemoveWorktreeByPath_NonExistentPath(t *testing.T) {
 		t.Fatalf("failed to create commit: %v", err)
 	}
 
-	err = RemoveWorktreeByPath("/nonexistent/path/to/worktree")
+	err = RemoveWorktreeByPath("/nonexistent/path/to/worktree", false)
 	if err == nil {
 		t.Error("expected error for non-existent worktree path")
 	}

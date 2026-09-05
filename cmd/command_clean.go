@@ -280,7 +280,7 @@ func (c *CleanCommand) removeWorktrees(statuses []*WorktreeStatus) error {
 		// Remove the worktree with spinner
 		sp := spinner.New(fmt.Sprintf("Removing %s...", dirName), c.deps.Stdout)
 		sp.Start()
-		removeErr := c.git().RemoveWorktreeByPath(status.Info.Path)
+		removeErr := c.git().RemoveWorktreeByPath(status.Info.Path, false)
 		sp.Stop()
 		if removeErr != nil {
 			fmt.Fprintf(c.deps.Stderr, "%s Failed to remove %s: %v\n", coloredError(), dirName, removeErr)

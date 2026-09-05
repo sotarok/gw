@@ -16,7 +16,7 @@ type WorktreeManager interface {
 	CreateWorktree(issueNumber, baseBranch string) (string, error)
 	CreateWorktreeFromBranch(worktreePath, sourceBranch, targetBranch string) error
 	RemoveWorktree(issueNumber string) error
-	RemoveWorktreeByPath(worktreePath string) error
+	RemoveWorktreeByPath(worktreePath string, force bool) error
 	ListWorktrees() ([]WorktreeInfo, error)
 	GetWorktreeForIssue(issueNumber string) (*WorktreeInfo, error)
 	GetWorktreeRootForBranch(branch string) (string, error)

@@ -10,6 +10,8 @@ var (
 	endNoProjectHooks bool
 )
 
+const forceEndUsage = "Force removal without safety checks, discarding uncommitted changes and untracked files"
+
 var endCmd = &cobra.Command{
 	Use:   "end [issue-number]",
 	Short: "Remove a worktree for the specified issue",
@@ -22,7 +24,7 @@ The command will check for uncommitted changes and unpushed commits before remov
 
 func init() {
 	rootCmd.AddCommand(endCmd)
-	endCmd.Flags().BoolVarP(&forceEnd, "force", "f", false, "Force removal without safety checks")
+	endCmd.Flags().BoolVarP(&forceEnd, "force", "f", false, forceEndUsage)
 	endCmd.Flags().BoolVar(&endNoFetch, "no-fetch", false, "Skip git fetch before running the command")
 	endCmd.Flags().BoolVar(&endNoProjectHooks, "no-project-hooks", false, "Skip project-local .gwrc hook overrides for this run")
 }

@@ -236,9 +236,11 @@ Before removing, `gw end` runs three safety checks in parallel:
 
 If any check trips, `gw end` prints the warnings and prompts for confirmation. Use `--force` to skip all checks.
 
+Accepting the warnings — or passing `--force` — also removes the worktree even when it holds uncommitted changes or untracked files, which `git worktree remove` refuses to do on its own. Those files are discarded along with the worktree. A worktree that is clean apart from gitignored files (a copied `.env`, build output) is removed without any of this.
+
 | Flag | Short | Description |
 |---|---|---|
-| `--force` | `-f` | Force removal without safety checks |
+| `--force` | `-f` | Force removal without safety checks, discarding uncommitted changes and untracked files |
 | `--no-fetch` | | Skip `git fetch` before running the command |
 | `--no-project-hooks` | | Skip project-local `.gwrc` hook overrides for this run |
 
@@ -518,7 +520,7 @@ The repository you cloned ships a project-local hook file. `gw` shows the hook v
 
 **`gw end` refuses to remove my worktree**
 
-The safety checks found uncommitted changes, unpushed commits, or a branch not yet merged into the base branch. `gw end` prints the specific reason(s). Resolve them first, or use `gw end --force` to override all checks.
+The safety checks found uncommitted changes, unpushed commits, or a branch not yet merged into the base branch. `gw end` prints the specific reason(s). Resolve them first, or use `gw end --force` to override all checks and discard the worktree's uncommitted changes and untracked files.
 
 **How do I skip the automatic fetch?**
 

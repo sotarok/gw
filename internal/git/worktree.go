@@ -129,17 +129,26 @@ func (c *Client) RemoveWorktree(issueNumberOrBranch string) error {
 
 	// Create worktree directory path relative to repository root
 	worktreeDir := ResolveWorktreePath(repoRoot, repoName, dirSuffix)
-	return c.RemoveWorktreeByPath(worktreeDir)
+	return c.RemoveWorktreeByPath(worktreeDir, false)
 }
 
-// RemoveWorktreeByPath removes a git worktree by its path
-func (c *Client) RemoveWorktreeByPath(worktreePath string) error {
+// RemoveWorktreeByPath removes a git worktree by its path. When force is set,
+// `--force` is passed through to git, which is what lets the removal proceed
+// past untracked or modified files — git refuses those without it, so a caller
+// that has already cleared its own safety checks would otherwise still be
+// blocked.
+func (c *Client) RemoveWorktreeByPath(worktreePath string, force bool) error {
 	if !c.IsGitRepository() {
 		return fmt.Errorf("not in a git repository")
 	}
 
-	// Remove the worktree
-	if err := c.r.runStreaming("", "worktree", "remove", worktreePath); err != nil {
+	args := []string{"worktree", "remove"}
+	if force {
+		args = append(args, "--force")
+	}
+	args = append(args, worktreePath)
+
+	if err := c.r.runStreaming("", args...); err != nil {
 		return fmt.Errorf("failed to remove worktree: %w", err)
 	}
 

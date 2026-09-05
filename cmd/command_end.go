@@ -62,7 +62,7 @@ func (c *EndCommand) Execute(issueNumber string) error {
 		hookRepoName, _ = c.git().GetRepositoryName()
 	}
 
-	proceed, err := c.confirmRemoval(issueNumber, worktreePath, branchName)
+	proceed, forceRemove, err := c.confirmRemoval(issueNumber, worktreePath, branchName)
 	if err != nil {
 		return err
 	}
@@ -70,7 +70,7 @@ func (c *EndCommand) Execute(issueNumber string) error {
 		return nil
 	}
 
-	return c.remove(issueNumber, worktreePath, branchName, hookRepoName)
+	return c.remove(issueNumber, worktreePath, branchName, hookRepoName, forceRemove)
 }
 
 // resolveWorktree determines the worktree to remove, either via interactive
@@ -111,11 +111,15 @@ func (c *EndCommand) resolveWorktree(issueNumber string) (resolvedIssue, worktre
 }
 
 // confirmRemoval runs the safety checks (unless forced) and, when they raise
-// warnings, prompts the user to continue. It returns whether the removal should
-// proceed.
-func (c *EndCommand) confirmRemoval(issueNumber, worktreePath, branchName string) (bool, error) {
+// warnings, prompts the user to continue. It reports whether the removal should
+// proceed, and whether git's refusal to delete a worktree holding untracked or
+// modified files should be overridden. The two travel together: once the user
+// has accepted that the worktree is not clean — up front via --force, or by
+// answering the warnings — leaving git to block the delete would strand them
+// with no way through.
+func (c *EndCommand) confirmRemoval(issueNumber, worktreePath, branchName string) (proceed, force bool, err error) {
 	if c.force {
-		return true, nil
+		return true, true, nil
 	}
 
 	sp := spinner.New(fmt.Sprintf("Checking worktree for issue #%s...", issueNumber), c.deps.Stdout)
@@ -131,23 +135,25 @@ func (c *EndCommand) confirmRemoval(issueNumber, worktreePath, branchName string
 		}
 
 		fmt.Fprintf(c.deps.Stdout, "\nDo you want to continue?")
-		confirmed, err := c.deps.UI.ConfirmPrompt(" (y/N): ")
-		if err != nil {
-			return false, fmt.Errorf("failed to read response: %w", err)
+		confirmed, promptErr := c.deps.UI.ConfirmPrompt(" (y/N): ")
+		if promptErr != nil {
+			return false, false, fmt.Errorf("failed to read response: %w", promptErr)
 		}
 
 		if !confirmed {
 			fmt.Fprintf(c.deps.Stdout, "Aborted.\n")
-			return false, nil
+			return false, false, nil
 		}
+
+		return true, true, nil
 	}
 
-	return true, nil
+	return true, false, nil
 }
 
 // remove runs the pre-end hook, removes the worktree, optionally deletes the
 // branch, and resets the iTerm2 tab.
-func (c *EndCommand) remove(issueNumber, worktreePath, branchName, hookRepoName string) error {
+func (c *EndCommand) remove(issueNumber, worktreePath, branchName, hookRepoName string, force bool) error {
 	// Execute pre-end hook with cwd set to the worktree so the hook can operate
 	// on files that are about to disappear (e.g. docker compose).
 	if c.deps.Config.PreEndHook != "" {
@@ -161,7 +167,7 @@ func (c *EndCommand) remove(issueNumber, worktreePath, branchName, hookRepoName 
 	// looked up from the issue number / branch name, worktreePath already points
 	// at the actual worktree, so this works regardless of how the input maps to a
 	// directory suffix (e.g. "527" vs "527/impl").
-	removeErr := c.git().RemoveWorktreeByPath(worktreePath)
+	removeErr := c.git().RemoveWorktreeByPath(worktreePath, force)
 	sp.Stop()
 	if removeErr != nil {
 		return removeErr

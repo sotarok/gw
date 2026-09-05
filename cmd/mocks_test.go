@@ -40,19 +40,20 @@ type mockGit struct {
 	// "*AtFn" callbacks receive the same args as the real Git interface
 	// methods. Use them when a test needs to vary results by worktree path or
 	// branch (the simpler Fn forms above still work for fixed return values).
-	HasUncommittedChangesAtFn   func(worktreePath string) (bool, error)
-	HasUnpushedCommitsAtFn      func(worktreePath, currentBranch string) (bool, error)
-	IsMergedToBaseBranchAtFn    func(worktreePath, currentBranch, targetBranch string) (bool, error)
-	DeleteBranchFn              func(string) error
-	ListWorktreesFn             func() ([]git.WorktreeInfo, error)
-	RemoveWorktreeByPathFn      func(string) error
-	GetRepositoryNameFn         func() (string, error)
-	GetOriginalRepositoryNameFn func() (string, error)
-	GetRepositoryRootFn         func() (string, error)
-	GetMainRepositoryRootFn     func() (string, error)
-	CreateWorktreeFromBranchFn  func(string, string, string) error
-	FindUntrackedEnvFilesFn     func(string) ([]git.EnvFile, error)
-	SanitizeBranchNameForDirFn  func(string) string
+	HasUncommittedChangesAtFn       func(worktreePath string) (bool, error)
+	HasUnpushedCommitsAtFn          func(worktreePath, currentBranch string) (bool, error)
+	IsMergedToBaseBranchAtFn        func(worktreePath, currentBranch, targetBranch string) (bool, error)
+	DeleteBranchFn                  func(string) error
+	ListWorktreesFn                 func() ([]git.WorktreeInfo, error)
+	RemoveWorktreeByPathFn          func(string) error
+	RemoveWorktreeByPathWithForceFn func(worktreePath string, force bool) error
+	GetRepositoryNameFn             func() (string, error)
+	GetOriginalRepositoryNameFn     func() (string, error)
+	GetRepositoryRootFn             func() (string, error)
+	GetMainRepositoryRootFn         func() (string, error)
+	CreateWorktreeFromBranchFn      func(string, string, string) error
+	FindUntrackedEnvFilesFn         func(string) ([]git.EnvFile, error)
+	SanitizeBranchNameForDirFn      func(string) string
 }
 
 func (m *mockGit) IsGitRepository() bool {
@@ -130,7 +131,10 @@ func (m *mockGit) RemoveWorktree(issueNumber string) error {
 	return nil
 }
 
-func (m *mockGit) RemoveWorktreeByPath(worktreePath string) error {
+func (m *mockGit) RemoveWorktreeByPath(worktreePath string, force bool) error {
+	if m.RemoveWorktreeByPathWithForceFn != nil {
+		return m.RemoveWorktreeByPathWithForceFn(worktreePath, force)
+	}
 	if m.RemoveWorktreeByPathFn != nil {
 		return m.RemoveWorktreeByPathFn(worktreePath)
 	}
