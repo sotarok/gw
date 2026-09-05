@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.2.1] - 2026-09-07
+
 ### Fixed
 - `gw end --force` now actually removes the worktree. `--force` only skipped `gw`'s own safety checks and was never passed through to `git worktree remove`, so git still refused with `contains modified or untracked files, use --force to delete it` and the command failed with exit status 128. Answering `y` to the safety-check warnings had the same problem, which left worktrees holding uncommitted changes or untracked files impossible to remove with `gw end` at all. Both paths now force the git removal, discarding those files along with the worktree. Worktrees that are clean apart from gitignored files (such as a copied `.env`) were never affected and are still removed unforced, as is every worktree removed by `gw clean`.
 
