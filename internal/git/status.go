@@ -67,7 +67,49 @@ func (c *Client) IsMergedToBaseBranch(worktreePath, currentBranch, targetBranch 
 
 	// Merged into the local base branch. This covers the common case of
 	// merging the branch into local main before pushing main.
-	return c.branchListContains(worktreePath, currentBranch, false, targetBranch)
+	localMerged, err := c.branchListContains(worktreePath, currentBranch, false, targetBranch)
+	if err != nil {
+		return false, err
+	}
+	if localMerged {
+		return true, nil
+	}
+
+	// A rebase merge rewrites commit hashes, so the branch tip never appears
+	// in the base branch's history even though every change landed there.
+	for _, base := range []string{"refs/remotes/origin/" + targetBranch, "refs/heads/" + targetBranch} {
+		applied, err := c.allCommitsApplied(worktreePath, currentBranch, base)
+		if err != nil {
+			return false, err
+		}
+		if applied {
+			return true, nil
+		}
+	}
+	return false, nil
+}
+
+// allCommitsApplied reports whether every non-merge commit on currentBranch
+// that is missing from baseRef has a patch-equivalent commit in baseRef
+// (`git cherry` marks all of them with "-"). A missing baseRef yields false.
+func (c *Client) allCommitsApplied(worktreePath, currentBranch, baseRef string) (bool, error) {
+	if _, err := c.r.run(worktreePath, "rev-parse", "--verify", "--quiet", baseRef); err != nil {
+		return false, nil
+	}
+
+	output, err := c.r.run(worktreePath, "cherry", baseRef, currentBranch)
+	if err != nil {
+		return false, fmt.Errorf("failed to check merge status: %w", err)
+	}
+	if output == "" {
+		return false, nil
+	}
+	for _, line := range strings.Split(output, "\n") {
+		if !strings.HasPrefix(line, "-") {
+			return false, nil
+		}
+	}
+	return true, nil
 }
 
 // branchListContains reports whether wantRef appears in the output of

@@ -7,6 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- `gw clean` and `gw end` now recognize branches that were rebase-merged into the base branch. The merge check only asked whether the branch tip was in the history of `origin/main` or local `main`, and a rebase merge rewrites commit hashes, so such branches were reported as `unpushed commits, not merged` and kept out of `gw clean`. When the tip is not found, `gw` now also checks with `git cherry` whether every commit on the branch has a patch-equivalent commit in the base branch. Squash-merged branches are still reported as not merged.
+
 ## [1.2.1] - 2026-09-07
 
 ### Fixed
