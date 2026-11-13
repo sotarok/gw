@@ -164,9 +164,13 @@ This will:
 
 | Flag | Description |
 |---|---|
-| `--copy-envs` | Copy untracked `.env` files to the new worktree |
+| `--copy-envs` | Copy untracked `.env` and `.dev.vars` files to the new worktree |
 | `--no-fetch` | Skip `git fetch` before running the command |
 | `--no-project-hooks` | Skip project-local `.gwrc` hook overrides for this run |
+
+#### Which files are copied
+
+Untracked files named `.env*`, plus Wrangler's `.dev.vars` and `.dev.vars.<environment>`, are copied wherever they sit in the repository. `.git`, `node_modules`, `vendor`, `dist` and `build` are skipped.
 
 #### Where `.env` files are copied from
 
@@ -210,7 +214,7 @@ This will:
 
 | Flag | Description |
 |---|---|
-| `--copy-envs` | Copy untracked `.env` files to the new worktree |
+| `--copy-envs` | Copy untracked `.env` and `.dev.vars` files to the new worktree |
 | `--no-fetch` | Skip `git fetch` before running the command |
 | `--no-project-hooks` | Skip project-local `.gwrc` hook overrides for this run |
 
@@ -318,7 +322,7 @@ All configuration lives in `~/.gwrc`. Use `gw init` for first-time setup or `gw 
 | `auto_cd` | `true` | Automatically change directory to the new worktree after creation (requires shell integration) |
 | `update_iterm2_tab` | `false` | Update iTerm2 tab title with worktree information (macOS only) |
 | `auto_remove_branch` | `false` | Automatically delete the local branch after successful worktree removal |
-| `copy_envs` | *(unset)* | Copy `.env` files to new worktrees. When unset (nil), `gw` prompts each time; set to `true` or `false` to fix the behavior |
+| `copy_envs` | *(unset)* | Copy `.env` and `.dev.vars` files to new worktrees. When unset (nil), `gw` prompts each time; set to `true` or `false` to fix the behavior |
 | `fetch_before_command` | `true` | Run `git fetch --all --prune` before commands to sync remote branch info |
 | `post_start_hook` | *(empty)* | Shell command to execute after a successful `gw start` |
 | `post_checkout_hook` | *(empty)* | Shell command to execute after a successful `gw checkout` |

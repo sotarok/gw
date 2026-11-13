@@ -28,7 +28,15 @@ var skipDirs = map[string]bool{
 	"build":        true,
 }
 
-// collectEnvFiles returns the relative paths of all .env* files found while
+// isEnvFileName reports whether name is a .env* file or a Wrangler .dev.vars
+// file (.dev.vars or .dev.vars.<environment>).
+func isEnvFileName(name string) bool {
+	return strings.HasPrefix(name, ".env") ||
+		name == ".dev.vars" ||
+		strings.HasPrefix(name, ".dev.vars.")
+}
+
+// collectEnvFiles returns the relative paths of all env files found while
 // walking repoPath, excluding directories in skipDirs.
 func collectEnvFiles(repoPath string) ([]string, error) {
 	var paths []string
@@ -39,7 +47,7 @@ func collectEnvFiles(repoPath string) ([]string, error) {
 		if info.IsDir() && skipDirs[info.Name()] {
 			return filepath.SkipDir
 		}
-		if !info.IsDir() && strings.HasPrefix(info.Name(), ".env") {
+		if !info.IsDir() && isEnvFileName(info.Name()) {
 			rel, relErr := filepath.Rel(repoPath, path)
 			if relErr != nil {
 				return nil
@@ -66,7 +74,7 @@ func (c *Client) trackedFileSet(repoPath string) (map[string]bool, error) {
 	return tracked, nil
 }
 
-// FindUntrackedEnvFiles finds all untracked .env* files in the repository
+// FindUntrackedEnvFiles finds all untracked env files in the repository
 func (c *Client) FindUntrackedEnvFiles(repoPath string) ([]EnvFile, error) {
 	allEnvFiles, err := collectEnvFiles(repoPath)
 	if err != nil {

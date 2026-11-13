@@ -92,7 +92,7 @@ var fieldSpecs = []fieldSpec{
 	{
 		key:         copyEnvsKey,
 		kind:        kindOptionalBool,
-		description: "Automatically copy .env files to new worktrees (prompt if not set)",
+		description: "Automatically copy .env and .dev.vars files to new worktrees (prompt if not set)",
 		defaultBool: false,
 		load: func(c *Config, v string) {
 			boolValue := v == trueValue

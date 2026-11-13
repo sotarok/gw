@@ -7,6 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- `--copy-envs` and the `copy_envs` option now also copy Wrangler's untracked `.dev.vars` and `.dev.vars.<environment>` files, so Cloudflare Workers projects keep their local secrets in new worktrees.
+
 ## [1.2.2] - 2026-10-01
 
 ### Fixed

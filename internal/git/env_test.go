@@ -27,13 +27,17 @@ func TestFindUntrackedEnvFiles(t *testing.T) {
 
 	// Create test files
 	testFiles := map[string]bool{
-		".env":             false, // untracked
-		".env.local":       false, // untracked
-		".env.example":     true,  // tracked
-		"app/.env":         false, // untracked
-		"app/.env.local":   false, // untracked
-		"app/.env.example": true,  // tracked
-		"app/.envrc":       false, // untracked
+		".env":                   false, // untracked
+		".env.local":             false, // untracked
+		".env.example":           true,  // tracked
+		"app/.env":               false, // untracked
+		"app/.env.local":         false, // untracked
+		"app/.env.example":       true,  // tracked
+		"app/.envrc":             false, // untracked
+		".dev.vars":              false, // untracked
+		"app/.dev.vars.staging":  false, // untracked
+		"app/.dev.vars.example":  true,  // tracked
+		"app/.dev.variables.txt": false, // untracked, not a Wrangler env file
 	}
 
 	for file, tracked := range testFiles {
@@ -58,11 +62,13 @@ func TestFindUntrackedEnvFiles(t *testing.T) {
 
 	// Expected untracked files
 	expectedFiles := map[string]bool{
-		".env":           true,
-		".env.local":     true,
-		"app/.env":       true,
-		"app/.env.local": true,
-		"app/.envrc":     true,
+		".env":                  true,
+		".env.local":            true,
+		"app/.env":              true,
+		"app/.env.local":        true,
+		"app/.envrc":            true,
+		".dev.vars":             true,
+		"app/.dev.vars.staging": true,
 	}
 
 	// Check if all expected files are found

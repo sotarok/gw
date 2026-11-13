@@ -20,7 +20,7 @@ If no branch is specified, an interactive selector will be shown.`,
 }
 
 func init() {
-	checkoutCmd.Flags().BoolVar(&checkoutCopyEnvs, "copy-envs", false, "Copy untracked .env files to the new worktree")
+	checkoutCmd.Flags().BoolVar(&checkoutCopyEnvs, "copy-envs", false, "Copy untracked .env and .dev.vars files to the new worktree")
 	checkoutCmd.Flags().BoolVar(&checkoutNoFetch, "no-fetch", false, "Skip git fetch before running the command")
 	checkoutCmd.Flags().BoolVar(&checkoutNoProjectHooks, "no-project-hooks", false, "Skip project-local .gwrc hook overrides for this run")
 	rootCmd.AddCommand(checkoutCmd)
